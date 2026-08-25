@@ -10,6 +10,8 @@ import dotenv from 'dotenv';
 import jiraRoutes from './routes/jira.js';
 import * as auth from './auth.js';
 import { canManageAccess, createUser, listUsers, revokeUser, updateUser } from './access-store.js';
+import { authConfig } from '../lib/authConfig.js';
+import { canAccessPermission, permissionForJiraRequest } from '../lib/appPermissions.js';
 
 dotenv.config();
 
@@ -23,6 +25,20 @@ app.use(cors());
 // express.json() skips if req.body is already set.
 app.use(express.json({ limit: '1mb' }));
 
+app.use((req, _res, next) => {
+  req.cookies = Object.fromEntries(
+    String(req.headers.cookie || '')
+      .split(';')
+      .map(part => part.trim())
+      .filter(Boolean)
+      .map(part => {
+        const index = part.indexOf('=');
+        if (index < 0) return [part, ''];
+        return [part.slice(0, index), decodeURIComponent(part.slice(index + 1))];
+      })
+  );
+  next();
+});
 
 // ─── Rotas de autenticação (públicas) ───────────────────
 // O frontend e a funcao Vercel usam /api/auth. Mantemos os aliases antigos.
@@ -34,13 +50,12 @@ app.post('/api/auth/logout', auth.handleLogout);
 app.get('/api/auth/check', auth.handleCheckSession);
 
 function requireFullAccess(req, res, next) {
-  const sessionId = req.headers['x-session-id'];
-  const session = auth.validateSession(sessionId);
-  if (!session || !canManageAccess(session.user)) {
-    return res.status(403).json({ error: 'Acesso restrito ao perfil Full.' });
-  }
-  req.session = session;
-  next();
+  auth.requireAppAuth(req, res, () => {
+    if (!canManageAccess(req.session?.user)) {
+      return res.status(403).json({ error: 'Acesso restrito ao perfil Full.' });
+    }
+    next();
+  });
 }
 
 app.get('/api/access/users', requireFullAccess, async (req, res) => {
@@ -49,7 +64,7 @@ app.get('/api/access/users', requireFullAccess, async (req, res) => {
 
 app.post('/api/access/users', requireFullAccess, async (req, res) => {
   try {
-    res.status(201).json({ user: await createUser(req.body || {}) });
+    res.status(201).json({ user: await createUser({ ...(req.body || {}), actorUserId: req.session?.user?.id }) });
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });
   }
@@ -57,7 +72,7 @@ app.post('/api/access/users', requireFullAccess, async (req, res) => {
 
 app.put('/api/access/users/:id', requireFullAccess, async (req, res) => {
   try {
-    res.json({ user: await updateUser(req.params.id, req.body || {}) });
+    res.json({ user: await updateUser(req.params.id, { ...(req.body || {}), actorUserId: req.session?.user?.id }) });
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });
   }
@@ -71,18 +86,22 @@ app.delete('/api/access/users/:id', requireFullAccess, async (req, res) => {
   }
 });
 
-// ─── Middleware de proteção opcional ────────────────────────────
-// As APIs do Jira usam credenciais armazenadas no banco (criptografadas)
-// Não precisam de sessão do usuário
-function optionalAuth(req, res, next) {
+function jiraApiAuth(req, res, next) {
+  if (authConfig.requireApiAuth) {
+    return auth.requireAppAuth(req, res, () => {
+      const permission = permissionForJiraRequest(req);
+      if (!canAccessPermission(req.session?.user, permission)) {
+        return res.status(403).json({ error: 'Permissao insuficiente para esta API.', permission });
+      }
+      next();
+    });
+  }
+
   const sessionId = req.headers['x-session-id'];
-  
-  // Se não tem sessionId, permite acesso (as APIs usam credenciais do banco)
   if (!sessionId) {
     return next();
   }
-  
-  // Se tem sessionId, valida (opcional)
+
   const session = auth.validateSession(sessionId);
   if (session) {
     req.session = session;
@@ -91,11 +110,10 @@ function optionalAuth(req, res, next) {
   next();
 }
 
-// Rotas do Jira sem autenticação obrigatória
-app.use('/api/jira', optionalAuth, jiraRoutes);
+app.use('/api/jira', jiraApiAuth, jiraRoutes);
 
 // Rota raiz para verificação rápida (sem proteção obrigatória)
-app.get('/api/jira', optionalAuth, (req, res) => {
+app.get('/api/jira', jiraApiAuth, (req, res) => {
   res.json({
     status: 'ok',
     message: 'Radar Jira Antlia API (Desenvolvimento)',

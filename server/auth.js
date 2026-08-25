@@ -5,6 +5,8 @@
 import { authenticateUser } from './access-store.js';
 
 import { createSignedSession, verifySignedSession } from '../lib/authSession.js';
+import { authConfig } from '../lib/authConfig.js';
+import { resolveSupabaseSession, signInWithSupabase, signOutSupabase } from '../lib/appAuthService.js';
 
 // Fallback legado temporario. A versao oficial deve substituir este fluxo por
 // Supabase Auth; enquanto isso, credenciais precisam ser configuradas fora do repo.
@@ -125,6 +127,18 @@ function requireAuth(req, res, next) {
   next();
 }
 
+async function requireAppAuth(req, res, next) {
+  if (authConfig.provider === 'supabase') {
+    const session = await resolveSupabaseSession(req, res);
+    if (!session) {
+      return res.status(401).json({ error: 'Sessao Supabase ausente, expirada ou invalida.' });
+    }
+    req.session = session;
+    return next();
+  }
+  return requireAuth(req, res, next);
+}
+
 /**
  * Endpoint de login
  */
@@ -135,6 +149,23 @@ async function handleLogin(req, res) {
     return res.status(400).json({ error: 'Email e senha são obrigatórios' });
   }
   
+  if (authConfig.provider === 'supabase') {
+    try {
+      const session = await signInWithSupabase(email, password, res);
+      return res.json({
+        success: true,
+        sessionId: session.sessionId,
+        email: session.email,
+        user: session.user,
+      });
+    } catch (error) {
+      return res.status(error.status || 500).json({
+        error: error.message,
+        code: error.code || 'AUTH_SUPABASE_FAILED',
+      });
+    }
+  }
+
   const managedUser = await authenticateUser(email, password);
   const fallbackUser = validateCredentials(email, password) ? {
     id: 'env-admin',
@@ -170,6 +201,13 @@ async function handleLogin(req, res) {
  * Endpoint de logout
  */
 function handleLogout(req, res) {
+  if (authConfig.provider === 'supabase') {
+    signOutSupabase(req, res).finally(() => {
+      res.json({ success: true, message: 'Logout realizado' });
+    });
+    return;
+  }
+
   const sessionId = req.headers['x-session-id'] || req.cookies?.sessionId;
   
   if (sessionId) {
@@ -182,7 +220,19 @@ function handleLogout(req, res) {
 /**
  * Endpoint para verificar sessão atual
  */
-function handleCheckSession(req, res) {
+async function handleCheckSession(req, res) {
+  if (authConfig.provider === 'supabase') {
+    const session = await resolveSupabaseSession(req, res);
+    if (!session) {
+      return res.status(401).json({ authenticated: false });
+    }
+    return res.json({
+      authenticated: true,
+      email: session.email,
+      user: session.user,
+    });
+  }
+
   const sessionId = req.headers['x-session-id'] || req.cookies?.sessionId;
   
   if (!sessionId) {
@@ -206,6 +256,7 @@ export {
   handleLogin,
   handleLogout,
   handleCheckSession,
+  requireAppAuth,
   requireAuth,
   validateSession
 };

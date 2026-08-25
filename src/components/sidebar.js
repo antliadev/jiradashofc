@@ -178,6 +178,7 @@ export function renderSidebar() {
         <span class="dot ${source}" aria-hidden="true"></span>
         <span>Fonte: <strong>${sourceLabel}</strong></span>
       </div>
+      <button class="btn btn-secondary sidebar-logout" id="logout-button" type="button">Sair</button>
     </div>
   `;
 
@@ -185,6 +186,16 @@ export function renderSidebar() {
     toggleTheme();
     renderSidebar();
     window.dispatchEvent(new HashChangeEvent('hashchange'));
+  });
+
+  document.getElementById('logout-button')?.addEventListener('click', async () => {
+    await fetch('/api/auth', {
+      method: 'DELETE',
+      credentials: 'include',
+    }).catch(() => null);
+    window.clearSession?.();
+    window.updateLayout?.(false);
+    window.location.hash = '#/login';
   });
 
   sidebar.querySelectorAll('[data-nav-toggle]').forEach(button => {

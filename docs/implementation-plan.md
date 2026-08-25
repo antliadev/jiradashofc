@@ -18,12 +18,12 @@
 
 ## Fase 2 - Supabase Auth
 
-- Implementar login Supabase Auth.
-- Exigir confirmação por email.
-- Bloquear domínio fora de `@antlia.com.br`.
-- Implementar exceção admin documentada.
-- Criar/convocar usuários em `auth.users`.
-- Remover senha própria do app.
+- Login Supabase Auth preparado no backend com cookie `HttpOnly`.
+- Confirmação por email exigida por configuração.
+- Bloqueio de domínio `@antlia.com.br` preparado no backend.
+- Exceção admin documentável por `AUTH_ADMIN_EXCEPTION_EMAILS`.
+- Convite de usuários via Supabase Auth Admin preparado no painel de acessos.
+- Próximo passo: aplicar migration oficial no Supabase e validar fluxos reais.
 
 ## Fase 3 - Permissões E RLS
 

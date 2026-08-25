@@ -8,7 +8,7 @@ Projeto alvo:
 
 ## Modelo Alvo De Acesso
 
-Tabelas a criar ou adaptar:
+Tabelas criadas pela migration oficial:
 
 - `profiles`: perfil interno vinculado a `auth.users.id`.
 - `roles`: perfis oficiais.
@@ -16,6 +16,8 @@ Tabelas a criar ou adaptar:
 - `user_roles`: vínculo de usuários com perfis.
 - `role_permissions`: vínculo de perfis com permissões.
 - `audit_logs`: auditoria administrativa.
+- `user_permissions`: permissões extras para perfil `personalizado`.
+- `user_effective_permissions`: view consolidada de permissões por perfil e usuário.
 
 Perfis oficiais:
 
@@ -47,3 +49,9 @@ A versão oficial deve manter sempre a última sincronização ativa. A implemen
 ## RLS
 
 Todas as tabelas expostas devem ter RLS habilitado. Escritas sensíveis devem ser feitas apenas pelo backend com chave privilegiada ou por funções controladas.
+
+Migration inicial:
+
+- [migration-official-auth-rls.sql](../sql/migration-official-auth-rls.sql)
+
+Essa migration ainda precisa ser aplicada e validada no Supabase oficial.

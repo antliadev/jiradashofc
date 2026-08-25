@@ -75,7 +75,6 @@ const dataRoutes = new Set([
 ]);
 const AUTH_CACHE_TTL_MS = 30000;
 let authCache = {
-  sessionId: null,
   authenticated: false,
   checkedAt: 0
 };
@@ -206,15 +205,9 @@ setNotFound(() => {
 
 // ─── Sistema de Autenticação Opcional ───────────────────
 
-// Verifica se tem sessão no localStorage
-function getSessionId() {
-  return localStorage.getItem('sessionId');
-}
-
-function setSessionId(sessionId) {
-  localStorage.setItem('sessionId', sessionId);
+function markAuthenticated(user = null) {
+  setCurrentUser(user);
   authCache = {
-    sessionId,
     authenticated: true,
     checkedAt: Date.now()
   };
@@ -228,7 +221,6 @@ function clearSession() {
   localStorage.removeItem('sessionId');
   setCurrentUser(null);
   authCache = {
-    sessionId: null,
     authenticated: false,
     checkedAt: 0
   };
@@ -261,18 +253,8 @@ async function authGuard(path) {
   }
 
   // Verifica se tem sessão local
-  const sessionId = getSessionId();
-
-  if (!sessionId) {
-    // Sem sessão — redireciona para login
-    window.location.hash = '#/login';
-    return false;
-  }
-
-  // Tem sessão — valida com servidor (com timeout)
   const now = Date.now();
   if (
-    authCache.sessionId === sessionId &&
     authCache.authenticated &&
     now - authCache.checkedAt < AUTH_CACHE_TTL_MS
   ) {
@@ -289,7 +271,10 @@ async function authGuard(path) {
       try {
         const response = await fetchWithTimeout('/api/auth', {
           method: 'GET',
-          headers: { 'x-session-id': sessionId }
+          credentials: 'include',
+          headers: localStorage.getItem('sessionId')
+            ? { 'x-session-id': localStorage.getItem('sessionId') }
+            : {}
         }, 5000);
         const data = await response.json().catch(() => ({ authenticated: false }));
         if (response.status === 401 || response.status === 403) {
@@ -302,15 +287,16 @@ async function authGuard(path) {
           return false;
         }
         setCurrentUser(data.user || null);
-        authCache = { sessionId, authenticated: true, checkedAt: Date.now() };
+        authCache = { authenticated: true, checkedAt: Date.now() };
         if (!canAccessRoute(path, data.user || null)) {
           window.location.hash = `#${firstAllowedRoute(data.user || null)}`;
           return false;
         }
         return true;
       } catch (err) {
-        console.warn('[Auth] Validacao temporariamente indisponivel; mantendo sessao local:', err.message);
-        return true;
+        console.warn('[Auth] Validacao indisponivel:', err.message);
+        clearSession();
+        return false;
       } finally {
         authValidationPromise = null;
       }
@@ -346,7 +332,7 @@ function syncMobileThemeButton() {
 }
 
 window.updateLayout = updateLayout;
-window.setSessionId = setSessionId;
+window.markAuthenticated = markAuthenticated;
 window.setSessionUser = setSessionUser;
 window.clearSession = clearSession;
 
@@ -364,9 +350,8 @@ async function initApp() {
   // Define o guard de autenticação
   setAuthGuard(authGuard);
   const currentPath = normalizePath(window.location.hash.replace(/^#\/?/, '/') || '/');
-  const hasSession = Boolean(getSessionId());
 
-  if (currentPath === '/login' || (!publicRoutes.includes(currentPath) && !hasSession)) {
+  if (currentPath === '/login') {
     updateLayout(false);
   } else {
     updateLayout(true);

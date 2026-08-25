@@ -18,6 +18,8 @@ function roleLabel(role) {
   return {
     full: 'Full',
     master: 'Master',
+    visualizacao: 'Visualizacao',
+    personalizado: 'Personalizado',
     custom: 'Personalizado',
   }[role] || role;
 }
@@ -27,7 +29,7 @@ function statusLabel(status) {
 }
 
 async function requestUsers() {
-  const response = await fetch('/api/access/users', { headers: sessionHeaders() });
+  const response = await fetch('/api/access/users', { headers: sessionHeaders(), credentials: 'include' });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || 'Nao foi possivel carregar usuarios.');
   users = data.users || [];
@@ -88,7 +90,8 @@ function renderForm(user) {
           <select id="access-role">
             <option value="full" ${role === 'full' ? 'selected' : ''}>Acesso Full</option>
             <option value="master" ${role === 'master' ? 'selected' : ''}>Acesso Master</option>
-            <option value="custom" ${role === 'custom' ? 'selected' : ''}>Acesso Personalizado</option>
+            <option value="visualizacao" ${role === 'visualizacao' ? 'selected' : ''}>Acesso Visualizacao</option>
+            <option value="personalizado" ${role === 'personalizado' || role === 'custom' ? 'selected' : ''}>Acesso Personalizado</option>
           </select>
         </label>
         <label>Status
@@ -119,7 +122,7 @@ function renderForm(user) {
         </div>
       </form>
       <div class="report-alert info">
-        Full acessa tudo e administra usuarios. Master acessa menus funcionais, sem Gestao de Acessos. Personalizado recebe apenas os menus marcados.
+        Full acessa tudo e administra usuarios. Master acessa menus funcionais, sem Gestao de Acessos. Visualizacao tem acesso de leitura aos modulos liberados. Personalizado recebe apenas os menus marcados.
       </div>
     </section>
   `;
@@ -173,6 +176,7 @@ async function saveUser(event) {
   const response = await fetch(id ? `/api/access/users/${encodeURIComponent(id)}` : '/api/access/users', {
     method: id ? 'PUT' : 'POST',
     headers: sessionHeaders(),
+    credentials: 'include',
     body: JSON.stringify(formPayload()),
   });
   const data = await response.json().catch(() => ({}));
@@ -190,6 +194,7 @@ async function revokeSelectedUser() {
   const response = await fetch(`/api/access/users/${encodeURIComponent(selectedId)}`, {
     method: 'DELETE',
     headers: sessionHeaders(),
+    credentials: 'include',
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {

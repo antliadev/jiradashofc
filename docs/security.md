@@ -11,7 +11,15 @@
 
 ## Estado Atual
 
-O código inicial ainda contém fallback legado de autenticação para preservar funcionamento durante a migração. Esse fallback não possui credenciais padrão e exige variáveis explícitas. Ele deve ser substituído na fase de Auth.
+O backend já foi preparado para usar Supabase Auth como provedor padrão (`AUTH_PROVIDER=supabase`) e emitir sessão em cookies `HttpOnly`. O fallback legado permanece apenas para transição controlada com `AUTH_PROVIDER=legacy`, sem credenciais padrão.
+
+Para funcionar em ambiente real, o projeto precisa de:
+
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` ou `SUPABASE_SECRET_KEY` somente no backend
+- `AUTH_ALLOWED_DOMAIN=antlia.com.br`
+- `AUTH_ADMIN_EXCEPTION_EMAILS` com a conta administrativa geral, se ela não for `@antlia.com.br`
 
 ## Controles Alvo
 
@@ -36,3 +44,14 @@ Comentários, descrições e worklogs do Jira devem ser tratados como potencialm
 - Teste de domínio permitido e bloqueio de domínio externo.
 - Teste de API protegida sem permissão.
 - Teste de RLS com usuário comum e admin.
+
+## Migration Oficial
+
+A migration [migration-official-auth-rls.sql](../sql/migration-official-auth-rls.sql) define `profiles`, `roles`, `permissions`, `user_roles`, `role_permissions`, `user_permissions`, `audit_logs`, view de permissões efetivas e policies iniciais de RLS.
+
+Não aplicar em produção sem:
+
+- backup ou ambiente de homologação;
+- chave backend privilegiada configurada;
+- teste de usuário comum/admin;
+- revisão do Security Advisor do Supabase.

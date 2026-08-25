@@ -4,8 +4,11 @@
 
 ```bash
 npm install
+cp .env.example .env
 npm run dev:all
 ```
+
+Preencha a `.env` local com chaves reais fora do Git. A `.env` criada neste workspace contém apenas a URL oficial e campos vazios para segredos.
 
 Frontend local:
 
@@ -48,6 +51,7 @@ URLs de dev e produção ainda serão definidas. Antes de conectar ao Vercel:
 ## Troubleshooting
 
 - Supabase não configurado: revisar `SUPABASE_URL` e chave backend.
+- Login indisponível: revisar `SUPABASE_ANON_KEY`, confirmação de email e domínio permitido.
 - Sync sem credenciais: revisar variáveis Jira no ambiente do backend.
 - RLS bloqueando jobs: confirmar uso de service role/secret no backend antes de endurecer policies.
 - Dashboard vazio: confirmar último job de sync e tabelas Jira.

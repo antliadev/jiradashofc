@@ -75,7 +75,7 @@ function canAccessPermission(permission, user = getCurrentUser()) {
   if (!user) return true;
   if (permission === 'access.manage') return isFull(user);
   if (isFull(user) || isMaster(user)) return true;
-  if (user.role !== 'custom' || user.status !== 'active') return false;
+  if (!['custom', 'personalizado', 'visualizacao'].includes(user.role) || user.status !== 'active') return false;
   return Array.isArray(user.permissions) && user.permissions.includes(permission);
 }
 

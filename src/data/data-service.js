@@ -157,6 +157,7 @@ class DataService {
       const response = await fetch(`${this._apiBase}/config`, {
         method: 'POST',
         headers: this._getHeaders(),
+        credentials: 'include',
         body: JSON.stringify(config)
       });
       
@@ -210,6 +211,7 @@ class DataService {
       const response = await fetch(`${this._apiBase}/test-connection`, {
         method: 'POST',
         headers: this._getHeaders(),
+        credentials: 'include',
         body: JSON.stringify(credentials)
       });
       

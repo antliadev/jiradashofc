@@ -1,8 +1,6 @@
 /**
  * login.js — Página de Login
  */
-import { dataService } from '../data/data-service.js';
-
 export function renderLogin() {
   const content = document.getElementById('page-content');
   
@@ -25,7 +23,7 @@ export function renderLogin() {
               type="email" 
               id="login-email" 
               name="email" 
-              placeholder="admin@jira.com"
+              placeholder="seu.nome@antlia.com.br"
               required
               autocomplete="email"
             >
@@ -79,6 +77,7 @@ export function renderLogin() {
     try {
       const response = await fetch('/api/auth', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json'
         },
@@ -91,14 +90,11 @@ export function renderLogin() {
         throw new Error(data.error || 'Erro ao fazer login');
       }
       
-      // Salvar sessionId e atualizar cache de auth do app
-      if (window.setSessionId) {
-        window.setSessionId(data.sessionId);
-      } else {
-        localStorage.setItem('sessionId', data.sessionId);
-      }
       if (window.setSessionUser) {
         window.setSessionUser(data.user || null);
+      }
+      if (window.markAuthenticated) {
+        window.markAuthenticated(data.user || null);
       }
       
       // Atualizar layout para mostrar sidebar

@@ -463,7 +463,7 @@ async function updateUser(id, input = {}) {
   return safeUser(users[index]);
 }
 
-async function revokeUser(id) {
+async function revokeUser(id, actorUserId = null) {
   if (authConfig.provider === 'supabase') {
     requirePrivilegedSupabase();
     const { error: profileError } = await supabase
@@ -477,7 +477,7 @@ async function revokeUser(id) {
     });
     if (authError) throw authError;
 
-    await auditAccessChange(null, 'profile.revoke', id);
+    await auditAccessChange(actorUserId, 'profile.revoke', id);
     return findProfileById(id);
   }
 

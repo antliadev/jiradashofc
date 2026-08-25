@@ -50,8 +50,14 @@ A versão oficial deve manter sempre a última sincronização ativa. A implemen
 
 Todas as tabelas expostas devem ter RLS habilitado. Escritas sensíveis devem ser feitas apenas pelo backend com chave privilegiada ou por funções controladas.
 
-Migration inicial:
+Migrations oficiais iniciais:
 
+- [migration-official-core-jira-schema.sql](../sql/migration-official-core-jira-schema.sql)
 - [migration-official-auth-rls.sql](../sql/migration-official-auth-rls.sql)
+- [migration-official-advisor-fixes.sql](../sql/migration-official-advisor-fixes.sql)
 
-Essa migration ainda precisa ser aplicada e validada no Supabase oficial.
+Estado em 2026-08-25:
+
+- migrations aplicadas no Supabase oficial: `official_core_jira_schema`, `official_auth_rls`, `official_advisor_fixes`;
+- Advisor de segurança: sem lints;
+- Advisor de performance: apenas `INFO` de índices ainda não utilizados em banco recém-criado, sem `WARN`/`ERROR` acionável após as correções.

@@ -80,7 +80,7 @@ app.put('/api/access/users/:id', requireFullAccess, async (req, res) => {
 
 app.delete('/api/access/users/:id', requireFullAccess, async (req, res) => {
   try {
-    res.json({ user: await revokeUser(req.params.id) });
+    res.json({ user: await revokeUser(req.params.id, req.session?.user?.id) });
   } catch (error) {
     res.status(error.status || 500).json({ error: error.message });
   }

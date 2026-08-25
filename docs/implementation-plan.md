@@ -18,12 +18,14 @@
 
 ## Fase 2 - Supabase Auth
 
+- Schema Jira oficial limpo criado em `sql/migration-official-core-jira-schema.sql`.
 - Login Supabase Auth preparado no backend com cookie `HttpOnly`.
 - Confirmação por email exigida por configuração.
 - Bloqueio de domínio `@antlia.com.br` preparado no backend.
 - Exceção admin documentável por `AUTH_ADMIN_EXCEPTION_EMAILS`.
 - Convite de usuários via Supabase Auth Admin preparado no painel de acessos.
-- Próximo passo: aplicar migration oficial no Supabase e validar fluxos reais.
+- Migrations oficiais aplicadas e Advisor de segurança validado sem lints no Supabase oficial.
+- Próximo passo: configurar chave privilegiada fora do Git e validar convite/login real com email confirmado.
 
 ## Fase 3 - Permissões E RLS
 

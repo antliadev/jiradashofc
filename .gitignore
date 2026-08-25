@@ -1,0 +1,48 @@
+# Dependencies and build outputs
+node_modules/
+dist/
+dist-ssr/
+coverage/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Environment and local state
+.env
+.env.*
+!.env.example
+.local-data/
+.vercel/
+
+# Sensitive Jira/Supabase artifacts
+jira-config.json
+cookies.txt
+*.cookie
+*.har
+*.trace.zip
+playwright-report/
+test-results/
+
+# Temporary diagnostics
+_page_check*.html
+test-*.js
+insert-to-supabase.js
+generate-upsert-sql.js
+test-jira-output.json
+create-table.js
+setup-supabase.js
+update-connection-token.js
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Regenerable architecture artifacts
+graphify-out/

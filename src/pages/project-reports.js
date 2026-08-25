@@ -1,0 +1,614 @@
+/**
+ * project-reports.js — Relatorios gerenciais e saude dos cards por projeto.
+ */
+import { dataService } from '../data/data-service.js';
+import { isCardOverdue, resolveStatusCategory, StatusCategory } from '../data/models.js';
+import { formatDate, formatDateTime, sanitize, typeLabel } from '../utils/helpers.js';
+import { exportRowsWorkbook } from '../utils/excel-export.js';
+
+const HEALTH_MIN_KEY = 'rja.projectHealth.minimumPercent';
+const REPORT_CONFIG_KEY = 'rja.clientReport.config';
+
+function pct(value, total) {
+  if (!total) return null;
+  return Math.round((value / total) * 100);
+}
+
+function pctLabel(value) {
+  return value === null || value === undefined ? 'Nao calculavel' : `${value}%`;
+}
+
+function cardEndDate(card) {
+  return card.plannedEndDate || card.dueDate || null;
+}
+
+function cardStartDate(card) {
+  return card.plannedStartDate || card.startDate || cardEndDate(card);
+}
+
+function isEpic(card) {
+  return card.type === 'epic';
+}
+
+function isCanceled(card) {
+  return String(card.status || '').toLowerCase().includes('cancel');
+}
+
+function getRawIssue(card) {
+  const rawIssues = dataService.getRawJiraData()?.issues || [];
+  return rawIssues.find(issue => issue.issue_id === card.id || issue.issue_key === card.key) || {};
+}
+
+function rawTypeLabel(card) {
+  return getRawIssue(card).type_name || typeLabel(card.type);
+}
+
+function getProjectFromState() {
+  const projects = dataService.getProjects();
+  const params = new URLSearchParams((window.location.hash.split('?')[1] || ''));
+  const requestedKey = params.get('projectKey');
+  return dataService.getProjectByKey(requestedKey) || projects[0] || null;
+}
+
+function projectOptions(selectedId) {
+  return dataService.getProjects().map(project => (
+    `<option value="${sanitize(project.id)}" ${project.id === selectedId ? 'selected' : ''}>${sanitize(project.key)} - ${sanitize(project.name)}</option>`
+  )).join('');
+}
+
+function cardsForProject(projectId, { includeEpics = true } = {}) {
+  return dataService.getCardsByProject(projectId)
+    .filter(card => includeEpics || !isEpic(card))
+    .filter(card => !isCanceled(card));
+}
+
+function getEpicChildren(epic, projectCards) {
+  return projectCards.filter(card => card.id !== epic.id && (card.parentKey === epic.key || card.epicKey === epic.key));
+}
+
+function summarizeEpic(epic, projectCards) {
+  const children = getEpicChildren(epic, projectCards).filter(card => !isCanceled(card));
+  const done = children.filter(card => resolveStatusCategory(card.status) === StatusCategory.DONE).length;
+  const blocked = children.filter(card => resolveStatusCategory(card.status) === StatusCategory.BLOCKED).length;
+  const overdue = children.filter(isCardOverdue).length;
+  const starts = children.map(cardStartDate).filter(Boolean).map(value => new Date(value));
+  const ends = children.map(cardEndDate).filter(Boolean).map(value => new Date(value));
+  const progress = pct(done, children.length) || 0;
+  const forecast = ends.length ? new Date(Math.max(...ends.map(date => date.getTime()))).toISOString() : null;
+  const original = epic.dueDate || cardEndDate(epic) || forecast;
+  const status = resolveStatusCategory(epic.status);
+  const situation = status === StatusCategory.DONE || progress === 100
+    ? 'Atividades Antlia concluidas'
+    : blocked || overdue
+      ? (overdue ? 'Atrasado' : 'Bloqueado')
+      : status === StatusCategory.IN_PROGRESS
+        ? 'Em andamento'
+        : 'Pendente';
+
+  return {
+    epic,
+    children,
+    done,
+    blocked,
+    overdue,
+    progress,
+    forecast,
+    original,
+    start: starts.length ? new Date(Math.min(...starts.map(date => date.getTime()))).toISOString() : null,
+    situation,
+  };
+}
+
+function reportConfig(projectKey) {
+  try {
+    const all = JSON.parse(localStorage.getItem(REPORT_CONFIG_KEY) || '{}');
+    return all[projectKey] || {};
+  } catch {
+    return {};
+  }
+}
+
+function saveReportConfig(projectKey, config) {
+  const all = JSON.parse(localStorage.getItem(REPORT_CONFIG_KEY) || '{}');
+  all[projectKey] = { ...all[projectKey], ...config, updatedAt: new Date().toISOString() };
+  localStorage.setItem(REPORT_CONFIG_KEY, JSON.stringify(all));
+}
+
+function renderHeader(title, subtitle) {
+  const header = document.getElementById('page-header');
+  header.innerHTML = `
+    <div>
+      <h2>${sanitize(title)}</h2>
+      <div class="subtitle">${sanitize(subtitle)}</div>
+    </div>
+  `;
+}
+
+function renderExecutiveReport() {
+  const content = document.getElementById('page-content');
+  const project = getProjectFromState();
+  renderHeader('Relatorio Gerencial - Clientes', 'Pre-visualizacao executiva por epicos, prazos e bloqueios');
+  if (!project) {
+    content.innerHTML = '<div class="empty-state"><h3>Sem projetos carregados</h3><p>Sincronize os dados para gerar o relatorio.</p></div>';
+    return;
+  }
+
+  const projectCards = cardsForProject(project.id);
+  const epics = projectCards.filter(isEpic).map(epic => summarizeEpic(epic, projectCards));
+  const selectedConfig = reportConfig(project.key);
+  const selectedEpicKeys = selectedConfig.selectedEpicKeys || epics.map(item => item.epic.key);
+  const visibleEpics = epics.filter(item => selectedEpicKeys.includes(item.epic.key));
+  const doneCards = projectCards.filter(card => !isEpic(card) && resolveStatusCategory(card.status) === StatusCategory.DONE).length;
+  const totalCards = projectCards.filter(card => !isEpic(card)).length;
+  const blockedCards = projectCards.filter(card => !isEpic(card) && resolveStatusCategory(card.status) === StatusCategory.BLOCKED).length;
+  const overdueCards = projectCards.filter(card => !isEpic(card) && isCardOverdue(card)).length;
+  const progress = pct(doneCards, totalCards) || 0;
+  const forecastDates = visibleEpics.map(item => item.forecast).filter(Boolean).map(value => new Date(value));
+  const antliaForecast = forecastDates.length ? new Date(Math.max(...forecastDates.map(date => date.getTime()))).toISOString() : null;
+
+  content.innerHTML = `
+    <div class="report-page">
+      <div class="report-toolbar">
+        <label>Projeto<select id="report-project">${projectOptions(project.id)}</select></label>
+        <label>Titulo<input id="report-title" value="${sanitize(selectedConfig.title || 'Relatorio Gerencial')}"></label>
+        <label>Cliente<input id="report-client" value="${sanitize(selectedConfig.client || project.name.split('-')[0]?.trim() || project.name)}"></label>
+        <label>Data de referencia<input id="report-date" type="date" value="${sanitize(selectedConfig.referenceDate || new Date().toISOString().slice(0, 10))}"></label>
+        <button class="btn btn-primary" id="save-report-config">Salvar configuracao</button>
+        <button class="btn btn-secondary" id="export-report-png">PNG</button>
+        <button class="btn btn-secondary" id="export-report-pdf">PDF</button>
+      </div>
+
+      <section class="client-slide" id="client-report-export">
+        <div class="client-slide-header">
+          <div>
+            <h1>${sanitize(selectedConfig.title || 'Relatorio Gerencial')}</h1>
+            <p>${sanitize(selectedConfig.subtitle || 'Acompanhamento executivo das atividades sob responsabilidade da Antlia')}</p>
+          </div>
+          <div>
+            <strong>${sanitize(selectedConfig.client || project.name)}</strong>
+            <span>${sanitize(project.key)} - ${sanitize(project.name)}</span>
+            <span>Referencia: ${formatDate(selectedConfig.referenceDate || new Date().toISOString())}</span>
+            <span>Atualizado: ${formatDateTime(dataService.getSyncMetadata().lastSyncedAt)}</span>
+          </div>
+        </div>
+
+        <div class="report-kpis">
+          <div><strong>${progress}%</strong><span>Progresso Antlia</span></div>
+          <div><strong>${epics.length}</strong><span>Epicos</span></div>
+          <div><strong>${doneCards}/${totalCards}</strong><span>Cards concluidos</span></div>
+          <div><strong>${overdueCards}</strong><span>Atrasados</span></div>
+          <div><strong>${blockedCards}</strong><span>Bloqueados</span></div>
+          <div><strong>${formatDate(antliaForecast)}</strong><span>Previsao Antlia</span></div>
+        </div>
+
+        <div class="client-slide-grid">
+          <section>
+            <h3>Resumo executivo</h3>
+            <textarea id="report-notes" placeholder="Decisoes, estrategia acordada, pontos de atencao e observacoes manuais">${sanitize(selectedConfig.notes || '')}</textarea>
+          </section>
+          <section>
+            <h3>Previsao consolidada</h3>
+            <p>Conclusao prevista das atividades Antlia: <strong>${formatDate(antliaForecast)}</strong></p>
+            <p>A subida efetiva em UAT fica tratada como dependencia externa e nao compoe o percentual Antlia.</p>
+            <p class="muted">Prazo original historico depende de baseline cadastrado ou historico de alteracao de datas no Jira.</p>
+          </section>
+        </div>
+
+        <section>
+          <h3>Linha do tempo dos epicos</h3>
+          <div class="epic-timeline">
+            ${visibleEpics.map((item, index) => `
+              <article class="epic-milestone ${item.situation.toLowerCase().includes('atras') || item.situation.toLowerCase().includes('bloque') ? 'danger' : item.progress === 100 ? 'success' : 'warning'}">
+                <small>${index + 1}</small>
+                <strong>${sanitize(item.epic.key)}</strong>
+                <span>${sanitize(item.epic.title)}</span>
+                <b>${item.progress}%</b>
+                <em>${sanitize(item.situation)}</em>
+              </article>
+            `).join('') || '<p class="muted">Nenhum epico encontrado neste projeto.</p>'}
+          </div>
+        </section>
+
+        <section>
+          <h3>Detalhe dos epicos</h3>
+          <div class="table-container">
+            <table class="data-table">
+              <thead><tr><th>Epico</th><th>Status</th><th>Inicio</th><th>Previsao Antlia</th><th>Conclusao</th><th>Atrasados</th><th>Bloqueados</th><th>Situacao</th></tr></thead>
+              <tbody>
+                ${visibleEpics.map(item => `
+                  <tr>
+                    <td><strong>${sanitize(item.epic.key)}</strong><br><span class="muted">${sanitize(item.epic.title)}</span></td>
+                    <td>${sanitize(item.epic.status)}</td>
+                    <td>${formatDate(item.start)}</td>
+                    <td>${formatDate(item.forecast)}</td>
+                    <td>${item.done}/${item.children.length} - ${item.progress}%</td>
+                    <td>${item.overdue}</td>
+                    <td>${item.blocked}</td>
+                    <td><span class="badge ${item.situation.includes('Atrasado') || item.situation.includes('Bloqueado') ? 'badge-blocked' : item.progress === 100 ? 'badge-done' : 'badge-warning'}">${sanitize(item.situation)}</span></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </div>
+  `;
+
+  bindReportControls(project, visibleEpics);
+}
+
+function bindReportControls(project, visibleEpics) {
+  document.getElementById('report-project')?.addEventListener('change', event => {
+    const selected = dataService.getProjectById(event.target.value);
+    if (selected) window.location.hash = `#/projects/executive?projectKey=${selected.key}`;
+  });
+  document.getElementById('save-report-config')?.addEventListener('click', () => {
+    saveReportConfig(project.key, {
+      title: document.getElementById('report-title')?.value || '',
+      client: document.getElementById('report-client')?.value || '',
+      referenceDate: document.getElementById('report-date')?.value || '',
+      notes: document.getElementById('report-notes')?.value || '',
+      selectedEpicKeys: visibleEpics.map(item => item.epic.key),
+    });
+    renderExecutiveReport();
+  });
+  document.getElementById('export-report-png')?.addEventListener('click', () => exportElementAsPng('client-report-export', `relatorio_gerencial_${project.key}`));
+  document.getElementById('export-report-pdf')?.addEventListener('click', () => exportElementAsPdf('client-report-export', `relatorio_gerencial_${project.key}`));
+}
+
+function commentAvailability() {
+  const sample = dataService.getRawJiraData()?.issues?.find(issue => issue.comments || issue.comment_count || issue.comments_count);
+  return Boolean(sample);
+}
+
+function classifyCommentHealth(card) {
+  const raw = getRawIssue(card);
+  const human = Number(raw.human_comment_count || raw.comments_human_count || 0);
+  const automation = Number(raw.automation_comment_count || raw.comments_automation_count || 0);
+  const total = Number(raw.comment_count || raw.comments_count || human + automation || 0);
+  if (!commentAvailability()) return { key: 'unavailable', label: 'Comentarios nao sincronizados', human, automation, total };
+  if (human > 0) return { key: 'healthy', label: 'Com comentario humano', human, automation, total };
+  if (automation > 0) return { key: 'automation', label: 'Somente comentarios de automacao', human, automation, total };
+  return { key: 'missing', label: 'Sem comentario humano', human, automation, total };
+}
+
+function healthMinimum() {
+  return Number(localStorage.getItem(HEALTH_MIN_KEY) || 90);
+}
+
+function renderHealthReport() {
+  const content = document.getElementById('page-content');
+  const project = getProjectFromState();
+  renderHeader('Saude Detalhamento Cards Projetos', 'Cobertura de comentarios humanos para apoiar relatorios gerenciais');
+  if (!project) {
+    content.innerHTML = '<div class="empty-state"><h3>Sem projetos carregados</h3></div>';
+    return;
+  }
+
+  const minimum = healthMinimum();
+  const allProjectSummaries = dataService.getProjects().map(p => {
+    const eligible = cardsForProject(p.id, { includeEpics: false });
+    const enriched = eligible.map(card => ({ card, health: classifyCommentHealth(card) }));
+    const healthy = enriched.filter(item => item.health.key === 'healthy').length;
+    const automation = enriched.filter(item => item.health.key === 'automation').length;
+    const unavailable = enriched.filter(item => item.health.key === 'unavailable').length;
+    const percent = unavailable ? null : pct(healthy, eligible.length);
+    return {
+      project: p,
+      eligible,
+      enriched,
+      healthy,
+      automation,
+      missing: eligible.length - healthy - automation - unavailable,
+      unavailable,
+      percent,
+      analysts: new Set(eligible.map(card => card.assigneeId)).size,
+    };
+  });
+  const summary = allProjectSummaries.find(item => item.project.id === project.id) || allProjectSummaries[0];
+  const filteredCards = summary.enriched.filter(item => item.health.key !== 'healthy').slice(0, 200);
+  const status = summary.percent === null
+    ? 'Sem dados suficientes'
+    : summary.percent >= minimum
+      ? 'Apto para gerar relatorio'
+      : 'Abaixo do minimo';
+
+  content.innerHTML = `
+    <div class="report-page">
+      <div class="report-toolbar">
+        <label>Projeto<select id="health-project">${projectOptions(project.id)}</select></label>
+        <label>Minimo esperado<input id="health-minimum" type="number" min="0" max="100" value="${minimum}"></label>
+        <button class="btn btn-primary" id="save-health-minimum">Salvar minimo</button>
+        <button class="btn btn-secondary" id="export-health-xlsx">Exportar Excel</button>
+      </div>
+
+      ${!commentAvailability() ? `
+        <div class="report-alert warning">
+          Comentarios do Jira ainda nao estao presentes na carga atual. A tela foi preparada, mas a saude real so pode ser calculada quando a sincronizacao trouxer comentarios e autor do comentario.
+        </div>
+      ` : ''}
+
+      <div class="kpi-grid">
+        <div class="kpi-card kpi-info"><div class="kpi-value">${pctLabel(summary.percent)}</div><div class="kpi-label">Percentual de saude</div><div class="kpi-trend">Minimo esperado: ${minimum}%</div></div>
+        <div class="kpi-card"><div class="kpi-value">${summary.eligible.length}</div><div class="kpi-label">Cards elegiveis</div></div>
+        <div class="kpi-card kpi-success"><div class="kpi-value">${summary.healthy}</div><div class="kpi-label">Com comentario humano</div></div>
+        <div class="kpi-card kpi-warning"><div class="kpi-value">${summary.missing}</div><div class="kpi-label">Sem comentario humano</div></div>
+        <div class="kpi-card kpi-danger"><div class="kpi-value">${summary.automation}</div><div class="kpi-label">Somente automacao</div></div>
+        <div class="kpi-card"><div class="kpi-value">${allProjectSummaries.filter(item => item.percent !== null && item.percent < minimum).length}</div><div class="kpi-label">Projetos abaixo do minimo</div></div>
+      </div>
+
+      <section class="report-section">
+        <h3>Resumo por projeto</h3>
+        <div class="table-container">
+          <table class="data-table">
+            <thead><tr><th>Projeto</th><th>Elegiveis</th><th>Com humano</th><th>Sem humano</th><th>Somente automacao</th><th>Saude</th><th>Situacao</th><th>Analistas</th></tr></thead>
+            <tbody>
+              ${allProjectSummaries.map(item => `
+                <tr>
+                  <td><strong>${sanitize(item.project.key)}</strong><br><span class="muted">${sanitize(item.project.name)}</span></td>
+                  <td>${item.eligible.length}</td>
+                  <td>${item.healthy}</td>
+                  <td>${item.missing}</td>
+                  <td>${item.automation}</td>
+                  <td>${pctLabel(item.percent)}</td>
+                  <td><span class="badge ${item.percent === null ? 'badge-warning' : item.percent >= minimum ? 'badge-done' : 'badge-blocked'}">${item.percent === null ? 'Sem dados suficientes' : item.percent >= minimum ? 'Apto' : 'Abaixo do minimo'}</span></td>
+                  <td>${item.analysts}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="report-section">
+        <h3>Cards pendentes de cobertura - ${sanitize(project.key)}</h3>
+        <p class="muted">Situacao do projeto: ${sanitize(status)}</p>
+        <div class="table-container">
+          <table class="data-table">
+            <thead><tr><th>Card</th><th>Tipo</th><th>Status</th><th>Responsavel</th><th>Atualizado</th><th>Humanos</th><th>Automacao</th><th>Situacao</th></tr></thead>
+            <tbody>
+              ${filteredCards.map(({ card, health }) => {
+                const user = dataService.getUserById(card.assigneeId);
+                return `
+                  <tr>
+                    <td><a href="${sanitize(card.jiraUrl || '#')}" target="_blank" rel="noopener noreferrer">${sanitize(card.key)}</a><br><span class="muted">${sanitize(card.title)}</span></td>
+                    <td>${sanitize(rawTypeLabel(card))}</td>
+                    <td>${sanitize(card.status)}</td>
+                    <td>${sanitize(user?.displayName || 'Sem responsavel definido')}</td>
+                    <td>${formatDate(card.updatedAt)}</td>
+                    <td>${health.human}</td>
+                    <td>${health.automation}</td>
+                    <td><span class="badge badge-warning">${sanitize(health.label)}</span></td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  `;
+
+  document.getElementById('health-project')?.addEventListener('change', event => {
+    const selected = dataService.getProjectById(event.target.value);
+    if (selected) window.location.hash = `#/projects/health?projectKey=${selected.key}`;
+  });
+  document.getElementById('save-health-minimum')?.addEventListener('click', () => {
+    localStorage.setItem(HEALTH_MIN_KEY, document.getElementById('health-minimum')?.value || '90');
+    renderHealthReport();
+  });
+  document.getElementById('export-health-xlsx')?.addEventListener('click', () => exportHealthWorkbook(allProjectSummaries, summary));
+}
+
+function renderDetailedReport() {
+  const content = document.getElementById('page-content');
+  const project = getProjectFromState();
+  renderHeader('Relatorio Gerencial Detalhado - Clientes', 'Cards, epicos, bloqueios, pendencias e rastreabilidade disponivel');
+  if (!project) {
+    content.innerHTML = '<div class="empty-state"><h3>Sem projetos carregados</h3></div>';
+    return;
+  }
+
+  const params = new URLSearchParams((window.location.hash.split('?')[1] || ''));
+  const statusFilter = params.get('status') || '';
+  const projectCards = cardsForProject(project.id, { includeEpics: false });
+  const filtered = statusFilter ? projectCards.filter(card => card.status === statusFilter) : projectCards;
+  const done = filtered.filter(card => resolveStatusCategory(card.status) === StatusCategory.DONE).length;
+  const inProgress = filtered.filter(card => resolveStatusCategory(card.status) === StatusCategory.IN_PROGRESS).length;
+  const blocked = filtered.filter(card => resolveStatusCategory(card.status) === StatusCategory.BLOCKED).length;
+  const overdue = filtered.filter(isCardOverdue).length;
+  const epics = [...new Set(filtered.map(card => card.parentKey || card.epicKey).filter(Boolean))];
+  const assignees = [...new Set(filtered.map(card => card.assigneeId).filter(Boolean))];
+  const coverage = commentAvailability() ? pct(filtered.filter(card => classifyCommentHealth(card).key === 'healthy').length, filtered.length) : null;
+
+  content.innerHTML = `
+    <div class="report-page">
+      <div class="report-toolbar">
+        <label>Projeto<select id="detailed-project">${projectOptions(project.id)}</select></label>
+        <label>Status<select id="detailed-status"><option value="">Todos</option>${dataService.getStatusOptions().map(status => `<option value="${sanitize(status)}" ${status === statusFilter ? 'selected' : ''}>${sanitize(status)}</option>`).join('')}</select></label>
+        <button class="btn btn-secondary" id="clear-detailed-filters">Limpar filtros</button>
+        <button class="btn btn-secondary" id="copy-executive-summary">Copiar resumo</button>
+        <button class="btn btn-secondary" id="export-detailed-xlsx">Excel</button>
+      </div>
+
+      ${!commentAvailability() ? '<div class="report-alert warning">Analise inteligente de comentarios aguardando sincronizacao de comentarios do Jira. O relatorio abaixo usa dados estruturados atuais.</div>' : ''}
+
+      <div class="kpi-grid">
+        <div class="kpi-card"><div class="kpi-value">${filtered.length}</div><div class="kpi-label">Cards analisados</div></div>
+        <div class="kpi-card kpi-success"><div class="kpi-value">${done}</div><div class="kpi-label">Concluidos</div></div>
+        <div class="kpi-card kpi-info"><div class="kpi-value">${inProgress}</div><div class="kpi-label">Em andamento</div></div>
+        <div class="kpi-card kpi-danger"><div class="kpi-value">${blocked}</div><div class="kpi-label">Bloqueados</div></div>
+        <div class="kpi-card kpi-warning"><div class="kpi-value">${overdue}</div><div class="kpi-label">Atrasados</div></div>
+        <div class="kpi-card"><div class="kpi-value">${pctLabel(coverage)}</div><div class="kpi-label">Cobertura das informacoes</div></div>
+      </div>
+
+      <section class="report-section">
+        <h3>Resumo inteligente revisavel</h3>
+        <textarea id="detailed-summary">Projeto ${project.name}: ${filtered.length} cards analisados, ${done} concluidos, ${inProgress} em andamento, ${blocked} bloqueados e ${overdue} atrasados. Existem ${epics.length} epicos impactados e ${assignees.length} responsaveis envolvidos. Revise este texto antes de apresentar ao cliente.</textarea>
+      </section>
+
+      <section class="report-section">
+        <h3>Evolucao por epico</h3>
+        <div class="table-container">
+          <table class="data-table">
+            <thead><tr><th>Epico</th><th>Total</th><th>Concluidos</th><th>Em andamento</th><th>Bloqueados</th><th>Atrasados</th><th>Previsao</th></tr></thead>
+            <tbody>
+              ${epics.map(epicKey => {
+                const cards = filtered.filter(card => (card.parentKey || card.epicKey) === epicKey);
+                const doneCount = cards.filter(card => resolveStatusCategory(card.status) === StatusCategory.DONE).length;
+                const ends = cards.map(cardEndDate).filter(Boolean).map(value => new Date(value));
+                return `
+                  <tr>
+                    <td><strong>${sanitize(epicKey)}</strong></td>
+                    <td>${cards.length}</td>
+                    <td>${doneCount} (${pct(doneCount, cards.length) || 0}%)</td>
+                    <td>${cards.filter(card => resolveStatusCategory(card.status) === StatusCategory.IN_PROGRESS).length}</td>
+                    <td>${cards.filter(card => resolveStatusCategory(card.status) === StatusCategory.BLOCKED).length}</td>
+                    <td>${cards.filter(isCardOverdue).length}</td>
+                    <td>${formatDate(ends.length ? new Date(Math.max(...ends.map(date => date.getTime()))).toISOString() : null)}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="report-section">
+        <h3>Detalhamento dos cards</h3>
+        <div class="table-container">
+          <table class="data-table">
+            <thead><tr><th>Card</th><th>Epico</th><th>Tipo</th><th>Status</th><th>Responsavel</th><th>Data limite</th><th>Atualizacao</th><th>Rastreabilidade</th></tr></thead>
+            <tbody>
+              ${filtered.slice(0, 300).map(card => {
+                const user = dataService.getUserById(card.assigneeId);
+                return `
+                  <tr>
+                    <td><a href="${sanitize(card.jiraUrl || '#')}" target="_blank" rel="noopener noreferrer">${sanitize(card.key)}</a><br><span class="muted">${sanitize(card.title)}</span></td>
+                    <td>${sanitize(card.parentKey || card.epicKey || '-')}</td>
+                    <td>${sanitize(rawTypeLabel(card))}</td>
+                    <td>${sanitize(card.status)}</td>
+                    <td>${sanitize(user?.displayName || 'Sem responsavel definido')}</td>
+                    <td>${formatDate(cardEndDate(card))}</td>
+                    <td>${formatDate(card.updatedAt)}</td>
+                    <td><span class="badge badge-type">Card Jira</span></td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  `;
+
+  document.getElementById('detailed-project')?.addEventListener('change', event => {
+    const selected = dataService.getProjectById(event.target.value);
+    if (selected) window.location.hash = `#/projects/detailed-report?projectKey=${selected.key}`;
+  });
+  document.getElementById('detailed-status')?.addEventListener('change', event => {
+    window.location.hash = `#/projects/detailed-report?projectKey=${project.key}${event.target.value ? `&status=${encodeURIComponent(event.target.value)}` : ''}`;
+  });
+  document.getElementById('clear-detailed-filters')?.addEventListener('click', () => {
+    window.location.hash = `#/projects/detailed-report?projectKey=${project.key}`;
+  });
+  document.getElementById('copy-executive-summary')?.addEventListener('click', async () => {
+    await navigator.clipboard.writeText(document.getElementById('detailed-summary')?.value || '');
+  });
+  document.getElementById('export-detailed-xlsx')?.addEventListener('click', () => exportDetailedWorkbook(filtered, project));
+}
+
+async function exportElementAsPng(elementId, filename) {
+  const element = document.getElementById(elementId);
+  if (!element) return;
+  const { default: html2canvas } = await import('html2canvas');
+  const canvas = await html2canvas(element, { backgroundColor: '#0f111a', scale: Math.min(2, window.devicePixelRatio || 1), useCORS: true });
+  const link = document.createElement('a');
+  link.download = `${filename}_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+async function exportElementAsPdf(elementId, filename) {
+  const element = document.getElementById(elementId);
+  if (!element) return;
+  const { default: html2canvas } = await import('html2canvas');
+  const { jsPDF } = await import('jspdf');
+  const canvas = await html2canvas(element, { backgroundColor: '#0f111a', scale: 1.5, useCORS: true });
+  const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [canvas.width, canvas.height] });
+  pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+  pdf.save(`${filename}_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.pdf`);
+}
+
+async function exportHealthWorkbook(projectSummaries, selectedSummary) {
+  await exportRowsWorkbook([
+    {
+      name: 'Resumo por projeto',
+      rows: projectSummaries.map(item => ({
+        projeto: item.project.key,
+        nome: item.project.name,
+        elegiveis: item.eligible.length,
+        com_humano: item.healthy,
+        sem_humano: item.missing,
+        somente_automacao: item.automation,
+        saude: pctLabel(item.percent),
+      })),
+    },
+    {
+      name: 'Cards pendentes',
+      rows: selectedSummary.enriched.filter(item => item.health.key !== 'healthy').map(({ card, health }) => ({
+        card: card.key,
+        titulo: card.title,
+        tipo: rawTypeLabel(card),
+        status: card.status,
+        responsavel: dataService.getUserById(card.assigneeId)?.displayName || '',
+        humanos: health.human,
+        automacao: health.automation,
+        situacao: health.label,
+        jira: card.jiraUrl || '',
+      })),
+    },
+  ], `saude_cards_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+async function exportDetailedWorkbook(cards, project) {
+  await exportRowsWorkbook([
+    {
+      name: 'Resumo',
+      rows: [{
+        projeto: project.key,
+        nome: project.name,
+        cards_analisados: cards.length,
+        gerado_em: new Date().toISOString(),
+        observacao: commentAvailability() ? 'Comentarios disponiveis na carga.' : 'Comentarios nao sincronizados na carga atual.',
+      }],
+    },
+    {
+      name: 'Detalhamento',
+      rows: cards.map(card => ({
+        card: card.key,
+        titulo: card.title,
+        epico: card.parentKey || card.epicKey || '',
+        tipo: rawTypeLabel(card),
+        status: card.status,
+        responsavel: dataService.getUserById(card.assigneeId)?.displayName || '',
+        data_limite: cardEndDate(card) || '',
+        atualizado: card.updatedAt || '',
+        jira: card.jiraUrl || '',
+      })),
+    },
+  ], `relatorio_detalhado_${project.key}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
+export function renderProjectExecutiveReport() {
+  renderExecutiveReport();
+}
+
+export function renderProjectHealthReport() {
+  renderHealthReport();
+}
+
+export function renderProjectDetailedReport() {
+  renderDetailedReport();
+}

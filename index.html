@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Radar Jira Antlia - Visão executiva de projetos, cards e analistas" />
+  <title>Radar Jira Antlia — RJA</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <script>
+    (() => {
+      const saved = localStorage.getItem('jira-dashboard-theme');
+      const theme = saved === 'light' || saved === 'dark'
+        ? saved
+        : (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.style.colorScheme = theme;
+    })();
+  </script>
+</head>
+<body>
+  <button id="mobile-theme-toggle" class="mobile-theme-toggle" type="button" aria-label="Alternar tema"></button>
+  <div id="app" class="app-layout">
+    <aside id="sidebar" class="sidebar"></aside>
+    <main class="main-content">
+      <header id="page-header" class="page-header"></header>
+      <section id="page-content" class="page-content"></section>
+    </main>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

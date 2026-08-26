@@ -5,6 +5,7 @@ import { dataService } from '../data/data-service.js';
 import { isCardOverdue, resolveStatusCategory, StatusCategory } from '../data/models.js';
 import { formatDate, sanitize, sanitizeTitle, typeLabel } from '../utils/helpers.js';
 import { exportRowsWorkbook } from '../utils/excel-export.js';
+import { businessHelp } from '../utils/ui-feedback.js';
 
 const MIN_SAMPLE_KEY = 'rja.analysts.minimumSample';
 const SHARED_ANALYST_KEY = 'rja.analysts.sharedUserId';
@@ -238,14 +239,14 @@ function renderGeneral() {
       </section>
 
       <div class="kpi-grid analyst-kpi-grid">
-        <div class="kpi-card"><div class="kpi-value">${m.projects.length}</div><div class="kpi-label">Projetos em atuacao</div></div>
-        <div class="kpi-card"><div class="kpi-value">${m.current.length}</div><div class="kpi-label">Cards sob responsabilidade</div></div>
-        <div class="kpi-card kpi-success"><div class="kpi-value">${m.done.length}</div><div class="kpi-label">Cards concluidos</div></div>
-        <div class="kpi-card"><div class="kpi-value">${percentLabel(m.onTimeRate)}</div><div class="kpi-label">Entregas no prazo</div></div>
-        <div class="kpi-card kpi-danger"><div class="kpi-value">${m.overdue.length}</div><div class="kpi-label">Cards atrasados</div><div class="kpi-trend">${m.avgLateDays} dias uteis em media</div></div>
-        <div class="kpi-card kpi-warning"><div class="kpi-value">${m.blocked.length}</div><div class="kpi-label">Cards bloqueados</div></div>
-        <div class="kpi-card"><div class="kpi-value">${percentLabel(m.commentCoverage)}</div><div class="kpi-label">Cobertura comentarios</div></div>
-        <div class="kpi-card"><div class="kpi-value">${m.stale.length}</div><div class="kpi-label">Sem atualizacao recente</div></div>
+        <div class="kpi-card">${businessHelp('Regra: projetos em atuação', 'Quantidade de projetos que possuem cards atribuídos ao profissional no período analisado.')}<div class="kpi-value">${m.projects.length}</div><div class="kpi-label">Projetos em atuacao</div></div>
+        <div class="kpi-card">${businessHelp('Regra: cards sob responsabilidade', 'Cards atuais atribuídos ao profissional, excluindo os que estão concluídos.')}<div class="kpi-value">${m.current.length}</div><div class="kpi-label">Cards sob responsabilidade</div></div>
+        <div class="kpi-card kpi-success">${businessHelp('Regra: cards concluídos', 'Cards do profissional classificados como Concluído.')}<div class="kpi-value">${m.done.length}</div><div class="kpi-label">Cards concluidos</div></div>
+        <div class="kpi-card">${businessHelp('Regra: entregas no prazo', 'Percentual de cards concluídos com data de entrega e resolução até o prazo.')}<div class="kpi-value">${percentLabel(m.onTimeRate)}</div><div class="kpi-label">Entregas no prazo</div></div>
+        <div class="kpi-card kpi-danger">${businessHelp('Regra: cards atrasados', 'Cards com data vencida que ainda não foram concluídos.')}<div class="kpi-value">${m.overdue.length}</div><div class="kpi-label">Cards atrasados</div><div class="kpi-trend">${m.avgLateDays} dias uteis em media</div></div>
+        <div class="kpi-card kpi-warning">${businessHelp('Regra: cards bloqueados', 'Cards classificados como Bloqueado no mapa de status normalizado.')}<div class="kpi-value">${m.blocked.length}</div><div class="kpi-label">Cards bloqueados</div></div>
+        <div class="kpi-card">${businessHelp('Regra: cobertura de comentários', 'Percentual de cards com pelo menos um comentário humano, quando os comentários estão disponíveis.')}<div class="kpi-value">${percentLabel(m.commentCoverage)}</div><div class="kpi-label">Cobertura comentarios</div></div>
+        <div class="kpi-card">${businessHelp('Regra: sem atualização recente', 'Cards em aberto cuja última atualização ocorreu há mais de cinco dias úteis.')}<div class="kpi-value">${m.stale.length}</div><div class="kpi-label">Sem atualizacao recente</div></div>
       </div>
 
       <section class="report-section">
@@ -371,12 +372,12 @@ function renderComparative() {
         <div class="report-alert info">A tela nao gera ranking geral. Indicadores com menor valor favoravel: atraso, bloqueio, alteracao de prazo e sem atualizacao recente.</div>
         ${!hasHumanCommentsAvailable() ? '<div class="report-alert warning">Comentarios e historico de responsaveis nao estao sincronizados; metricas usam responsavel atual e dados estruturados.</div>' : ''}
         <div class="kpi-grid analyst-kpi-grid">
-          <div class="kpi-card"><div class="kpi-value">${rows.length}</div><div class="kpi-label">Profissionais</div></div>
-          <div class="kpi-card"><div class="kpi-value">${new Set(rows.flatMap(row => row.projects)).size}</div><div class="kpi-label">Projetos</div></div>
-          <div class="kpi-card"><div class="kpi-value">${groupWorked}</div><div class="kpi-label">Cards trabalhados</div></div>
-          <div class="kpi-card kpi-success"><div class="kpi-value">${groupDone}</div><div class="kpi-label">Cards concluidos</div></div>
-          <div class="kpi-card"><div class="kpi-value">${percentLabel(avgOnTime)}</div><div class="kpi-label">Media prazo individual</div></div>
-          <div class="kpi-card"><div class="kpi-value">${percentLabel(medianOnTime)}</div><div class="kpi-label">Mediana prazo</div></div>
+          <div class="kpi-card">${businessHelp('Regra: profissionais', 'Quantidade de profissionais selecionados para comparação.')}<div class="kpi-value">${rows.length}</div><div class="kpi-label">Profissionais</div></div>
+          <div class="kpi-card">${businessHelp('Regra: projetos', 'Quantidade de projetos distintos presentes nos cards dos profissionais selecionados.')}<div class="kpi-value">${new Set(rows.flatMap(row => row.projects)).size}</div><div class="kpi-label">Projetos</div></div>
+          <div class="kpi-card">${businessHelp('Regra: cards trabalhados', 'Cards vinculados aos profissionais selecionados dentro dos filtros atuais.')}<div class="kpi-value">${groupWorked}</div><div class="kpi-label">Cards trabalhados</div></div>
+          <div class="kpi-card kpi-success">${businessHelp('Regra: cards concluídos', 'Soma dos cards classificados como Concluído para os profissionais selecionados.')}<div class="kpi-value">${groupDone}</div><div class="kpi-label">Cards concluidos</div></div>
+          <div class="kpi-card">${businessHelp('Regra: média de prazo', 'Média dos percentuais individuais de entregas concluídas dentro do prazo.')}<div class="kpi-value">${percentLabel(avgOnTime)}</div><div class="kpi-label">Media prazo individual</div></div>
+          <div class="kpi-card">${businessHelp('Regra: mediana de prazo', 'Valor central dos percentuais individuais de entregas concluídas dentro do prazo.')}<div class="kpi-value">${percentLabel(medianOnTime)}</div><div class="kpi-label">Mediana prazo</div></div>
         </div>
         <section class="report-section">
           <h3>Graficos comparativos</h3>
@@ -541,10 +542,10 @@ function renderEvolution() {
 
       ${!selectedUser ? '<div class="empty-state"><h3>Selecione um profissional para visualizar a evolução.</h3></div>' : `
       <div class="kpi-grid analyst-kpi-grid">
-        <div class="kpi-card"><div class="kpi-value">${sanitize(selectedUser.displayName)}</div><div class="kpi-label">Profissional</div></div>
-        <div class="kpi-card"><div class="kpi-value">${indicators.filter(item => item.className === 'positive').length}</div><div class="kpi-label">Evolucoes positivas</div></div>
-        <div class="kpi-card kpi-warning"><div class="kpi-value">${indicators.filter(item => item.className === 'negative').length}</div><div class="kpi-label">Pontos de atencao</div></div>
-        <div class="kpi-card"><div class="kpi-value">${indicators.filter(item => item.className === 'stable').length}</div><div class="kpi-label">Estaveis</div></div>
+        <div class="kpi-card">${businessHelp('Regra: profissional', 'Identifica o profissional selecionado para a análise histórica.')}<div class="kpi-value">${sanitize(selectedUser.displayName)}</div><div class="kpi-label">Profissional</div></div>
+        <div class="kpi-card">${businessHelp('Regra: evoluções positivas', 'Quantidade de indicadores cuja variação em relação ao período anterior foi favorável.')}<div class="kpi-value">${indicators.filter(item => item.className === 'positive').length}</div><div class="kpi-label">Evolucoes positivas</div></div>
+        <div class="kpi-card kpi-warning">${businessHelp('Regra: pontos de atenção', 'Quantidade de indicadores cuja variação em relação ao período anterior exige atenção.')}<div class="kpi-value">${indicators.filter(item => item.className === 'negative').length}</div><div class="kpi-label">Pontos de atencao</div></div>
+        <div class="kpi-card">${businessHelp('Regra: indicadores estáveis', 'Quantidade de indicadores sem variação relevante no período selecionado.')}<div class="kpi-value">${indicators.filter(item => item.className === 'stable').length}</div><div class="kpi-label">Estaveis</div></div>
       </div>
 
       ${!hasHumanCommentsAvailable() ? '<div class="report-alert warning">Comentarios e historico de alteracoes nao estao sincronizados. Evolucao calculada com datas e status disponiveis.</div>' : ''}

@@ -6,6 +6,7 @@ import '../styles/executive.css';
 import { dataService } from '../data/data-service.js';
 import { formatDate, sanitize } from '../utils/helpers.js';
 import { toDate, signedDaysBetween } from '../data/schedule-service.js';
+import { businessHelp } from '../utils/ui-feedback.js';
 
 let html2canvasModule = null;
 let jsPDFModule = null;
@@ -93,7 +94,7 @@ function renderScheduleTimeline(schedule) {
         <span><i class="effective"></i>Período efetivo (Jira)</span>
         <span><i class="buffer"></i>Gordura</span>
       </div>
-      <div class="exec-timeline-bars">
+      <div class="exec-timeline-bars ${plannedWidth ? '' : 'timeline-missing-planned'}">
         ${plannedWidth ? `<div class="exec-timeline-bar planned" style="left:${plannedLeft}%;width:${plannedWidth}%;"></div>` : '<div class="exec-timeline-empty">Datas previstas em proposta ainda não informadas.</div>'}
         ${effectiveWidth ? `<div class="exec-timeline-bar effective" style="left:${effectiveLeft}%;width:${effectiveWidth}%;"></div>` : ''}
         <div class="exec-timeline-buffer ${schedule.bufferDays < 0 ? 'danger' : ''}" style="left:${bufferLeft ?? 0}%;width:${bufferWidth}%;">
@@ -148,14 +149,15 @@ function renderExecutiveDashboard(summary, formatTicket) {
       <div id="executive-export-area">
       <div class="exec-kpi-row">
         <div class="exec-kpi-card farol ${farolClass}">
+          ${businessHelp('Regra do farol', 'Combina andamento, conclusão, riscos e cronograma para indicar a situação geral do projeto.')}
           <div class="exec-farol-ring"><span></span></div>
           <div><small>Farol do projeto</small><strong>${progressPercent}%</strong><p>${sanitize(topAlert)}</p></div>
         </div>
-        <div class="exec-kpi-card"><small>Total de tickets</small><strong>${totals.issues}</strong><p>100% do total</p></div>
-        <div class="exec-kpi-card success"><small>Concluídos</small><strong>${totals.done}</strong><p>${progressPercent}% do total</p></div>
-        <div class="exec-kpi-card progress"><small>Em andamento</small><strong>${totals.inProgress}</strong><p>${totals.issues ? Math.round((totals.inProgress / totals.issues) * 100) : 0}% do total</p></div>
-        <div class="exec-kpi-card danger"><small>Bloqueados</small><strong>${totals.blocked}</strong><p>${totals.issues ? Math.round((totals.blocked / totals.issues) * 100) : 0}% do total</p></div>
-        <div class="exec-kpi-card warning"><small>Data parcial</small><strong>${totals.datePartial || 0}</strong><p>Sem início no Jira</p></div>
+        <div class="exec-kpi-card"><span class="business-help-wrap">${businessHelp('Total de tickets', 'Quantidade total de tickets do projeto, incluindo os status atuais.')}</span><small>Total de tickets</small><strong>${totals.issues}</strong><p>100% do total</p></div>
+        <div class="exec-kpi-card success"><span class="business-help-wrap">${businessHelp('Concluídos', 'Tickets classificados como Concluído pelo mapa de status normalizado.')}</span><small>Concluídos</small><strong>${totals.done}</strong><p>${progressPercent}% do total</p></div>
+        <div class="exec-kpi-card progress"><span class="business-help-wrap">${businessHelp('Em andamento', 'Tickets cujo status foi classificado como Em Andamento.')}</span><small>Em andamento</small><strong>${totals.inProgress}</strong><p>${totals.issues ? Math.round((totals.inProgress / totals.issues) * 100) : 0}% do total</p></div>
+        <div class="exec-kpi-card danger"><span class="business-help-wrap">${businessHelp('Bloqueados', 'Tickets classificados como Bloqueado e que precisam de acompanhamento.')}</span><small>Bloqueados</small><strong>${totals.blocked}</strong><p>${totals.issues ? Math.round((totals.blocked / totals.issues) * 100) : 0}% do total</p></div>
+        <div class="exec-kpi-card warning"><span class="business-help-wrap">${businessHelp('Data parcial', 'Tickets sem data de início informada no Jira, impedindo uma visão completa do cronograma.')}</span><small>Data parcial</small><strong>${totals.datePartial || 0}</strong><p>Sem início no Jira</p></div>
       </div>
 
       <div class="exec-main-grid">
@@ -187,14 +189,14 @@ function renderExecutiveDashboard(summary, formatTicket) {
         </section>
 
         <section class="exec-card">
-          <div class="exec-card-title">Progresso por Status</div>
+          <div class="exec-card-title">Progresso por Status ${businessHelp('Regra de progresso', 'Mostra a quantidade e a proporção de tickets em cada status normalizado.')}</div>
           <div class="exec-status-list">
             ${statusBreakdown.slice(0, 6).map((item, idx) => renderProgressLine(item.name, item.count, totals.issues, ['success','progress','danger','warning','planned','muted'][idx] || 'muted')).join('')}
           </div>
         </section>
 
         <section class="exec-card">
-          <div class="exec-card-title">Time do Projeto</div>
+          <div class="exec-card-title">Time do Projeto ${businessHelp('Regra do time', 'Lista os responsáveis atuais e a quantidade de tickets atribuídos a cada um.')}</div>
           <div class="exec-team-row">
             ${team.slice(0, 5).map(member => `
               <div class="exec-team-member">
@@ -209,7 +211,7 @@ function renderExecutiveDashboard(summary, formatTicket) {
 
       <div class="exec-bottom-grid">
         <section class="exec-card">
-          <div class="exec-card-title">Entregáveis</div>
+          <div class="exec-card-title">Entregáveis ${businessHelp('Regra dos entregáveis', 'Agrupa os itens de entrega e calcula o percentual com base nos tickets concluídos de cada item.')}</div>
           <div class="exec-deliverables">
             ${(deliverables || []).slice(0, 6).map(item => `
               <div class="exec-deliverable-row">
@@ -224,14 +226,14 @@ function renderExecutiveDashboard(summary, formatTicket) {
         </section>
 
         <section class="exec-card">
-          <div class="exec-card-title">Últimas Conquistas</div>
+          <div class="exec-card-title">Últimas Conquistas ${businessHelp('Regra das conquistas', 'Considera tickets concluídos recentemente e ordenados pela data de resolução.')}</div>
           <div class="exec-compact-list">
             ${achievements.length ? achievements.map(a => `<div><b>✓</b><span>${formatTicket(a)}<small>${formatDate(a.resolvedAt)}</small></span></div>`).join('') : '<div class="executive-list-empty">Nenhuma conquista ainda</div>'}
           </div>
         </section>
 
         <section class="exec-card">
-          <div class="exec-card-title">Próximos Passos</div>
+          <div class="exec-card-title">Próximos Passos ${businessHelp('Regra dos próximos passos', 'Exibe tickets ainda não concluídos, priorizando os itens que permanecem em aberto.')}</div>
           <div class="exec-compact-list next">
             ${nextSteps.length ? nextSteps.map(n => `<div><b>→</b><span>${formatTicket(n)}<small>${sanitize(n.status)}</small></span></div>`).join('') : '<div class="executive-list-empty">Nenhum próximo passo</div>'}
           </div>
@@ -239,7 +241,7 @@ function renderExecutiveDashboard(summary, formatTicket) {
       </div>
 
       <section class="exec-card exec-risk-card">
-        <div class="exec-card-title">Pontos de Acompanhamento</div>
+        <div class="exec-card-title">Pontos de Acompanhamento ${businessHelp('Regra dos riscos', 'Reúne tickets com bloqueio, atraso ou sinais de atenção para acompanhamento operacional.')}</div>
         <div class="exec-risk-row">
           ${risks.length ? risks.slice(0, 4).map(r => `<div class="exec-risk-item ${r.level === 'Alto' ? 'high' : 'medium'}"><strong>${sanitize(r.key)} — ${sanitize(r.title)}</strong><span>${sanitize(r.reason)} · Resp: ${sanitize(r.assignee)}</span><b aria-label="Indicador visual do item"></b></div>`).join('') : '<div class="executive-list-empty">Nenhum item de acompanhamento pendente</div>'}
         </div>

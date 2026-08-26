@@ -3,6 +3,7 @@
  */
 import { dataService } from '../data/data-service.js';
 import { healthLabel, sanitize, sanitizeTitle } from '../utils/helpers.js';
+import { businessHelp } from '../utils/ui-feedback.js';
 
 export function renderProjects() {
   const header = document.getElementById('page-header');
@@ -23,6 +24,7 @@ export function renderProjects() {
         const stats = dataService.getProjectStats(p.id);
         return `
           <div class="project-card" onclick="location.hash='#/board?projectKey=${sanitize(p.key)}'">
+            ${businessHelp('Regra do projeto', 'Indicadores calculados a partir dos cards do projeto e do status normalizado do Jira.')}
             <div style="display: flex; justify-content: space-between; align-items: flex-start;">
               <span class="project-key">${sanitize(p.key)}</span>
               <span class="badge badge-health-${stats.health}">${healthLabel(stats.health)}</span>
@@ -70,4 +72,8 @@ export function renderProjects() {
       }).join('')}
     </div>
   `;
+
+  content.querySelectorAll('.business-help').forEach(button => {
+    button.addEventListener('click', event => event.stopPropagation());
+  });
 }

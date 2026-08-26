@@ -5,6 +5,7 @@
 import { dataService } from '../data/data-service.js';
 import { resolveStatusCategory, StatusCategory, isCardOverdue } from '../data/models.js';
 import { STATUS_COLORS, healthLabel, sanitize, formatDateTime, formatDate, priorityLabel, sanitizeTitle, getJiraIssueUrl } from '../utils/helpers.js';
+import { businessHelp } from '../utils/ui-feedback.js';
 
 let dashboardChart = null;
 let selectedWorkloadProject = '';
@@ -184,8 +185,6 @@ function clearFilterChip(key, label, tone = 'accent') {
   `;
 }
 
-
-
 function renderDashboardContent() {
   const content = document.getElementById('page-content');
   const projects = dataService.getProjects();
@@ -282,6 +281,7 @@ function renderDashboardContent() {
     <!-- KPI GRID -->
     <div class="kpi-grid dashboard-kpi-grid">
       <div class="kpi-card">
+        ${businessHelp('Como é calculado?', 'Quantidade de projetos que possuem cards depois da aplicação dos filtros. O sistema não consulta um campo de status do projeto.')}
         <div class="kpi-label">Projetos Ativos</div>
         <div class="kpi-value">${stats.totalProjects}</div>
         <div class="kpi-icon" style="background: rgba(99,102,241,0.1); color: #6366f1;">
@@ -289,6 +289,7 @@ function renderDashboardContent() {
         </div>
       </div>
       <div class="kpi-card">
+        ${businessHelp('Como é calculado?', 'Contagem de cards retornados após aplicar projeto, analista, status, prioridade, período e filtros rápidos.')}
         <div class="kpi-label">Total de Cards</div>
         <div class="kpi-value">${stats.totalCards}</div>
         <div class="kpi-icon" style="background: rgba(59,130,246,0.1); color: #3b82f6;">
@@ -296,6 +297,7 @@ function renderDashboardContent() {
         </div>
       </div>
       <div class="kpi-card">
+        ${businessHelp('Como é calculado?', 'Cards cujo status do Jira é classificado como Em Andamento pelo mapa padrão de status normalizados.')}
         <div class="kpi-label">Em Andamento</div>
         <div class="kpi-value">${stats.byCategory.in_progress}</div>
         <div class="kpi-icon" style="background: rgba(16,185,129,0.1); color: #10b981;">
@@ -303,6 +305,7 @@ function renderDashboardContent() {
         </div>
       </div>
       <div class="kpi-card">
+        ${businessHelp('Como é calculado?', 'Cards com data de entrega anterior ao dia atual, desde que tenham data válida e ainda não estejam concluídos.')}
         <div class="kpi-label">Atrasados</div>
         <div class="kpi-value ${stats.overdue > 0 ? 'text-danger' : ''}">${stats.overdue}</div>
         <div class="kpi-icon" style="background: rgba(239,68,68,0.1); color: #ef4444;">
@@ -310,6 +313,7 @@ function renderDashboardContent() {
         </div>
       </div>
       <div class="kpi-card">
+        ${businessHelp('Como é calculado?', 'Contagem de cards marcados como inconsistentes durante a normalização dos dados do Jira.')}
         <div class="kpi-label">Saúde de Dados</div>
         <div class="kpi-value ${stats.inconsistent > 0 ? 'text-warning' : ''}">${stats.inconsistent}</div>
         <div class="kpi-icon" style="background: rgba(245,158,11,0.1); color: #f59e0b;">
@@ -321,12 +325,12 @@ function renderDashboardContent() {
     <!-- CHARTS GRID -->
     <div class="charts-grid">
       <div class="chart-card">
-        <h3>Distribuição por Status</h3>
+        <h3>Distribuição por Status ${businessHelp('Regra de status', 'Cada status original do Jira é convertido em A Fazer, Em Andamento, Concluído ou Bloqueado pelo mapa de status normalizado.')}</h3>
         <canvas id="statusChart"></canvas>
       </div>
       <div class="chart-card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-          <h3>Carga de Trabalho por Analista</h3>
+          <h3>Carga de Trabalho por Analista ${businessHelp('Regra de carga', 'Agrupa os cards filtrados pelo analista responsável. O percentual da barra compara cada total com o maior total da lista.')}</h3>
           <select id="workload-project-select" style="background: var(--bg-input); border: 1px solid var(--border); color: var(--text-primary); padding: 6px 12px; border-radius: 6px; font-size: 12px;">
             <option value="">Todos os Projetos</option>
             ${projects.map(p => `<option value="${sanitize(p.key)}" ${selectedWorkloadProject === p.key ? 'selected' : ''}>${sanitize(p.name)}</option>`).join('')}
@@ -337,7 +341,7 @@ function renderDashboardContent() {
         </div>
       </div>
       <div class="chart-card chart-full">
-        <h3>Progresso por Projeto</h3>
+        <h3>Progresso por Projeto ${businessHelp('Regra de progresso', 'O progresso de cada projeto é a proporção de cards concluídos em relação ao total de cards daquele projeto.')}</h3>
         <div class="table-container">
           <table class="data-table">
             <thead>
@@ -697,6 +701,7 @@ function renderAuditCard(title, list, tooltip) {
   const isOk = count === 0;
   return `
     <div class="audit-card ${isOk ? 'audit-ok' : 'audit-warning'}">
+      ${businessHelp(`Regra: ${title}`, tooltip)}
       <div class="audit-icon">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
           ${isOk ? '<path d="M20 6L9 17l-5-5"/>' : '<path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'}

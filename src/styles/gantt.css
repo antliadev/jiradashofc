@@ -2391,6 +2391,7 @@
 }
 
 @media (max-width: 600px) {
+  :root { --gantt-left-col-width: 160px !important; }
   .gantt-page {
     gap: 12px;
   }

@@ -3,6 +3,7 @@
  */
 import { ACCESS_ITEMS } from '../utils/access-control.js';
 import { sanitize } from '../utils/helpers.js';
+import { confirmAction, renderPageLoading, setButtonBusy, showToast } from '../utils/ui-feedback.js';
 
 let users = [];
 let selectedId = '';
@@ -173,36 +174,62 @@ function formPayload() {
 async function saveUser(event) {
   event.preventDefault();
   const id = document.getElementById('access-id')?.value || '';
-  const response = await fetch(id ? `/api/access/users/${encodeURIComponent(id)}` : '/api/access/users', {
-    method: id ? 'PUT' : 'POST',
-    headers: sessionHeaders(),
-    credentials: 'include',
-    body: JSON.stringify(formPayload()),
+  const confirmed = await confirmAction({
+    title: id ? 'Salvar alterações?' : 'Criar usuário?',
+    message: id ? 'As permissões e o status deste usuário serão atualizados.' : 'O usuário poderá acessar o sistema conforme o perfil escolhido.',
+    confirmLabel: 'Salvar'
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    alert(data.error || 'Nao foi possivel salvar o usuario.');
-    return;
+  if (!confirmed) return;
+
+  const submitButton = document.querySelector('#access-form button[type="submit"]');
+  setButtonBusy(submitButton, true, 'Salvando...');
+  try {
+    const response = await fetch(id ? `/api/access/users/${encodeURIComponent(id)}` : '/api/access/users', {
+      method: id ? 'PUT' : 'POST',
+      headers: sessionHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(formPayload()),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Nao foi possivel salvar o usuario.');
+    selectedId = data.user?.id || selectedId;
+    await requestUsers();
+    renderAccessPage();
+    showToast(id ? 'Usuário atualizado.' : 'Usuário criado.', 'success');
+  } catch (error) {
+    setButtonBusy(submitButton, false);
+    showToast(error.message, 'error');
   }
-  selectedId = data.user?.id || selectedId;
-  await requestUsers();
-  renderAccessPage();
 }
 
 async function revokeSelectedUser() {
   if (!selectedId) return;
-  const response = await fetch(`/api/access/users/${encodeURIComponent(selectedId)}`, {
-    method: 'DELETE',
-    headers: sessionHeaders(),
-    credentials: 'include',
+  const user = currentUser();
+  const confirmed = await confirmAction({
+    title: 'Revogar acesso?',
+    message: `O acesso de ${user?.name || 'este usuário'} será desativado.`,
+    confirmLabel: 'Revogar acesso',
+    danger: true
   });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    alert(data.error || 'Nao foi possivel revogar o acesso.');
-    return;
+  if (!confirmed) return;
+
+  const revokeButton = document.getElementById('revoke-access-user');
+  setButtonBusy(revokeButton, true, 'Revogando...');
+  try {
+    const response = await fetch(`/api/access/users/${encodeURIComponent(selectedId)}`, {
+      method: 'DELETE',
+      headers: sessionHeaders(),
+      credentials: 'include',
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Nao foi possivel revogar o acesso.');
+    await requestUsers();
+    renderAccessPage();
+    showToast('Acesso revogado.', 'success');
+  } catch (error) {
+    setButtonBusy(revokeButton, false);
+    showToast(error.message, 'error');
   }
-  await requestUsers();
-  renderAccessPage();
 }
 
 function bindAccessEvents() {
@@ -225,6 +252,7 @@ function bindAccessEvents() {
 
 export async function renderAccessManagement() {
   renderHeader();
+  document.getElementById('page-content').innerHTML = renderPageLoading('Carregando usuários');
   try {
     await requestUsers();
     renderAccessPage();

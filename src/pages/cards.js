@@ -14,6 +14,7 @@ import {
 } from '../utils/helpers.js';
 import { exportRowsWorkbook } from '../utils/excel-export.js';
 import { isCardOverdue, resolveStatusCategory, StatusCategory } from '../data/models.js';
+import { businessHelp } from '../utils/ui-feedback.js';
 
 const PAGE_SIZE = 100;
 const CRITICAL_OVERDUE_DAYS = 7;
@@ -893,6 +894,7 @@ function uniqueSorted(values) {
 function kpiCard(value, label, trend, tone) {
   return `
     <div class="kpi-card kpi-${sanitize(tone)}">
+      ${businessHelp(`Regra: ${label}`, trend)}
       <div class="kpi-value">${sanitize(String(value))}</div>
       <div class="kpi-label">${sanitize(label)}</div>
       <div class="kpi-trend">${sanitize(trend)}</div>

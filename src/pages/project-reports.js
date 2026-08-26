@@ -5,6 +5,7 @@ import { dataService } from '../data/data-service.js';
 import { isCardOverdue, resolveStatusCategory, StatusCategory } from '../data/models.js';
 import { formatDate, formatDateTime, sanitize, typeLabel } from '../utils/helpers.js';
 import { exportRowsWorkbook } from '../utils/excel-export.js';
+import { businessHelp } from '../utils/ui-feedback.js';
 
 const HEALTH_MIN_KEY = 'rja.projectHealth.minimumPercent';
 const REPORT_CONFIG_KEY = 'rja.clientReport.config';
@@ -330,12 +331,12 @@ function renderHealthReport() {
       ` : ''}
 
       <div class="kpi-grid">
-        <div class="kpi-card kpi-info"><div class="kpi-value">${pctLabel(summary.percent)}</div><div class="kpi-label">Percentual de saude</div><div class="kpi-trend">Minimo esperado: ${minimum}%</div></div>
-        <div class="kpi-card"><div class="kpi-value">${summary.eligible.length}</div><div class="kpi-label">Cards elegiveis</div></div>
-        <div class="kpi-card kpi-success"><div class="kpi-value">${summary.healthy}</div><div class="kpi-label">Com comentario humano</div></div>
-        <div class="kpi-card kpi-warning"><div class="kpi-value">${summary.missing}</div><div class="kpi-label">Sem comentario humano</div></div>
-        <div class="kpi-card kpi-danger"><div class="kpi-value">${summary.automation}</div><div class="kpi-label">Somente automacao</div></div>
-        <div class="kpi-card"><div class="kpi-value">${allProjectSummaries.filter(item => item.percent !== null && item.percent < minimum).length}</div><div class="kpi-label">Projetos abaixo do minimo</div></div>
+        <div class="kpi-card kpi-info">${businessHelp('Regra: percentual de saúde', `Percentual de cards elegíveis com comentário humano. Mínimo esperado: ${minimum}%.`)}<div class="kpi-value">${pctLabel(summary.percent)}</div><div class="kpi-label">Percentual de saude</div><div class="kpi-trend">Minimo esperado: ${minimum}%</div></div>
+        <div class="kpi-card">${businessHelp('Regra: cards elegíveis', 'Cards que podem ser avaliados pela regra de cobertura de comentários.') }<div class="kpi-value">${summary.eligible.length}</div><div class="kpi-label">Cards elegiveis</div></div>
+        <div class="kpi-card kpi-success">${businessHelp('Regra: comentário humano', 'Cards elegíveis que possuem pelo menos um comentário feito por uma pessoa.') }<div class="kpi-value">${summary.healthy}</div><div class="kpi-label">Com comentario humano</div></div>
+        <div class="kpi-card kpi-warning">${businessHelp('Regra: sem comentário humano', 'Cards elegíveis sem comentário humano identificado na carga sincronizada.') }<div class="kpi-value">${summary.missing}</div><div class="kpi-label">Sem comentario humano</div></div>
+        <div class="kpi-card kpi-danger">${businessHelp('Regra: somente automação', 'Cards que possuem apenas comentários automáticos, sem comentário humano.') }<div class="kpi-value">${summary.automation}</div><div class="kpi-label">Somente automacao</div></div>
+        <div class="kpi-card">${businessHelp('Regra: projetos abaixo do mínimo', `Projetos com percentual de saúde abaixo de ${minimum}%, desconsiderando projetos sem dados suficientes.`) }<div class="kpi-value">${allProjectSummaries.filter(item => item.percent !== null && item.percent < minimum).length}</div><div class="kpi-label">Projetos abaixo do minimo</div></div>
       </div>
 
       <section class="report-section">
@@ -435,12 +436,12 @@ function renderDetailedReport() {
       ${!commentAvailability() ? '<div class="report-alert warning">Analise inteligente de comentarios aguardando sincronizacao de comentarios do Jira. O relatorio abaixo usa dados estruturados atuais.</div>' : ''}
 
       <div class="kpi-grid">
-        <div class="kpi-card"><div class="kpi-value">${filtered.length}</div><div class="kpi-label">Cards analisados</div></div>
-        <div class="kpi-card kpi-success"><div class="kpi-value">${done}</div><div class="kpi-label">Concluidos</div></div>
-        <div class="kpi-card kpi-info"><div class="kpi-value">${inProgress}</div><div class="kpi-label">Em andamento</div></div>
-        <div class="kpi-card kpi-danger"><div class="kpi-value">${blocked}</div><div class="kpi-label">Bloqueados</div></div>
-        <div class="kpi-card kpi-warning"><div class="kpi-value">${overdue}</div><div class="kpi-label">Atrasados</div></div>
-        <div class="kpi-card"><div class="kpi-value">${pctLabel(coverage)}</div><div class="kpi-label">Cobertura das informacoes</div></div>
+        <div class="kpi-card">${businessHelp('Regra: cards analisados', 'Quantidade de cards do projeto após o filtro de status selecionado.') }<div class="kpi-value">${filtered.length}</div><div class="kpi-label">Cards analisados</div></div>
+        <div class="kpi-card kpi-success">${businessHelp('Regra: concluídos', 'Cards classificados como Concluído pelo mapa de status normalizado.') }<div class="kpi-value">${done}</div><div class="kpi-label">Concluidos</div></div>
+        <div class="kpi-card kpi-info">${businessHelp('Regra: em andamento', 'Cards classificados como Em Andamento pelo mapa de status normalizado.') }<div class="kpi-value">${inProgress}</div><div class="kpi-label">Em andamento</div></div>
+        <div class="kpi-card kpi-danger">${businessHelp('Regra: bloqueados', 'Cards classificados como Bloqueado pelo mapa de status normalizado.') }<div class="kpi-value">${blocked}</div><div class="kpi-label">Bloqueados</div></div>
+        <div class="kpi-card kpi-warning">${businessHelp('Regra: atrasados', 'Cards com data de entrega anterior ao dia atual e que ainda não foram concluídos.') }<div class="kpi-value">${overdue}</div><div class="kpi-label">Atrasados</div></div>
+        <div class="kpi-card">${businessHelp('Regra: cobertura das informações', 'Percentual de cards com os campos estruturados necessários para o relatório.') }<div class="kpi-value">${pctLabel(coverage)}</div><div class="kpi-label">Cobertura das informacoes</div></div>
       </div>
 
       <section class="report-section">

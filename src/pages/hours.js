@@ -1,6 +1,7 @@
 import '../styles/hours.css';
 import { dataService } from '../data/data-service.js';
 import { sanitize } from '../utils/helpers.js';
+import { businessHelp } from '../utils/ui-feedback.js';
 
 const HOURS_PROJECTS = {
   CRAWFORD: { key: 'CRAWFORD', name: 'Crawford', logo: '/crawford-logo.png' },
@@ -228,17 +229,17 @@ function renderReport(report) {
       </div>
 
       <div class="hours-kpis">
-        <article class="hours-kpi used"><span>${isCumulative ? 'Horas utilizadas acumuladas' : 'Horas utilizadas'}</span><strong>${sanitize(formatHours(report.usedHours))}</strong><small>${isCumulative ? `${formatHours(report.periodUsedHours)} nesta competência · ` : ''}de ${sanitize(formatHours(report.allowanceHours))}</small></article>
-        <article class="hours-kpi available"><span>Horas disponíveis</span><strong>${sanitize(formatHours(report.availableHours))}</strong><small>${isCumulative ? 'saldo acumulado do contrato, sem reset mensal' : 'renovação mensal, sem acúmulo'}</small></article>
-        <article class="hours-kpi utilization ${alert.css}"><span>Consumo</span><strong>${sanitize(report.utilizationPercent.toLocaleString('pt-BR', { maximumFractionDigits: 1 }))}%</strong><small>${sanitize(alert.label)}</small></article>
-        <article class="hours-kpi overage ${report.overageHours > 0 ? 'visible' : ''}"><span>Horas excedentes</span><strong>${sanitize(formatHours(report.overageHours))}</strong><small>${report.overageHours > 0 ? 'acima do limite contratado' : 'sem excedente no período'}</small></article>
-        <article class="hours-kpi cards"><span>Cards do Jira</span><strong>${sanitize(String(report.totalProjectCards))}</strong><small>${sanitize(String(report.cardsWithWorklog))} com apontamento · ${sanitize(String(report.cardsWithoutWorklog.length))} sem apontamento</small></article>
+        <article class="hours-kpi used">${businessHelp('Regra: horas utilizadas', 'Soma dos worklogs do projeto na competência. No contrato cumulativo, inclui também o saldo das competências anteriores.')}<span>${isCumulative ? 'Horas utilizadas acumuladas' : 'Horas utilizadas'}</span><strong>${sanitize(formatHours(report.usedHours))}</strong><small>${isCumulative ? `${formatHours(report.periodUsedHours)} nesta competência · ` : ''}de ${sanitize(formatHours(report.allowanceHours))}</small></article>
+        <article class="hours-kpi available">${businessHelp('Regra: horas disponíveis', 'Limite contratado menos as horas utilizadas. No acumulativo, o saldo considera as competências anteriores e não reinicia mensalmente.')}<span>Horas disponíveis</span><strong>${sanitize(formatHours(report.availableHours))}</strong><small>${isCumulative ? 'saldo acumulado do contrato, sem reset mensal' : 'renovação mensal, sem acúmulo'}</small></article>
+        <article class="hours-kpi utilization ${alert.css}">${businessHelp('Regra: consumo', 'Percentual de utilização calculado por horas utilizadas dividido pelo limite de horas da competência ou contrato.')}<span>Consumo</span><strong>${sanitize(report.utilizationPercent.toLocaleString('pt-BR', { maximumFractionDigits: 1 }))}%</strong><small>${sanitize(alert.label)}</small></article>
+        <article class="hours-kpi overage ${report.overageHours > 0 ? 'visible' : ''}">${businessHelp('Regra: horas excedentes', 'Horas utilizadas que ultrapassam o limite contratado. O valor nunca é negativo.')}<span>Horas excedentes</span><strong>${sanitize(formatHours(report.overageHours))}</strong><small>${report.overageHours > 0 ? 'acima do limite contratado' : 'sem excedente no período'}</small></article>
+        <article class="hours-kpi cards">${businessHelp('Regra: cards do Jira', 'Conta os cards do projeto e separa os que possuem pelo menos um worklog dos que não possuem apontamento na competência.')}<span>Cards do Jira</span><strong>${sanitize(String(report.totalProjectCards))}</strong><small>${sanitize(String(report.cardsWithWorklog))} com apontamento · ${sanitize(String(report.cardsWithoutWorklog.length))} sem apontamento</small></article>
       </div>
 
       <div class="hours-chart-grid">
         <article class="hours-panel">
           <div class="hours-panel-heading">
-            <div><h2>Distribuição das horas</h2><span>Visualize todos os cards ou o consolidado executivo</span></div>
+            <div><h2>Distribuição das horas ${businessHelp('Regra da distribuição', 'Agrupa as horas por card ou por aplicação/épico, conforme o modo selecionado.')}</h2><span>Visualize todos os cards ou o consolidado executivo</span></div>
             <div class="hours-segmented" aria-label="Agrupamento das horas">
               <button type="button" data-hours-breakdown="card" aria-pressed="true">Por card (${cardBreakdown(report.entries).length})</button>
               <button type="button" data-hours-breakdown="epic" aria-pressed="false">Por épico (${report.byApplication.length})</button>
@@ -246,7 +247,7 @@ function renderReport(report) {
           </div>
           <div id="hours-breakdown-bars">${applicationBars(cardBreakdown(report.entries))}</div>
         </article>
-        <article class="hours-panel"><div class="hours-panel-heading"><h2>Consumo por mês</h2><span>Histórico de horas utilizadas</span></div>${monthlyBars(report.monthlyHistory)}</article>
+        <article class="hours-panel"><div class="hours-panel-heading"><h2>Consumo por mês ${businessHelp('Regra do histórico mensal', 'Exibe as horas utilizadas agrupadas por competência mensal, respeitando o modelo de cobrança do contrato.')}</h2><span>Histórico de horas utilizadas</span></div>${monthlyBars(report.monthlyHistory)}</article>
       </div>
 
       <article class="hours-panel hours-detail-panel">

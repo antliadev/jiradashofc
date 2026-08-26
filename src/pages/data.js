@@ -7,6 +7,7 @@
 import { dataService } from '../data/data-service.js';
 import { renderSidebar } from '../components/sidebar.js';
 import { sanitize } from '../utils/helpers.js';
+import { confirmAction, setButtonBusy, showToast } from '../utils/ui-feedback.js';
 
 let syncStatus = null;
 let pollingInterval = null;
@@ -236,8 +237,14 @@ function setupEventListeners() {
     const btn = document.getElementById('btn-start-sync');
     if (!btn || btn.disabled || ACTIVE_SYNC_STATUSES.has(syncStatus?.status)) return;
 
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner" style="width: 16px; height: 16px; border-width: 2px; margin-right: 8px;"></span> Iniciando...';
+    const confirmed = await confirmAction({
+      title: 'Iniciar sincronização?',
+      message: 'Os dados atuais serão atualizados com as informações disponíveis no Jira.',
+      confirmLabel: 'Sincronizar'
+    });
+    if (!confirmed) return;
+
+    setButtonBusy(btn, true, 'Iniciando...');
 
     try {
       const result = await dataService.startJiraSyncFromEnv();
@@ -253,6 +260,7 @@ function setupEventListeners() {
       }
 
       renderDataContent();
+      showToast('Sincronização iniciada.', 'success');
     } catch (error) {
       syncStatus = {
         status: 'error',
@@ -260,6 +268,7 @@ function setupEventListeners() {
       };
       stopPolling({ clearJob: true });
       renderDataContent();
+      showToast(error.message || 'Não foi possível iniciar a sincronização.', 'error');
     }
   });
 }
@@ -353,6 +362,12 @@ function addDataStyles() {
       display: flex;
       align-items: center;
       gap: 18px;
+    }
+
+    @media (max-width: 480px) {
+      .status-indicator { align-items: flex-start; flex-wrap: wrap; gap: 12px; }
+      .status-text-group { min-width: 0; flex: 1 1 180px; }
+      .status-title { overflow-wrap: anywhere; font-size: 16px; }
     }
 
     .status-icon-badge {

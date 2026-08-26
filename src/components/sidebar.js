@@ -5,6 +5,7 @@ import { dataService } from '../data/data-service.js';
 import { getTheme, toggleTheme } from '../utils/theme.js';
 import { StatusCategory } from '../data/models.js';
 import { canAccessPermission } from '../utils/access-control.js';
+import { confirmAction, setButtonBusy, showToast } from '../utils/ui-feedback.js';
 
 const ICONS = {
   dashboard: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
@@ -22,6 +23,7 @@ const ICONS = {
 };
 
 const MENU_STORAGE_KEY = 'rja.sidebar.expanded';
+const SIDEBAR_COLLAPSED_KEY = 'rja.sidebar.collapsed';
 
 function getCurrentPath() {
   return (window.location.hash.replace(/^#\/?/, '/') || '/').split('?')[0];
@@ -43,6 +45,10 @@ function persistExpandedMenu(menu, expanded) {
   localStorage.setItem(MENU_STORAGE_KEY, JSON.stringify(saved));
 }
 
+function isSidebarCollapsed() {
+  return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
+}
+
 function getAttentionCounts() {
   if (!dataService?.isLoaded) {
     return { overdue: 0, blocked: 0, total: 0 };
@@ -61,7 +67,7 @@ function navLink({ route, label, icon = '', count = null, permission = null }) {
   if (!canAccessPermission(permission)) return '';
   const counter = Number.isFinite(count) ? counterBadge(count) : '';
   return `
-    <button class="nav-item nav-subitem" data-route="${route}" onclick="location.hash='#${route}'" aria-label="Ir para ${label}">
+    <button class="nav-item nav-subitem" data-route="${route}" onclick="location.hash='#${route}'" aria-label="Ir para ${label}" title="${label}">
       ${icon}
       <span>${label}</span>
       ${counter}
@@ -90,7 +96,7 @@ function navGroup({ id, label, icon, expanded, count = null, children }) {
 
 function navButton({ route, label, icon, permission = null }) {
   if (!canAccessPermission(permission)) return '';
-  return `<button class="nav-item" data-route="${route}" onclick="location.hash='#${route}'" aria-label="Ir para ${label}">${icon}<span>${label}</span></button>`;
+  return `<button class="nav-item" data-route="${route}" onclick="location.hash='#${route}'" aria-label="Ir para ${label}" title="${label}">${icon}<span>${label}</span></button>`;
 }
 
 export function renderSidebar() {
@@ -103,6 +109,8 @@ export function renderSidebar() {
                       source === 'mock' ? 'Mock Data' : 
                       source === 'imported' ? 'Importado' : 'API Jira';
   const isLight = getTheme() === 'light';
+  const isCollapsed = isSidebarCollapsed();
+  document.body.classList.toggle('sidebar-collapsed', isCollapsed);
   sidebar.innerHTML = `
     <div class="sidebar-header" role="banner">
       <div class="sidebar-logo">
@@ -114,6 +122,9 @@ export function renderSidebar() {
           <span>RJA</span>
         </div>
       </div>
+      <button class="sidebar-collapse-toggle" id="sidebar-collapse-toggle" type="button" aria-label="${isCollapsed ? 'Expandir menu' : 'Recolher menu'}" aria-expanded="${isCollapsed ? 'false' : 'true'}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+      </button>
     </div>
     <nav class="sidebar-nav" role="navigation" aria-label="Menu principal">
       <div class="nav-section" role="heading" aria-level="2">Principal</div>
@@ -125,8 +136,8 @@ export function renderSidebar() {
         icon: ICONS.clock,
         expanded: expandedMenus.contracts,
         children: [
-          navLink({ route: '/contracts/crawford', label: 'Crawford', permission: 'contracts.crawford' }),
-          navLink({ route: '/contracts/docwise', label: 'Docwise', permission: 'contracts.docwise' }),
+            navLink({ route: '/contracts/crawford', label: 'Crawford', icon: ICONS.clock, permission: 'contracts.crawford' }),
+            navLink({ route: '/contracts/docwise', label: 'Docwise', icon: ICONS.clock, permission: 'contracts.docwise' }),
         ],
       })}
       ${navGroup({
@@ -136,8 +147,8 @@ export function renderSidebar() {
         expanded: expandedMenus.monitoring,
         count: attentionCounts.total,
         children: [
-          navLink({ route: '/monitoring/overdue', label: 'Cards com Data em Atraso', count: attentionCounts.overdue, permission: 'monitoring.overdue' }),
-          navLink({ route: '/monitoring/blocked', label: 'Cards Bloqueados', count: attentionCounts.blocked, permission: 'monitoring.blocked' }),
+          navLink({ route: '/monitoring/overdue', label: 'Cards com Data em Atraso', icon: ICONS.cards, count: attentionCounts.overdue, permission: 'monitoring.overdue' }),
+          navLink({ route: '/monitoring/blocked', label: 'Cards Bloqueados', icon: ICONS.cards, count: attentionCounts.blocked, permission: 'monitoring.blocked' }),
         ],
       })}
       ${navButton({ route: '/gantt', label: 'Gantt', icon: ICONS.gantt, permission: 'gantt' })}
@@ -147,10 +158,10 @@ export function renderSidebar() {
         icon: ICONS.projects,
         expanded: expandedMenus.projects,
         children: [
-          navLink({ route: '/projects', label: 'Issues - Kanban', permission: 'projects.kanban' }),
-          navLink({ route: '/projects/health', label: 'Saude Detalhamento Cards Projetos', permission: 'projects.health' }),
-          navLink({ route: '/projects/executive', label: 'Relatorio Gerencial - Clientes', permission: 'projects.executive' }),
-          navLink({ route: '/projects/detailed-report', label: 'Relatorio Gerencial Detalhado - Clientes', permission: 'projects.detailed' }),
+          navLink({ route: '/projects', label: 'Issues - Kanban', icon: ICONS.board, permission: 'projects.kanban' }),
+          navLink({ route: '/projects/health', label: 'Saude Detalhamento Cards Projetos', icon: ICONS.dashboard, permission: 'projects.health' }),
+          navLink({ route: '/projects/executive', label: 'Relatorio Gerencial - Clientes', icon: ICONS.executive, permission: 'projects.executive' }),
+          navLink({ route: '/projects/detailed-report', label: 'Relatorio Gerencial Detalhado - Clientes', icon: ICONS.executive, permission: 'projects.detailed' }),
         ],
       })}
       ${navGroup({
@@ -159,9 +170,9 @@ export function renderSidebar() {
         icon: ICONS.analysts,
         expanded: expandedMenus.analysts,
         children: [
-          navLink({ route: '/analysts/general', label: 'Geral', permission: 'analysts.general' }),
-          navLink({ route: '/analysts/evolution', label: 'Evolucao', permission: 'analysts.evolution' }),
-          navLink({ route: '/analysts/comparative', label: 'Comparativo', permission: 'analysts.comparative' }),
+          navLink({ route: '/analysts/general', label: 'Geral', icon: ICONS.analysts, permission: 'analysts.general' }),
+          navLink({ route: '/analysts/evolution', label: 'Evolucao', icon: ICONS.gantt, permission: 'analysts.evolution' }),
+          navLink({ route: '/analysts/comparative', label: 'Comparativo', icon: ICONS.dashboard, permission: 'analysts.comparative' }),
         ],
       })}
       <div class="nav-section" role="heading" aria-level="2">Configuração</div>
@@ -188,7 +199,22 @@ export function renderSidebar() {
     window.dispatchEvent(new HashChangeEvent('hashchange'));
   });
 
+  document.getElementById('sidebar-collapse-toggle')?.addEventListener('click', () => {
+    const collapsed = !isSidebarCollapsed();
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(collapsed));
+    document.body.classList.toggle('sidebar-collapsed', collapsed);
+    renderSidebar();
+  });
+
   document.getElementById('logout-button')?.addEventListener('click', async () => {
+    const confirmed = await confirmAction({
+      title: 'Sair do JiraDash?',
+      message: 'Sua sessão será encerrada neste dispositivo.',
+      confirmLabel: 'Sair'
+    });
+    if (!confirmed) return;
+    const logoutButton = document.getElementById('logout-button');
+    setButtonBusy(logoutButton, true, 'Saindo...');
     await fetch('/api/auth', {
       method: 'DELETE',
       credentials: 'include',
@@ -196,6 +222,7 @@ export function renderSidebar() {
     window.clearSession?.();
     window.updateLayout?.(false);
     window.location.hash = '#/login';
+    showToast('Sessão encerrada.', 'success');
   });
 
   sidebar.querySelectorAll('[data-nav-toggle]').forEach(button => {

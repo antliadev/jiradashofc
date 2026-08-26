@@ -1087,7 +1087,7 @@
   justify-content: center;
   gap: 6px;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .exec-kpi-card small,
@@ -1172,6 +1172,7 @@
 .exec-card-title {
   margin-bottom: 14px;
 }
+.exec-card-title .business-help-popover { left: auto; right: 0; }
 
 .exec-card-title-row {
   display: flex;
@@ -1251,6 +1252,9 @@
   padding: 11px 12px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.14);
 }
+
+.exec-schedule-list label > :not(i) { grid-column: 2; min-width: 0; }
+.exec-schedule-list label i { grid-column: 1; grid-row: 1 / -1; align-self: start; }
 
 .exec-schedule-list label::before {
   content: none;
@@ -1354,8 +1358,10 @@
   height: 7px;
   border-radius: 999px;
   background: rgba(148, 163, 184, 0.16);
-  overflow: hidden;
+  overflow: visible;
 }
+.exec-kpi-card > .business-help { position: absolute; top: 10px; right: 10px; }
+.exec-kpi-card.farol > .business-help .business-help-popover { left: 0; right: auto; }
 
 .exec-metric-box > div span {
   display: block;
@@ -1416,6 +1422,10 @@
   margin: 14px 4px 8px;
   border-bottom: 1px solid rgba(148, 163, 184, .15);
 }
+
+.exec-timeline-bars.timeline-missing-planned { height: 66px; }
+.exec-timeline-bars.timeline-missing-planned .exec-timeline-bar.effective,
+.exec-timeline-bars.timeline-missing-planned .exec-timeline-buffer { top: 42px; }
 
 .exec-timeline-bar,
 .exec-timeline-buffer {
@@ -1776,4 +1786,45 @@
   .farol-details {
     justify-content: center;
   }
+}
+
+@media (min-width: 1101px) and (max-width: 1400px) {
+  .exec-deliverable-row { grid-template-columns: minmax(0, 1fr) 100px minmax(50px, .5fr) 36px 24px; gap: 6px; }
+}
+
+@media (max-width: 680px) {
+  .executive-v2 { gap: 8px; }
+  .exec-topbar { padding: 14px; }
+  .exec-topbar h1 { font-size: 21px; line-height: 1.15; }
+  .exec-topbar-actions { width: 100%; align-items: stretch; flex-direction: column; gap: 8px; }
+  .exec-topbar-actions .exec-sync { white-space: normal; }
+  .exec-topbar-actions .executive-export-btn { width: 100%; justify-content: center; }
+  .exec-kpi-row { grid-template-columns: 1fr; }
+  .exec-kpi-card { min-height: 82px; padding: 14px; }
+  .exec-kpi-card.farol > .business-help .business-help-popover { left: 16px; right: 16px; width: auto; }
+  .exec-card-title .business-help-popover { left: 16px; right: 16px; width: auto; }
+  .exec-kpi-card.farol { align-items: flex-start; }
+  .exec-card { padding: 14px; }
+  .exec-card-title-row { flex-direction: column; }
+  .exec-schedule-list label { grid-template-columns: 28px minmax(0, 1fr); padding: 8px 10px; gap: 8px; }
+  .exec-schedule-list label i { width: 22px; height: 22px; }
+  .exec-schedule-list span { font-size: 10px; }
+  .exec-schedule-list strong { font-size: 14px; }
+  .exec-schedule-list small { font-size: 10px; }
+  .exec-schedule-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .exec-schedule-metrics .exec-metric-box.variance,
+  .exec-schedule-metrics .exec-timeline { grid-column: 1 / -1; }
+  .exec-metric-box { padding: 11px; }
+  .exec-metric-box strong { font-size: 24px; }
+  .exec-timeline { overflow-x: auto; }
+  .exec-timeline-legend { min-width: 290px; }
+  .exec-timeline-points { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 10px; }
+  .exec-deliverable-row { grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+  .exec-deliverable-row span, .exec-deliverable-row .exec-mini-track { grid-column: 1 / -1; }
+  .exec-risk-item { padding: 12px 16px; }
+  .exec-risk-item b { display: none; }
+}
+
+@media (max-width: 420px) {
+  .exec-timeline-points { grid-template-columns: 1fr; }
 }

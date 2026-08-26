@@ -15,7 +15,10 @@
 .hours-actions .btn { min-height:37px; }
 .hours-actions .btn:disabled { opacity:.45; cursor:not-allowed; }
 .hours-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
-.hours-kpi { min-height:124px; padding:20px; position:relative; overflow:hidden; }
+.hours-kpi { min-height:124px; padding:20px; position:relative; overflow:visible; }
+.hours-kpi > .business-help { position:absolute; top:10px; right:10px; }
+.hours-panel-heading h2 { display:flex; align-items:center; gap:8px; min-width:0; }
+.hours-panel-heading h2 .business-help { flex:0 0 auto; }
 .hours-kpi::before { content:""; position:absolute; inset:0 auto 0 0; width:4px; background:#f97316; }
 .hours-kpi.available::before { background:#10b981; }.hours-kpi.utilization::before { background:#3b82f6; }.hours-kpi.overage::before { background:#64748b; }
 .hours-kpi.utilization.attention::before { background:#f59e0b; }.hours-kpi.utilization.critical::before,.hours-kpi.utilization.exhausted::before,.hours-kpi.overage.visible::before { background:#ef4444; }.hours-kpi.utilization.exceeded::before { background:#dc2626; }

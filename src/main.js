@@ -9,6 +9,7 @@ import { dataService } from './data/data-service.js';
 import { canAccessRoute, firstAllowedRoute, getCurrentUser, HOME_ROUTE, setCurrentUser } from './utils/access-control.js';
 import { sanitize } from './utils/helpers.js';
 import { getTheme, toggleTheme } from './utils/theme.js';
+import { renderPageLoading } from './utils/ui-feedback.js';
 
 
 
@@ -134,6 +135,8 @@ async function renderRoute(importPage, renderName, params = {}, options = {}) {
   } else {
     updateLayout(true);
     renderSidebar();
+    const content = document.getElementById('page-content');
+    if (content) content.innerHTML = renderPageLoading();
   }
   if (dataRoutes.has(path) && !options.skipDataLoad) {
     if (!dataService.isLoaded) renderDataLoading();
@@ -338,6 +341,27 @@ function updateLayout(authenticated) {
   }
 }
 
+function closeMobileMenu() {
+  document.getElementById('sidebar')?.classList.remove('open');
+  document.getElementById('mobile-menu-toggle')?.setAttribute('aria-expanded', 'false');
+  document.getElementById('mobile-menu-toggle')?.setAttribute('aria-label', 'Abrir menu');
+  document.getElementById('sidebar-backdrop')?.classList.remove('visible');
+}
+
+function initMobileMenu() {
+  const toggle = document.getElementById('mobile-menu-toggle');
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebar-backdrop');
+  toggle?.addEventListener('click', () => {
+    const isOpen = sidebar?.classList.toggle('open') || false;
+    toggle.setAttribute('aria-expanded', String(isOpen));
+    toggle.setAttribute('aria-label', isOpen ? 'Fechar menu' : 'Abrir menu');
+    backdrop?.classList.toggle('visible', isOpen);
+  });
+  backdrop?.addEventListener('click', closeMobileMenu);
+  window.addEventListener('hashchange', closeMobileMenu);
+}
+
 function syncMobileThemeButton() {
   const button = document.getElementById('mobile-theme-toggle');
   if (!button) return;
@@ -357,6 +381,7 @@ window.clearSession = clearSession;
 async function initApp() {
   captureSupabaseRecoveryState();
   syncMobileThemeButton();
+  initMobileMenu();
   document.getElementById('mobile-theme-toggle')?.addEventListener('click', () => {
     toggleTheme();
     syncMobileThemeButton();

@@ -12,7 +12,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "node server/index.js",
-    "prepare": "git config core.hooksPath .githooks"
+    "prepare": "sh -c 'git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git config core.hooksPath .githooks || true'"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

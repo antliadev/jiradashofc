@@ -37,9 +37,48 @@ let authCache = {
   checkedAt: 0
 };
 let authValidationPromise = null;
+const RECOVERY_STORAGE_KEY = 'rja.auth.recovery';
 
 function normalizePath(path) {
   return (path || '/').split('?')[0] || '/';
+}
+
+function captureSupabaseRecoveryState() {
+  const searchParams = new URLSearchParams(window.location.search || '');
+  const hash = window.location.hash || '';
+  let authParams = null;
+
+  if (hash.startsWith('#access_token=') || hash.startsWith('#error=')) {
+    authParams = new URLSearchParams(hash.slice(1));
+  } else if (searchParams.get('type') === 'recovery' || searchParams.get('error')) {
+    authParams = searchParams;
+  }
+
+  if (!authParams) return;
+
+  const recoveryState = {
+    accessToken: authParams.get('access_token') || '',
+    refreshToken: authParams.get('refresh_token') || '',
+    type: authParams.get('type') || '',
+    error: authParams.get('error') || '',
+    errorCode: authParams.get('error_code') || '',
+    errorDescription: authParams.get('error_description') || '',
+  };
+
+  if (
+    !recoveryState.accessToken &&
+    !recoveryState.refreshToken &&
+    !recoveryState.error &&
+    recoveryState.type !== 'recovery'
+  ) {
+    return;
+  }
+
+  sessionStorage.setItem(RECOVERY_STORAGE_KEY, JSON.stringify(recoveryState));
+  if (window.location.search) {
+    window.history.replaceState({}, '', window.location.pathname);
+  }
+  window.location.hash = '#/login?recovery=1';
 }
 
 function renderDataLoading() {
@@ -297,6 +336,7 @@ window.clearSession = clearSession;
 // ─── Inicialização ──────────────────────────────────────
 
 async function initApp() {
+  captureSupabaseRecoveryState();
   syncMobileThemeButton();
   document.getElementById('mobile-theme-toggle')?.addEventListener('click', () => {
     toggleTheme();

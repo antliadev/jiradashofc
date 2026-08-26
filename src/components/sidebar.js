@@ -118,7 +118,7 @@ export function renderSidebar() {
     <nav class="sidebar-nav" role="navigation" aria-label="Menu principal">
       <div class="nav-section" role="heading" aria-level="2">Principal</div>
       ${navButton({ route: '/', label: 'Dashboard', icon: ICONS.dashboard, permission: 'dashboard' })}
-      ${navButton({ route: '/executive', label: 'Resumo Executivo', icon: ICONS.executive, permission: 'executive' })}
+      ${navButton({ route: '/home', label: 'Home', icon: ICONS.executive, permission: 'executive' })}
       ${navGroup({
         id: 'contracts',
         label: 'Contratos Consumo Horas',

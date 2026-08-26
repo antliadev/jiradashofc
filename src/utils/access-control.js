@@ -2,10 +2,11 @@
  * access-control.js - Regras de perfis e permissoes de navegação.
  */
 const CURRENT_USER_KEY = 'rja.currentUser';
+const HOME_ROUTE = '/home';
 
 const ACCESS_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', route: '/' },
-  { id: 'executive', label: 'Resumo Executivo', route: '/executive' },
+  { id: 'executive', label: 'Home', route: HOME_ROUTE },
   { id: 'contracts.crawford', label: 'Contratos / Crawford', route: '/contracts/crawford' },
   { id: 'contracts.docwise', label: 'Contratos / Docwise', route: '/contracts/docwise' },
   { id: 'monitoring.overdue', label: 'Monitoramento / Cards em Atraso', route: '/monitoring/overdue' },
@@ -23,6 +24,7 @@ const ACCESS_ITEMS = [
 
 const ROUTE_PERMISSION = {
   '/': 'dashboard',
+  [HOME_ROUTE]: 'executive',
   '/executive': 'executive',
   '/contracts/crawford': 'contracts.crawford',
   '/contracts/docwise': 'contracts.docwise',
@@ -85,12 +87,14 @@ function canAccessRoute(path, user = getCurrentUser()) {
 }
 
 function firstAllowedRoute(user = getCurrentUser()) {
+  if (canAccessPermission('executive', user)) return HOME_ROUTE;
   if (isFull(user)) return '/';
   return ACCESS_ITEMS.find(item => canAccessPermission(item.id, user))?.route || '/login';
 }
 
 export {
   ACCESS_ITEMS,
+  HOME_ROUTE,
   canAccessPermission,
   canAccessRoute,
   firstAllowedRoute,

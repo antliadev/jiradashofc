@@ -6,7 +6,7 @@ import './styles/main.css';
 import { initRouter, registerRoute, setNotFound, setAuthGuard } from './utils/router.js';
 import { renderSidebar } from './components/sidebar.js';
 import { dataService } from './data/data-service.js';
-import { canAccessRoute, firstAllowedRoute, getCurrentUser, setCurrentUser } from './utils/access-control.js';
+import { canAccessRoute, firstAllowedRoute, getCurrentUser, HOME_ROUTE, setCurrentUser } from './utils/access-control.js';
 import { sanitize } from './utils/helpers.js';
 import { getTheme, toggleTheme } from './utils/theme.js';
 
@@ -15,6 +15,7 @@ import { getTheme, toggleTheme } from './utils/theme.js';
 // Rotas públicas (não requerem autenticação)
 const publicRoutes = ['/login'];
 const dataRoutes = new Set([
+  HOME_ROUTE,
   '/',
   '/projects',
   '/projects/executive',
@@ -128,6 +129,12 @@ function renderDataLoadError(error) {
 
 async function renderRoute(importPage, renderName, params = {}, options = {}) {
   const path = normalizePath(window.location.hash.replace(/^#\/?/, '/') || '/');
+  if (options.public) {
+    updateLayout(false);
+  } else {
+    updateLayout(true);
+    renderSidebar();
+  }
   if (dataRoutes.has(path) && !options.skipDataLoad) {
     if (!dataService.isLoaded) renderDataLoading();
     try {
@@ -147,7 +154,8 @@ async function renderRoute(importPage, renderName, params = {}, options = {}) {
 
 // Registrar rotas com lazy loading
 registerRoute('/', () => renderRoute(() => import('./pages/dashboard.js'), 'renderDashboard'));
-registerRoute('/login', () => renderRoute(() => import('./pages/login.js'), 'renderLogin', {}, { skipDataLoad: true }));
+registerRoute('/login', () => renderRoute(() => import('./pages/login.js'), 'renderLogin', {}, { skipDataLoad: true, public: true }));
+registerRoute(HOME_ROUTE, () => renderRoute(() => import('./pages/executive.js'), 'renderExecutive'));
 registerRoute('/projects', () => renderRoute(() => import('./pages/projects.js'), 'renderProjects'));
 registerRoute('/cards', () => renderRoute(() => import('./pages/cards.js'), 'renderCards'));
 registerRoute('/analysts', () => renderRoute(() => import('./pages/analysts.js'), 'renderAnalysts'));
@@ -246,6 +254,7 @@ async function authGuard(path) {
   path = normalizePath(path);
   // Se é rota pública, permite
   if (publicRoutes.includes(path)) {
+    updateLayout(false);
     return true;
   }
 
@@ -309,12 +318,15 @@ async function authGuard(path) {
 
 function updateLayout(authenticated) {
   const sidebar = document.getElementById('sidebar');
+  const header = document.getElementById('page-header');
   
   if (authenticated) {
     sidebar?.classList.remove('hidden');
+    header?.classList.remove('hidden');
     document.body.classList.remove('login-only');
   } else {
     sidebar?.classList.add('hidden');
+    header?.classList.add('hidden');
     document.body.classList.add('login-only');
   }
 }
@@ -352,8 +364,7 @@ async function initApp() {
   if (currentPath === '/login') {
     updateLayout(false);
   } else {
-    updateLayout(true);
-    renderSidebar();
+    updateLayout(false);
   }
 
   // O guard faz a unica validacao remota, evitando corridas em reload/navegacao rapida.

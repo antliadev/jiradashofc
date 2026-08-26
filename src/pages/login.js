@@ -3,6 +3,8 @@
  */
 export function renderLogin() {
   const content = document.getElementById('page-content');
+  document.getElementById('page-header')?.replaceChildren();
+  window.updateLayout?.(false);
   const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
   const recoveryRequested = params.get('recovery') === '1';
   const recoveryState = readRecoveryState();
@@ -129,7 +131,7 @@ export function renderLogin() {
         window.updateLayout(true);
       }
       
-      window.location.hash = '#/';
+      window.location.hash = '#/home';
       
     } catch (err) {
       errorDiv.textContent = err.message;

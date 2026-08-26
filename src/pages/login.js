@@ -3,6 +3,11 @@
  */
 export function renderLogin() {
   const content = document.getElementById('page-content');
+  const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
+  const recoveryRequested = params.get('recovery') === '1';
+  const recoveryState = readRecoveryState();
+  const recoveryMode = recoveryRequested || Boolean(recoveryState.accessToken || recoveryState.error);
+  const recoveryError = recoveryState.error ? formatRecoveryError(recoveryState) : '';
   
   content.innerHTML = `
     <div class="login-container">
@@ -13,43 +18,57 @@ export function renderLogin() {
           </div>
           <div class="login-product-mark">RJA</div>
           <h1>Radar Jira Antlia</h1>
-          <p class="login-subtitle">Faça login para acessar o painel</p>
+          <p class="login-subtitle">${recoveryMode ? 'Entre em contato com o administrador para redefinir sua senha' : 'Faça login para acessar o painel'}</p>
         </div>
         
-        <form id="login-form" class="login-form">
-          <div class="form-group">
-            <label for="login-email">Email</label>
-            <input 
-              type="email" 
-              id="login-email" 
-              name="email" 
-              placeholder="seu.nome@antlia.com.br"
-              required
-              autocomplete="email"
-            >
+        ${recoveryMode ? `
+          <div class="login-form">
+            ${recoveryError ? `<div id="login-error" class="login-error">${recoveryError}</div>` : ''}
+            <div class="report-alert info login-recovery-note">
+              <strong>Redefinicao bloqueada para usuarios finais.</strong>
+              <p>Por politica de seguranca, apenas o administrador pode redefinir senhas pela tela Gestao de Acessos.</p>
+              <p>Avise o administrador responsavel para que ele gere uma nova senha provisoria no sistema.</p>
+            </div>
+            <button type="button" class="btn btn-secondary btn-login-alt" id="back-to-login-btn">
+              Voltar ao login
+            </button>
           </div>
-          
-          <div class="form-group">
-            <label for="login-password">Senha</label>
-            <input 
-              type="password" 
-              id="login-password" 
-              name="password" 
-              placeholder="••••••••"
-              required
-              autocomplete="current-password"
-            >
-          </div>
-          
-          <div id="login-error" class="login-error" style="display: none;"></div>
-          
-          <button type="submit" class="btn btn-primary btn-login" id="login-btn">
-            Entrar
-          </button>
-        </form>
+        ` : `
+          <form id="login-form" class="login-form">
+            <div class="form-group">
+              <label for="login-email">Email</label>
+              <input 
+                type="email" 
+                id="login-email" 
+                name="email" 
+                placeholder="seu.nome@antlia.com.br"
+                required
+                autocomplete="email"
+              >
+            </div>
+            
+            <div class="form-group">
+              <label for="login-password">Senha</label>
+              <input 
+                type="password" 
+                id="login-password" 
+                name="password" 
+                placeholder="••••••••"
+                required
+                autocomplete="current-password"
+              >
+            </div>
+            
+            <div id="login-error" class="login-error" style="display: none;"></div>
+            
+            <button type="submit" class="btn btn-primary btn-login" id="login-btn">
+              Entrar
+            </button>
+          </form>
+        `}
         
         <div class="login-footer">
-          <p>Acesso restrito a usuários autorizados</p>
+          <p>${recoveryMode ? 'A redefinicao de senha e tratada pelo administrador do sistema' : 'Acesso restrito a usuários autorizados'}</p>
         </div>
       </div>
     </div>
@@ -59,17 +78,26 @@ export function renderLogin() {
   addLoginStyles();
   
   // Configurar o formulário
-  const form = document.getElementById('login-form');
   const errorDiv = document.getElementById('login-error');
+
+  if (recoveryMode) {
+    const backButton = document.getElementById('back-to-login-btn');
+
+    backButton?.addEventListener('click', () => {
+      clearRecoveryState();
+      window.location.hash = '#/login';
+    });
+    return;
+  }
+
   const btn = document.getElementById('login-btn');
-  
+  const form = document.getElementById('login-form');
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     
     const email = document.getElementById('login-email').value;
     const password = document.getElementById('login-password').value;
     
-    // Resetar erro
     errorDiv.style.display = 'none';
     btn.disabled = true;
     btn.textContent = 'Entrando...';
@@ -97,12 +125,10 @@ export function renderLogin() {
         window.markAuthenticated(data.user || null);
       }
       
-      // Atualizar layout para mostrar sidebar
       if (window.updateLayout) {
         window.updateLayout(true);
       }
       
-      // Redirecionar para dashboard
       window.location.hash = '#/';
       
     } catch (err) {
@@ -112,6 +138,26 @@ export function renderLogin() {
       btn.textContent = 'Entrar';
     }
   });
+}
+
+function readRecoveryState() {
+  try {
+    return JSON.parse(sessionStorage.getItem('rja.auth.recovery') || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function clearRecoveryState() {
+  sessionStorage.removeItem('rja.auth.recovery');
+}
+
+function formatRecoveryError(recoveryState) {
+  const description = decodeURIComponent((recoveryState.errorDescription || '').replace(/\+/g, ' ')).trim();
+  if (recoveryState.errorCode === 'otp_expired') {
+    return 'O link de recuperacao expirou. Avise o administrador para emitir um novo reset pela Gestao de Acessos.';
+  }
+  return description || 'Nao foi possivel validar o link de recuperacao. Avise o administrador do sistema.';
 }
 
 function addLoginStyles() {
@@ -250,6 +296,21 @@ function addLoginStyles() {
     .btn-login:disabled {
       opacity: 0.7;
       cursor: not-allowed;
+    }
+
+    .btn-login-alt {
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 600;
+      margin-top: 4px;
+    }
+
+    .login-recovery-note {
+      margin: 0 0 12px 0;
+    }
+
+    .login-recovery-note p {
+      margin: 8px 0 0 0;
     }
     
     .login-footer {

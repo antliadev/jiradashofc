@@ -29,4 +29,5 @@ Este arquivo registra decisões e pendências técnicas de execução. Ele não 
 - Validar cookies de sessão em produção.
 - Validar RLS com tokens reais de usuário comum e admin.
 - Validar sync Jira em produção com job real.
+- Definir agendador de 30 minutos. Vercel Hobby bloqueia cron mais frequente que diário.
 - Revisar remoção definitiva de artefatos SQL antigos que não fazem parte do fluxo oficial.

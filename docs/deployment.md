@@ -51,8 +51,14 @@ Validar em produção:
 
 ## Agendamento
 
-O `vercel.json` define um cron a cada 30 minutos para:
+O endpoint de sincronização agendada é:
 
 - `/api/jira/sync/worker`
 
-O endpoint valida `Authorization: Bearer CRON_SECRET`. A variável `CRON_SECRET` precisa estar configurada no ambiente de produção da Vercel.
+O endpoint valida `Authorization: Bearer CRON_SECRET`. A variável `CRON_SECRET` precisa estar configurada no ambiente de produção.
+
+Contas Vercel Hobby aceitam apenas cron diário. Para sincronização a cada 30 minutos, usar uma das opções:
+
+- plano Vercel com suporte a cron mais frequente;
+- agendador externo chamando `/api/jira/sync/worker` com `CRON_SECRET`;
+- job dedicado fora da Vercel.

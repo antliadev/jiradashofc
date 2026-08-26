@@ -323,36 +323,56 @@ async function createUser(input = {}) {
     requirePrivilegedSupabase();
     const login = assertAllowedEmail(input.login || input.email);
     const name = String(input.name || '').trim();
+    const password = String(input.password || '');
     const role = normalizeRole(input.role);
-    if (!name || !login) {
-      const error = new Error('Nome e email sao obrigatorios.');
+    if (!name || !login || !password) {
+      const error = new Error('Nome, email e senha provisoria sao obrigatorios.');
       error.status = 400;
       throw error;
     }
 
-    const { data, error } = await supabase.auth.admin.inviteUserByEmail(login, {
-      data: { name },
+    console.info('[AccessStore] Iniciando provisionamento de usuario.', { role });
+    const { data, error } = await supabase.auth.admin.createUser({
+      email: login,
+      password,
+      email_confirm: true,
+      user_metadata: { name },
     });
     if (error) throw error;
 
     const userId = data?.user?.id;
     if (!userId) throw new Error('Supabase nao retornou o usuario convidado.');
 
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .upsert({
-        user_id: userId,
-        email: login,
-        display_name: name,
-        status: normalizeStatus(input.status),
-        primary_role: role,
-      }, { onConflict: 'user_id' });
-    if (profileError) throw profileError;
+    try {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          user_id: userId,
+          email: login,
+          display_name: name,
+          status: normalizeStatus(input.status),
+          primary_role: role,
+        }, { onConflict: 'user_id' });
+      if (profileError) throw profileError;
 
-    await replaceUserRole(userId, role);
-    await replaceCustomPermissions(userId, role, input.permissions);
-    await auditAccessChange(input.actorUserId, 'profile.invite', userId, { email: login, role });
-    return findProfileById(userId);
+      await replaceUserRole(userId, role);
+      await replaceCustomPermissions(userId, role, input.permissions);
+      await auditAccessChange(input.actorUserId, 'profile.create', userId, { email: login, role });
+      const createdUser = await findProfileById(userId);
+      console.info('[AccessStore] Provisionamento de usuario concluido.', { userId, role });
+      return createdUser;
+    } catch (provisionError) {
+      // Auth e tabelas publicas nao compartilham uma transacao. Removemos o
+      // usuario Auth para nao deixar uma conta parcial sem perfil/permissoes.
+      const { error: rollbackError } = await supabase.auth.admin.deleteUser(userId);
+      if (rollbackError) {
+        console.error('[AccessStore] Falha no rollback do usuario Auth.', {
+          userId,
+          rollbackCode: rollbackError.code || null,
+        });
+      }
+      throw provisionError;
+    }
   }
 
   const users = await readUsersRaw();
@@ -394,6 +414,7 @@ async function updateUser(id, input = {}) {
     requirePrivilegedSupabase();
     const login = assertAllowedEmail(input.login || input.email);
     const name = String(input.name || '').trim();
+    const password = String(input.password || '');
     const role = normalizeRole(input.role);
     if (!name || !login) {
       const error = new Error('Nome e email sao obrigatorios.');
@@ -401,10 +422,14 @@ async function updateUser(id, input = {}) {
       throw error;
     }
 
-    const { error: authError } = await supabase.auth.admin.updateUserById(id, {
+    const authChanges = {
       email: login,
+      email_confirm: true,
       user_metadata: { name },
-    });
+    };
+    if (password) authChanges.password = password;
+
+    const { error: authError } = await supabase.auth.admin.updateUserById(id, authChanges);
     if (authError) throw authError;
 
     const { error: profileError } = await supabase

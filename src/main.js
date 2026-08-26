@@ -319,14 +319,21 @@ async function authGuard(path) {
 function updateLayout(authenticated) {
   const sidebar = document.getElementById('sidebar');
   const header = document.getElementById('page-header');
+  const app = document.getElementById('app');
   
   if (authenticated) {
     sidebar?.classList.remove('hidden');
+    sidebar?.removeAttribute('aria-hidden');
+    if (sidebar) sidebar.inert = false;
     header?.classList.remove('hidden');
+    app?.classList.remove('login-layout');
     document.body.classList.remove('login-only');
   } else {
     sidebar?.classList.add('hidden');
+    sidebar?.setAttribute('aria-hidden', 'true');
+    if (sidebar) sidebar.inert = true;
     header?.classList.add('hidden');
+    app?.classList.add('login-layout');
     document.body.classList.add('login-only');
   }
 }

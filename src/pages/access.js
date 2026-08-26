@@ -85,7 +85,7 @@ function renderForm(user) {
         <input type="hidden" id="access-id" value="${sanitize(user?.id || '')}">
         <label>Nome completo<input id="access-name" required value="${sanitize(user?.name || '')}"></label>
         <label>Login<input id="access-login" required value="${sanitize(user?.login || '')}"></label>
-        <label>Senha<input id="access-password" type="password" ${isNew ? 'required' : ''} placeholder="${isNew ? 'Obrigatoria' : 'Preencher apenas para alterar'}"></label>
+        <label>Senha provisoria<input id="access-password" type="password" ${isNew ? 'required' : ''} autocomplete="new-password" placeholder="${isNew ? 'Defina a senha inicial' : 'Preencher apenas para alterar'}"></label>
         <label>Perfil
           <select id="access-role">
             <option value="full" ${role === 'full' ? 'selected' : ''}>Acesso Full</option>
@@ -122,7 +122,7 @@ function renderForm(user) {
         </div>
       </form>
       <div class="report-alert info">
-        Full acessa tudo e administra usuarios. Master acessa menus funcionais, sem Gestao de Acessos. Visualizacao tem acesso de leitura aos modulos liberados. Personalizado recebe apenas os menus marcados.
+        A senha provisoria definida pelo administrador permite o primeiro acesso imediato. Full acessa tudo e administra usuarios. Master acessa menus funcionais, sem Gestao de Acessos. Visualizacao tem acesso de leitura aos modulos liberados. Personalizado recebe apenas os menus marcados.
       </div>
     </section>
   `;

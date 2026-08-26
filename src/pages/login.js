@@ -131,7 +131,10 @@ export function renderLogin() {
         window.updateLayout(true);
       }
       
-      window.location.hash = '#/home';
+      // O destino inicial deve respeitar exatamente os acessos configurados
+      // para o usuario, em vez de assumir que todos possuem acesso a Home.
+      const { firstAllowedRoute } = await import('../utils/access-control.js');
+      window.location.hash = `#${firstAllowedRoute(data.user || null)}`;
       
     } catch (err) {
       errorDiv.textContent = err.message;

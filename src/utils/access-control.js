@@ -74,10 +74,13 @@ function isMaster(user = getCurrentUser()) {
 
 function canAccessPermission(permission, user = getCurrentUser()) {
   if (!permission) return true;
-  if (!user) return true;
+  // A ausencia de um usuario nunca pode liberar uma rota protegida. A
+  // autenticacao e validada no backend, mas este bloqueio evita que menus e
+  // paginas pisquem ou sejam renderizados com um estado local incompleto.
+  if (!user || user.status !== 'active') return false;
   if (permission === 'access.manage') return isFull(user);
   if (isFull(user) || isMaster(user)) return true;
-  if (!['custom', 'personalizado', 'visualizacao'].includes(user.role) || user.status !== 'active') return false;
+  if (!['custom', 'personalizado', 'visualizacao'].includes(user.role)) return false;
   return Array.isArray(user.permissions) && user.permissions.includes(permission);
 }
 
@@ -87,6 +90,7 @@ function canAccessRoute(path, user = getCurrentUser()) {
 }
 
 function firstAllowedRoute(user = getCurrentUser()) {
+  if (!user || user.status !== 'active') return '/login';
   if (canAccessPermission('executive', user)) return HOME_ROUTE;
   if (isFull(user)) return '/';
   return ACCESS_ITEMS.find(item => canAccessPermission(item.id, user))?.route || '/login';

@@ -2560,6 +2560,9 @@ button.issue-summary-item:hover { border-color: var(--accent); }
 body.login-only .sidebar { display: none !important; }
 body.login-only .main-content { margin-left: 0 !important; }
 body.login-only .page-header { display: none !important; }
+.app-layout.login-layout { display: block; }
+.app-layout.login-layout .main-content { margin-left: 0 !important; }
+.app-layout.login-layout .page-content { padding: 0; }
 
 /* Sidebar hidden utility */
 .sidebar.hidden { display: none !important; }

@@ -33,6 +33,47 @@ Resultados esperados sem sessão:
 - `/api/jira/system/status`: `401`
 - `/api/access/users`: `401`
 
+## Evidência Produção - 2026-08-26
+
+Deploy validado:
+
+- Vercel deployment: `dpl_4qcJV4ReCrAfRddELPbJMDjSiX5Q`
+- URL pública: `https://jiradashofc.vercel.app`
+
+Resultados sem sessão:
+
+- `GET /`: `200`
+- `GET /api/debug`: `404`
+- `GET /api/auth`: `401`
+- `GET /api/jira/system/status`: `401`
+- `GET /api/jira/dashboard`: `401`
+- `GET /api/access/users`: `401`
+
+Resultados com sessão `pedro.fernandes@antlia.com.br`:
+
+- `POST /api/auth`: `200`
+- cookies emitidos com `HttpOnly`, `Secure` e `SameSite=Lax`
+- `GET /api/auth`: `200`
+- `GET /api/access/users`: `200`
+- `GET /api/jira/system/status`: `200`, Supabase `configured=true`, `privileged=true`
+- `GET /api/jira/dashboard`: `200`, `3529` issues e `15` projetos
+- Playwright autenticado carregou a home em produção sem erros de console
+
+Bloqueios validados:
+
+- Login com domínio externo retornou `403`.
+- APIs protegidas retornaram `401` sem cookie de sessão.
+
+Email:
+
+- Supabase enviou email de redefinição de senha para `pedro.fernandes@antlia.com.br`.
+- Gmail confirmou recebimento em `2026-08-26T13:16:43+00:00`, assunto `Reset your password`.
+
+Limitações conhecidas:
+
+- Conta Vercel Hobby não permite cron a cada 30 minutos; o sync recorrente exige upgrade para Vercel Pro ou scheduler externo.
+- Supabase Security Advisor apontou `auth_leaked_password_protection` como `WARN`.
+
 ## Fluxos Manuais
 
 - Login com email `@antlia.com.br` confirmado.

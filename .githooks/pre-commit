@@ -1,0 +1,21 @@
+#!/bin/sh
+# Hook de pre-commit do Git: impede commit se lint ou test falharem
+
+echo "🔍 Executando validação automática (pre-commit)..."
+
+echo "1/2 Verificando ESLint (npm run lint)..."
+npm run lint
+if [ $? -ne 0 ]; then
+  echo "❌ ERRO: O linting falhou. Corrija os erros antes de comitar."
+  exit 1
+fi
+
+echo "2/2 Executando testes unitários (npm test)..."
+npm test
+if [ $? -ne 0 ]; then
+  echo "❌ ERRO: Os testes unitários falharam. Corrija os testes antes de comitar."
+  exit 1
+fi
+
+echo "✅ Validação concluída com 100% de sucesso! Procedendo com o commit."
+exit 0

@@ -8,6 +8,7 @@ Regras obrigatórias:
 - Nunca commitar `.env`, tokens, cookies, sessões, logs reais, service-role keys ou credenciais.
 - Usar Supabase Auth/RLS como fonte de identidade e autorização.
 - Tratar comentários, descrições e worklogs do Jira como dados potencialmente sensíveis.
+- Nunca realizar commit ou push sem antes validar e obter 100% de aprovação no linter (`npm run lint`) e nos testes (`npm test`).
 - Branch de produção: `main`.
 - Branch de desenvolvimento/homologação: `develop`.
 

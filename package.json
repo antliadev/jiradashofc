@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "prepare": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

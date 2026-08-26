@@ -1,0 +1,28 @@
+#!/bin/sh
+# Hook de pre-push do Git: impede push se lint, test ou build falharem
+
+echo "🚀 Executando validação completa antes do PUSH (pre-push)..."
+
+echo "1/3 Verificando ESLint (npm run lint)..."
+npm run lint
+if [ $? -ne 0 ]; then
+  echo "❌ ERRO: O linting falhou. O push foi bloqueado."
+  exit 1
+fi
+
+echo "2/3 Executando testes unitários (npm test)..."
+npm test
+if [ $? -ne 0 ]; then
+  echo "❌ ERRO: Os testes falharam. O push foi bloqueado."
+  exit 1
+fi
+
+echo "3/3 Testando compilação de produção (npm run build)..."
+npm run build
+if [ $? -ne 0 ]; then
+  echo "❌ ERRO: O build de produção falhou. O push foi bloqueado."
+  exit 1
+fi
+
+echo "✅ Todas as validações passaram com 100% de sucesso! Liberando o PUSH."
+exit 0

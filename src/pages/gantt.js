@@ -23,11 +23,7 @@ import { dataService } from '../data/data-service.js';
 import {
   resolveStatusCategory, StatusCategory, isCardOverdue
 } from '../data/models.js';
-import { sanitize, debounce, formatDate, priorityLabel } from '../utils/helpers.js';
-import {
-  buildProjectScheduleSummary,
-  toDate as toScheduleDate,
-} from '../data/schedule-service.js';
+import { sanitize, formatDate, priorityLabel } from '../utils/helpers.js';
 
 // ═══════════════════════════════════════════════════════════════
 // CONSTANTES
@@ -72,7 +68,7 @@ const MONTH_NAMES_SHORT = [
   'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez',
 ];
 
-const WEEK_DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
 
 const COLUMN_METADATA = {
   item: { label: 'Item', resizable: false },
@@ -210,17 +206,9 @@ function startOfQuarter(date) {
   return new Date(date.getFullYear(), q, 1);
 }
 
-function endOfMonth(date) {
-  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
-}
 
-function weekNumber(date) {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const dayNum = d.getUTCDay() || 7;
-  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
-}
+
+
 
 function isSameDay(a, b) {
   return a.getFullYear() === b.getFullYear()
@@ -280,15 +268,7 @@ function getStatusClass(item) {
   return classifyScheduleItem(item).className;
 }
 
-function getBarColors(statusClass) {
-  const map = {
-    done: { bg: '#10b981', from: '#10b981', to: '#059669' },
-    progress: { bg: '#f59e0b', from: '#f59e0b', to: '#d97706' },
-    overdue: { bg: '#ef4444', from: '#ef4444', to: '#dc2626' },
-    todo: { bg: '#64748b', from: '#64748b', to: '#475569' },
-  };
-  return map[statusClass] || map.todo;
-}
+
 
 function classifyScheduleItem(item) {
   const card = item.card || item;
@@ -443,34 +423,7 @@ function getTotalPixels(range, viewMode) {
   return Math.max(720, daysBetween(range.start, range.end) * getPxPerDay(viewMode));
 }
 
-function getTicksForMonth(monthStart, viewMode) {
-  const ticks = [];
-  const end = endOfMonth(monthStart);
-  let cursor = new Date(monthStart);
 
-  if (viewMode === 'day') {
-    while (cursor <= end) {
-      ticks.push(new Date(cursor));
-      cursor = addDays(cursor, 1);
-    }
-  } else if (viewMode === 'week') {
-    const endDate = new Date(end);
-    // Mostrar semanas dentro do mês
-    const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
-    cursor = startOfWeek(monthStart);
-    while (cursor <= monthEnd && cursor <= addDays(endDate, 7)) {
-      ticks.push(new Date(cursor));
-      cursor = addDays(cursor, 7);
-    }
-  } else if (viewMode === 'month') {
-    ticks.push(new Date(monthStart));
-  } else {
-    // quarter — apenas um tick por mês
-    ticks.push(new Date(monthStart));
-  }
-
-  return ticks;
-}
 
 // ═══════════════════════════════════════════════════════════════
 // FILTERS — Filtros e busca
@@ -509,12 +462,7 @@ function getActiveFilterCount() {
 // GROUPS — Agrupamento
 // ═══════════════════════════════════════════════════════════════
 
-const GROUP_ICONS = {
-  project: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
-  assignee: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-8 8-8s8 4 8 8"/></svg>`,
-  status: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>`,
-  priority: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l-4 8h8z"/><path d="M12 12v10"/></svg>`,
-};
+
 
 function getGroupKey(item, grouping) {
   const card = item.card;
@@ -548,7 +496,7 @@ function getGroupLabel(key, grouping, projects, users) {
   return 'Todos os tickets';
 }
 
-function getGroupColor(key, grouping) {
+function getGroupColor(key, _grouping) {
   const colors = ['#6366f1', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#06b6d4', '#a855f7', '#10b981'];
   // Hash simples para cor consistente
   let hash = 0;
@@ -858,7 +806,7 @@ function openModal(cardId) {
 // SETTINGS — Painel de personalização
 // ═══════════════════════════════════════════════════════════════
 
-function openSettingsPanel() {
+export function openSettingsPanel() {
   if (document.querySelector('.gantt-settings-overlay')) return;
 
   const overlay = document.createElement('div');
@@ -991,7 +939,7 @@ function openSettingsPanel() {
 // SUMMARY — Cards de resumo
 // ═══════════════════════════════════════════════════════════════
 
-function renderSummary(filtered, allItems) {
+function renderSummary(filtered, _allItems) {
   const metrics = getScheduleMetrics(filtered);
 
   return `
@@ -1288,10 +1236,11 @@ function renderLeftRow(item) {
       case 'duration':
         content = timeline.start && timeline.end ? daysBetween(timeline.start, timeline.end) + 'd' : '—';
         break;
-      case 'progress':
+      case 'progress': {
         const prog = statusCat === 'done' ? 100 : (statusCat === 'in_progress' ? 50 : 0);
         content = `<div class="gantt-progress-mini"><div class="gantt-progress-mini-bar" style="width:${prog}%"></div></div>`;
         break;
+      }
     }
 
     return `
@@ -1341,7 +1290,7 @@ function buildHierarchyRows(items) {
   }
 
   const visibleEpicKeys = new Set(epicItems.map(item => item.card.key));
-  for (const [epicKey, children] of childrenByEpic.entries()) {
+  for (const [epicKey, _children] of childrenByEpic.entries()) {
     if (!visibleEpicKeys.has(epicKey)) {
       const epicItem = byKey.get(epicKey);
       if (epicItem) epicItems.push(epicItem);
@@ -2002,7 +1951,7 @@ function bindEvents() {
   });
 
   // Timeline cell resize
-  document.querySelector('.gantt-timeline-header')?.addEventListener('mousedown', e => {
+  document.querySelector('.gantt-timeline-header')?.addEventListener('mousedown', _e => {
     // Aqui poderíamos adicionar um handle específico para o zoom fino se desejado
   });
 

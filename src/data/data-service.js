@@ -406,7 +406,7 @@ class DataService {
     } catch (err) {
       clearTimeout(id);
       if (err.name === 'AbortError') {
-        throw new Error(`Tempo limite excedido ao carregar ${url}.`);
+        throw new Error(`Tempo limite excedido ao carregar ${url}.`, { cause: err });
       }
       throw err;
     }
@@ -503,7 +503,7 @@ class DataService {
       });
       this._persistLocalProjectMetadata();
       return list;
-    } catch (error) {
+    } catch {
       this._loadLocalProjectMetadata();
       return [...this._projectMetadata.values()];
     }
@@ -1143,7 +1143,6 @@ class DataService {
       const isBlocked = statusName.includes('block');
       const isHighPriority = priorityName.includes('high') || priorityName.includes('critic') || priorityName.includes('alta') || priorityName.includes('crítica');
       const isOld = issue.updatedAt && (Date.now() - new Date(issue.updatedAt).getTime()) > 30 * 24 * 60 * 60 * 1000; // > 30 dias
-      const isUnassigned = !issue.assignee;
 
       if (isBlocked || isHighPriority || (isOld && !this.isDoneStatus(issue.status.name))) {
         let level = 'Baixo';

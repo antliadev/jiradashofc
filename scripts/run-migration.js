@@ -7,9 +7,6 @@
 
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import path from 'path';
 
 dotenv.config();
 
@@ -70,7 +67,7 @@ async function runMigration() {
 
   try {
     // Executar SQL diretamente
-    const { data, error } = await supabase.rpc('exec_sql', { 
+    const { error } = await supabase.rpc('exec_sql', { 
       query: migrationSQL 
     });
 
@@ -98,7 +95,7 @@ async function runMigration() {
     console.log('✅ Migração executada com sucesso!');
     
     // Verificar se as tabelas existem
-    const { data: sessions } = await supabase
+    await supabase
       .from('user_sessions')
       .select('count')
       .limit(1);

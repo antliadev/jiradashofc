@@ -1,9 +1,9 @@
 /**
- * api/index.js — Single entry point for all Vercel API routes.
+ * api/index.js — Ponto de entrada único para todas as rotas da API Vercel.
  *
- * Vercel's Node.js runtime uses a lazy getter on req.body that
- * can throw "Invalid JSON". We override it with a safe accessor
- * and normalize the body before Express processes it.
+ * O runtime Node.js da Vercel utiliza um getter preguiçoso em req.body que
+ * pode lançar "Invalid JSON". Sobrescrevemos com um acessor seguro
+ * e normalizamos o body antes do processamento pelo Express.
  */
 import { waitUntil } from '@vercel/functions';
 
@@ -11,14 +11,14 @@ export default async function handler(req, res) {
   try {
     const { default: app } = await import('../server/index.js');
     
-    // Expose Vercel's waitUntil to Express routes so they can run
-    // background tasks (e.g. sync jobs) after the HTTP response is sent.
+    // Expõe o waitUntil da Vercel para as rotas do Express para que possam executar
+    // tarefas em segundo plano (ex: sincronização) após o envio da resposta HTTP.
     req.waitUntil = waitUntil;
 
-    // Override Vercel's lazy body getter with a safe one
+    // Sobrescreve o getter preguiçoso de body da Vercel com um acessor seguro
     const rawCt = req.headers['content-type'] || '';
     if (req.method !== 'GET' && req.method !== 'DELETE' && rawCt.startsWith('application/json')) {
-      // Read the raw body safely
+      // Lê o corpo bruto da requisição com segurança
       let raw = null;
       try {
         raw = req.__vc_rawBody || req.__vc_body || null;
@@ -31,12 +31,14 @@ export default async function handler(req, res) {
             setTimeout(() => resolve(null), 100);
           });
         }
-      } catch {}
+      } catch {
+        // Ignora erros na leitura bruta do body
+      }
       
-      // Empty string is falsy — treat missing / empty body as {}
+      // String vazia é falsy — trata corpo ausente / vazio como {}
       const parsed = (raw && raw.length > 0) ? JSON.parse(raw) : {};
       
-      // Set req.body as a plain property (overrides Vercel's getter)
+      // Define req.body como uma propriedade simples (sobrescreve o getter da Vercel)
       Object.defineProperty(req, 'body', {
         value: parsed,
         writable: true,
@@ -44,10 +46,10 @@ export default async function handler(req, res) {
         enumerable: true,
       });
       
-      // Signal to Express's body-parser that body is already handled.
-      // body-parser checks req._body and skips parsing if true.
-      // Without this flag, it will try to read the (already-consumed)
-      // stream and fail with "stream is not readable".
+      // Sinaliza ao body-parser do Express que o corpo já foi tratado.
+      // O body-parser verifica req._body e ignora a análise se for verdadeiro.
+      // Sem essa flag, ele tentaria ler o stream (já consumido)
+      // e falharia com "stream is not readable".
       req._body = true;
     }
 

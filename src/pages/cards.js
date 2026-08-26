@@ -884,9 +884,7 @@ function getSortOptions(mode) {
   ];
 }
 
-function getSelectedValues(select) {
-  return [...select.selectedOptions].map(option => option.value);
-}
+
 
 function uniqueSorted(values) {
   return [...new Set(values)].sort((a, b) => a.localeCompare(b, 'pt-BR'));

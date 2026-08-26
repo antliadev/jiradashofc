@@ -8,7 +8,7 @@ import { exportRowsWorkbook } from '../utils/excel-export.js';
 
 const MIN_SAMPLE_KEY = 'rja.analysts.minimumSample';
 const SHARED_ANALYST_KEY = 'rja.analysts.sharedUserId';
-const DEFAULT_COLS = ['projects', 'worked', 'current', 'done', 'onTimeRate', 'blockRate', 'commentCoverage', 'delayRate', 'sample'];
+
 
 function routeMode() {
   const path = (window.location.hash.replace(/^#\/?/, '/') || '/analysts').split('?')[0];

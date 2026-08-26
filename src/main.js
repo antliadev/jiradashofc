@@ -10,49 +10,7 @@ import { canAccessRoute, firstAllowedRoute, getCurrentUser, setCurrentUser } fro
 import { sanitize } from './utils/helpers.js';
 import { getTheme, toggleTheme } from './utils/theme.js';
 
-// Cache de módulos carregados (lazy loading)
-const pageModules = {};
 
-// Mapa de páginas para seus caminhos de importação
-const pageImports = {
-  '/': () => import('./pages/dashboard.js'),
-  '/login': () => import('./pages/login.js'),
-  '/projects': () => import('./pages/projects.js'),
-  '/cards': () => import('./pages/cards.js'),
-  '/analysts': () => import('./pages/analysts.js'),
-  '/analysts/general': () => import('./pages/analysts.js'),
-  '/analysts/comparative': () => import('./pages/analysts.js'),
-  '/analysts/evolution': () => import('./pages/analysts.js'),
-  '/data': () => import('./pages/data.js'),
-  '/access': () => import('./pages/access.js'),
-  '/board': () => import('./pages/board.js'),
-  '/executive': () => import('./pages/executive.js'),
-  '/hours': () => import('./pages/hours.js'),
-  '/hours/docwise': () => import('./pages/hours.js'),
-  '/contracts/crawford': () => import('./pages/hours.js'),
-  '/contracts/docwise': () => import('./pages/hours.js'),
-  '/projects/health': () => import('./pages/project-reports.js'),
-  '/projects/executive': () => import('./pages/project-reports.js'),
-  '/projects/detailed-report': () => import('./pages/project-reports.js'),
-};
-
-// Carregamento lazy de páginas
-async function loadPage(path) {
-  const normalizedPath = path.split('?')[0]; // remover query params
-  
-  if (!pageModules[normalizedPath]) {
-    const importFn = pageImports[normalizedPath];
-    if (importFn) {
-      const module = await importFn();
-      pageModules[normalizedPath] = module.renderDashboard || module.renderLogin || 
-        module.renderProjects || module.renderCards || module.renderAnalysts || 
-        module.renderData || module.renderBoard || module.renderExecutive ||
-        module.renderHours || module.renderAccessManagement || module.renderPlannedFeature;
-    }
-  }
-  
-  return pageModules[normalizedPath];
-}
 
 // Rotas públicas (não requerem autenticação)
 const publicRoutes = ['/login'];

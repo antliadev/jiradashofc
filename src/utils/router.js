@@ -8,6 +8,10 @@ let currentRoute = null;
 let notFoundHandler = null;
 let authGuard = null;
 
+export function getCurrentRoute() {
+  return currentRoute;
+}
+
 // ─── Registro de Rotas ─────────────────────────────────────
 
 /**

@@ -1,9 +1,9 @@
 /**
- * api/[...slug].js — Catch-all entry point for all Vercel API routes.
+ * api/[...slug].js — Ponto de entrada genérico (catch-all) para rotas da API Vercel.
  *
- * Vercel's Node.js runtime pre-parses req.body for known content types.
- * But Express's express.json() tries to read from the stream which is
- * already consumed. We normalize req.body before calling Express.
+ * O runtime Node.js da Vercel faz pré-análise de req.body para tipos de conteúdo conhecidos.
+ * Porém express.json() do Express tenta ler do stream que já foi consumido.
+ * Normalizamos req.body antes de chamar o Express.
  */
 import app from '../server/index.js';
 import { waitUntil } from '@vercel/functions';
@@ -11,8 +11,8 @@ import { waitUntil } from '@vercel/functions';
 export default function handler(req, res) {
   req.waitUntil = waitUntil;
 
-  // For non-GET JSON requests, ensure req.body is a proper object
-  // BEFORE Express's express.json() middleware runs.
+  // Para requisições JSON não-GET, garante que req.body seja um objeto válido
+  // ANTES do middleware express.json() do Express ser executado.
   if (req.method !== 'GET' && req.method !== 'DELETE') {
     const ct = req.headers['content-type'] || '';
     if (ct.startsWith('application/json')) {
@@ -23,7 +23,7 @@ export default function handler(req, res) {
       } else if (typeof req.body !== 'object' || req.body === null) {
         req.body = {};
       }
-      // Express's body-parser checks req._body — tell it to skip
+      // O body-parser do Express verifica req._body — indica para ignorar a análise
       req._body = true;
     }
   }

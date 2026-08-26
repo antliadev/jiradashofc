@@ -20,9 +20,9 @@ const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 
-// Body parsing: in dev mode (local server), use express.json().
-// In Vercel, api/index.js pre-parses req.body before Express processes it.
-// express.json() skips if req.body is already set.
+// Parsing do body: em modo dev (servidor local), usa express.json().
+// Na Vercel, api/index.js faz a pré-análise do req.body antes do Express processar.
+// O express.json() ignora se req.body já estiver definido.
 app.use(express.json({ limit: '1mb' }));
 
 app.use((req, _res, next) => {
@@ -147,7 +147,7 @@ app.get('/health', (req, res) => {
 });
 
 // Error handler global
-app.use((err, req, res, next) => {
+app.use((err, req, res, _next) => {
   console.error('[Server] Erro não tratado:', err.message);
   res.status(500).json({ error: 'Erro interno do servidor', details: err.message });
 });

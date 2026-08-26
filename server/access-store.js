@@ -153,7 +153,7 @@ async function writeUsersRaw(users) {
 
 function safeUser(user) {
   if (!user) return null;
-  const { passwordHash, ...publicUser } = user;
+  const { passwordHash: _passwordHash, ...publicUser } = user;
   return publicUser;
 }
 

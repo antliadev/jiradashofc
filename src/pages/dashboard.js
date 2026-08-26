@@ -4,7 +4,7 @@
  */
 import { dataService } from '../data/data-service.js';
 import { resolveStatusCategory, StatusCategory, isCardOverdue } from '../data/models.js';
-import { PRIORITY_COLORS, STATUS_COLORS, healthLabel, HEALTH_COLORS, sanitize, formatDateTime, formatDate, priorityLabel, sanitizeTitle, getJiraIssueUrl } from '../utils/helpers.js';
+import { STATUS_COLORS, healthLabel, sanitize, formatDateTime, formatDate, priorityLabel, sanitizeTitle, getJiraIssueUrl } from '../utils/helpers.js';
 
 let dashboardChart = null;
 let selectedWorkloadProject = '';
@@ -30,12 +30,7 @@ let statsCache = {
   data: null
 };
 
-// Lista de status disponíveis para filtro
-const STATUS_OPTIONS = [
-  'A Fazer', 'Em Andamento', 'Em Progresso', 'In Progress',
-  'Concluído', 'Done', 'Bloqueado', 'Blocked',
-  'Ready4Test', 'Validação Cliente', 'Validação', 'QA'
-];
+
 
 export function renderDashboard() {
   const header = document.getElementById('page-header');
@@ -108,7 +103,7 @@ function getActiveFilterCount() {
   return count;
 }
 
-function setupFilterListeners(projects, users) {
+function setupFilterListeners() {
   // Filtro por projeto
   document.getElementById('filter-project')?.addEventListener('change', (e) => {
     dashboardFilters.projectId = e.target.value;
@@ -189,9 +184,7 @@ function clearFilterChip(key, label, tone = 'accent') {
   `;
 }
 
-function activeFilterChip(label) {
-  return `<span class="active-filter-chip static"><span>${sanitize(label)}</span></span>`;
-}
+
 
 function renderDashboardContent() {
   const content = document.getElementById('page-content');
@@ -464,7 +457,6 @@ function renderWorkloadList(workload) {
   
   return sorted.map(w => {
     const percent = maxTotal > 0 ? Math.round((w.total / maxTotal) * 100) : 0;
-    const progressPercent = w.total > 0 ? Math.round((w.done / w.total) * 100) : 0;
     
     return `
       <div class="workload-item" style="display: flex; align-items: center; gap: 12px; padding: 10px; border-bottom: 1px solid var(--border); position: relative;" title="Total: ${w.total} | Andamento: ${w.inProgress} | Concluídos: ${w.done}">
@@ -777,7 +769,7 @@ async function loadChart() {
   return ChartModule;
 }
 
-async function initCharts(stats, workload) {
+async function initCharts(stats) {
   const token = ++chartRenderToken;
   // Destruir gráficos anteriores se existirem
   if (dashboardChart) dashboardChart.destroy();

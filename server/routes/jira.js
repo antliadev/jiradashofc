@@ -24,7 +24,7 @@ import {
   listProjectMetadata,
   upsertProjectMetadata,
 } from '../../lib/projectMetadataService.js';
-import { createSyncJob, createSyncJobFromEnv, getSyncJobStatus, runSyncJob, executeAutoSync } from '../../lib/syncJobService.js';
+import { createSyncJob, createSyncJobFromEnv, createScopedSyncJobFromEnv, getSyncJobStatus, runSyncJob, executeAutoSync } from '../../lib/syncJobService.js';
 import { fetchHoursDashboard } from '../../lib/hoursDashboardService.js';
 
 const router = express.Router();
@@ -292,6 +292,54 @@ router.post('/sync/start', async (req, res) => {
     });
   } catch (error) {
     console.error('[sync/start] Erro:', error.message);
+    if (error.code === 'SYNC_ALREADY_RUNNING') {
+      return res.status(409).json({
+        success: false,
+        error: error.message,
+        code: 'SYNC_ALREADY_RUNNING',
+        job: error.job
+      });
+    }
+    if (error.code === 'JIRA_AUTH_INVALID') {
+      return res.status(401).json({
+        success: false,
+        error: error.message,
+        code: error.code
+      });
+    }
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ─────────────────────────────────────────────
+// POST /api/jira/sync/scoped — Sincroniza somente o recorte filtrado da tela
+// ─────────────────────────────────────────────
+router.post('/sync/scoped', async (req, res) => {
+  try {
+    const sessionId = req.headers['x-session-id'] || null;
+    const scope = req.body?.scope || {};
+    const { job, credentials, durable, credentialsPersisted } = await createScopedSyncJobFromEnv(scope, sessionId);
+
+    const bgTask = () => runSyncJob(job.id, credentials);
+    if (typeof req.waitUntil === 'function') {
+      req.waitUntil(bgTask().catch(err => console.error('[sync/scoped] Erro em background:', err.message)));
+    } else if (process.env.VERCEL !== '1') {
+      setImmediate(() => bgTask().catch(error => {
+        console.error('[sync/scoped] Erro em background:', error.message);
+      }));
+    }
+
+    return res.status(202).json({
+      success: true,
+      message: 'Sincronizacao filtrada iniciada no backend.',
+      jobId: job.id,
+      job,
+      scope,
+      durable,
+      credentialsPersisted
+    });
+  } catch (error) {
+    console.error('[sync/scoped] Erro:', error.message);
     if (error.code === 'SYNC_ALREADY_RUNNING') {
       return res.status(409).json({
         success: false,

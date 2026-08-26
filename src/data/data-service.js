@@ -12,6 +12,8 @@ import {
 import { buildProjectScheduleSummary } from './schedule-service.js';
 
 const DASHBOARD_DATA_TIMEOUT_MS = 120000;
+const DASHBOARD_CACHE_KEY = 'jiraDash.dashboardPayload.v2';
+const DASHBOARD_CACHE_TTL_MS = 3 * 60 * 1000;
 
 function jiraFieldText(value) {
   if (value == null) return '';
@@ -339,6 +341,50 @@ class DataService {
     }
   }
 
+  _hasActiveSyncScope(scope = {}) {
+    return Object.entries(scope || {}).some(([, value]) => {
+      if (Array.isArray(value)) return value.length > 0;
+      return Boolean(value);
+    });
+  }
+
+  async startScopedJiraSync(scope = {}) {
+    if (!this._hasActiveSyncScope(scope)) return this.startJiraSyncFromEnv();
+
+    try {
+      const response = await this._fetchWithTimeout(`${this._apiBase}/sync/scoped`, {
+        method: 'POST',
+        headers: this._getHeaders(),
+        body: JSON.stringify({ scope })
+      }, 15000);
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('[DataService] Resposta nao e JSON:', text.substring(0, 200));
+        throw new Error(`Erro ao sincronizar filtro: resposta invalida do servidor (${response.status})`);
+      }
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 409 && result.code === 'SYNC_ALREADY_RUNNING' && result.job) {
+          return {
+            ...result,
+            alreadyRunning: true,
+            jobId: result.job.id
+          };
+        }
+        throw new Error(result.error || 'Erro ao sincronizar filtro');
+      }
+
+      return result;
+    } catch (error) {
+      console.error('[DataService] Erro ao iniciar sincronizacao filtrada:', error.message);
+      throw error;
+    }
+  }
+
   /**
    * Verifica status da sincronização
    */
@@ -378,6 +424,7 @@ class DataService {
    */
   async clearCache() {
     try {
+      this._clearDashboardCache();
       const response = await fetch(`${this._apiBase}/cache/clear`, {
         method: 'POST',
         headers: this._getHeaders()
@@ -417,6 +464,18 @@ class DataService {
    */
   async loadJiraData({ force = false } = {}) {
     try {
+      if (force) this._clearDashboardCache();
+      if (!force) {
+        const cached = this._readDashboardCache();
+        if (cached) {
+          await this.loadProjectMetadata().catch(error => {
+            console.warn('[DataService] Metadata de projetos indisponivel:', error.message);
+          });
+          this._applyJiraData(cached);
+          return cached;
+        }
+      }
+
       const response = await this._fetchWithTimeout(`${this._apiBase}/dashboard${force ? '?force=1' : ''}`, {
         headers: this._getHeaders()
       }, DASHBOARD_DATA_TIMEOUT_MS);
@@ -427,17 +486,11 @@ class DataService {
       }
       
       const data = await response.json();
+      this._writeDashboardCache(data);
       await this.loadProjectMetadata().catch(error => {
         console.warn('[DataService] Metadata de projetos indisponivel:', error.message);
       });
-      this._rawJiraData = data;
-      this.transformJiraData(data);
-      this._source = DataSourceType.API;
-      this._lastSync = data.lastSyncedAt;
-      this._apiStatus = 'connected';
-      this._loadError = null;
-      this._hasLoaded = true;
-      this._notify();
+      this._applyJiraData(data);
       
       return data;
     } catch (error) {
@@ -456,6 +509,49 @@ class DataService {
       throw error;
     } finally {
       this._loadPromise = null;
+    }
+  }
+
+  _applyJiraData(data) {
+    this._rawJiraData = data;
+    this.transformJiraData(data);
+    this._source = DataSourceType.API;
+    this._lastSync = data.lastSyncedAt;
+    this._apiStatus = 'connected';
+    this._loadError = null;
+    this._hasLoaded = true;
+    this._notify();
+  }
+
+  _readDashboardCache() {
+    try {
+      const raw = sessionStorage.getItem(DASHBOARD_CACHE_KEY);
+      if (!raw) return null;
+      const cached = JSON.parse(raw);
+      if (!cached?.savedAt || !cached?.data) return null;
+      if (Date.now() - cached.savedAt > DASHBOARD_CACHE_TTL_MS) return null;
+      return cached.data;
+    } catch {
+      return null;
+    }
+  }
+
+  _writeDashboardCache(data) {
+    try {
+      sessionStorage.setItem(DASHBOARD_CACHE_KEY, JSON.stringify({
+        savedAt: Date.now(),
+        data
+      }));
+    } catch {
+      // ignore cache quota/private mode
+    }
+  }
+
+  _clearDashboardCache() {
+    try {
+      sessionStorage.removeItem(DASHBOARD_CACHE_KEY);
+    } catch {
+      // ignore storage errors
     }
   }
 

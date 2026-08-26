@@ -60,6 +60,22 @@ function filteredCards(overrides = {}) {
   });
 }
 
+function currentSyncScope() {
+  return {
+    projectKeys: currentFilters.projectId ? [currentFilters.projectId] : [],
+    assigneeIds: currentFilters.analystId ? [currentFilters.analystId] : [],
+    statuses: currentFilters.status ? [currentFilters.status] : [],
+    priorities: currentFilters.priority ? [currentFilters.priority] : [],
+    types: currentFilters.type ? [currentFilters.type] : [],
+    dueDateTo: currentFilters.dueDate || '',
+    overdue: Boolean(currentFilters.showOverdue),
+    blocked: Boolean(currentFilters.showBlocked),
+    noDueDate: Boolean(currentFilters.showNoDate),
+    noAssignee: Boolean(currentFilters.showNoAnalyst),
+    search: currentFilters.search || ''
+  };
+}
+
 function safeJiraUrl(card) {
   const fallback = `https://antliaprojetos.atlassian.net/browse/${encodeURIComponent(card.key)}`;
   try {
@@ -110,7 +126,7 @@ async function refreshIssues() {
   button.disabled = true;
   button.textContent = 'Atualizando...';
   try {
-    const started = await dataService.startJiraSyncFromEnv();
+    const started = await dataService.startScopedJiraSync(currentSyncScope());
     const jobId = started.jobId || started.job?.id;
     if (jobId) {
       const deadline = Date.now() + 4 * 60 * 1000;

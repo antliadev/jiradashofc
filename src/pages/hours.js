@@ -40,8 +40,8 @@ function formatSeconds(totalSeconds) {
   const normalized = Math.max(0, Math.round(number(totalSeconds)));
   const hours = Math.floor(normalized / 3600);
   const minutes = Math.round((normalized % 3600) / 60);
-  if (minutes === 60) return `${hours + 1}h00`;
-  return `${hours}h${String(minutes).padStart(2, '0')}`;
+  if (minutes === 60) return `${hours + 1}:00hrs`;
+  return `${hours}:${String(minutes).padStart(2, '0')}hrs`;
 }
 
 function formatHours(value) {

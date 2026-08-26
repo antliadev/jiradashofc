@@ -79,6 +79,19 @@
 [data-theme="light"] .exec-deliverable-row em,
 [data-theme="light"] .exec-compact-list small,
 [data-theme="light"] .exec-risk-item span { color:var(--text-secondary); }
+[data-theme="light"] .exec-compact-list div,
+[data-theme="light"] .exec-deliverable-row { color:var(--text-primary); }
+[data-theme="light"] .exec-deliverable-row em { color:var(--text-secondary); }
+[data-theme="light"] .exec-risk-item {
+  background:#fff7ed;
+  border-color:#fed7aa;
+  border-left-color:#f59e0b;
+}
+[data-theme="light"] .exec-risk-item.high {
+  background:#fef2f2;
+  border-color:#fecaca;
+  border-left-color:#ef4444;
+}
 [data-theme="light"] .executive-v2 :is(h1,h2,h3,strong) { color:var(--text-primary); }
 [data-theme="light"] .exec-save-btn { color:#1d4ed8; background:#eff6ff; border-color:#93c5fd; }
 [data-theme="light"] .exec-timeline-empty { color:#92400e; }

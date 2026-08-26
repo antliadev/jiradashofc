@@ -100,6 +100,33 @@ function applyMonitoringMode(mode = '') {
   };
 }
 
+function projectKeysFromIds(projectIds = []) {
+  return [...new Set((projectIds || [])
+    .map(id => dataService.getProjectById(id)?.key || id)
+    .filter(Boolean))];
+}
+
+function generalSyncScope() {
+  return {
+    projectKeys: currentFilters.projectId ? projectKeysFromIds([currentFilters.projectId]) : [],
+    statuses: currentFilters.status ? [currentFilters.status] : [],
+    priorities: currentFilters.priority ? [currentFilters.priority] : [],
+    search: currentFilters.search || '',
+    overdue: Boolean(currentFilters.overdue)
+  };
+}
+
+function monitoringSyncScope() {
+  return {
+    projectKeys: projectKeysFromIds(monitoringFilters.projectIds),
+    assigneeIds: monitoringFilters.assigneeIds || [],
+    statuses: monitoringFilters.statuses || [],
+    search: monitoringFilters.search || '',
+    overdue: currentMonitoringMode === 'overdue',
+    blocked: currentMonitoringMode === 'blocked'
+  };
+}
+
 export function renderCards(params = {}) {
   applyMonitoringMode(params.monitoring || '');
 
@@ -620,7 +647,7 @@ async function refreshMonitoringFromJira() {
   if (status) status.textContent = 'Sincronizando dados recentes do Jira...';
 
   try {
-    const sync = await dataService.startJiraSyncFromEnv();
+    const sync = await dataService.startScopedJiraSync(currentMonitoringMode ? monitoringSyncScope() : generalSyncScope());
     const jobId = sync.jobId || sync.job?.id || sync.id;
     if (status) status.textContent = sync.alreadyRunning ? 'Sincronizacao em andamento. Aguardando conclusao...' : 'Sincronizacao iniciada. Aguardando conclusao...';
     await waitForSyncJob(jobId);

@@ -10,6 +10,7 @@ import { businessHelp } from '../utils/ui-feedback.js';
 const MIN_SAMPLE_KEY = 'rja.analysts.minimumSample';
 const SHARED_ANALYST_KEY = 'rja.analysts.sharedUserId';
 
+let comparisonProfessionalsOpen = false;
 
 function routeMode() {
   const path = (window.location.hash.replace(/^#\/?/, '/') || '/analysts').split('?')[0];
@@ -89,6 +90,44 @@ function analystOptions(users, selectedIds = [], { includeEmpty = true } = {}) {
   return `${includeEmpty ? '<option value="">Selecionar profissional</option>' : ''}${users.map(user => (
     `<option value="${sanitize(user.id)}" ${selectedIds.includes(user.id) ? 'selected' : ''}>${sanitize(user.displayName)}</option>`
   )).join('')}`;
+}
+
+function renderProfessionalsPicker(users, selectedIds = []) {
+  const selectedSet = new Set(selectedIds);
+  const selectedUsers = users.filter(user => selectedSet.has(user.id));
+  const allSelected = users.length > 0 && selectedUsers.length === users.length;
+  const summary = allSelected
+    ? 'Todos os profissionais'
+    : selectedUsers.length === 0
+      ? 'Nenhum selecionado'
+      : selectedUsers.length === 1
+        ? selectedUsers[0].displayName
+        : `${selectedUsers.length} profissionais`;
+
+  return `
+    <div class="compact-multi-filter analyst-professionals-filter">
+      <span class="filter-label">Profissionais</span>
+      <details id="cmp-users-picker" ${comparisonProfessionalsOpen ? 'open' : ''}>
+        <summary aria-label="Selecionar profissionais para comparativo">
+          <span>${sanitize(summary)}</span>
+          <small>${selectedUsers.length}</small>
+        </summary>
+        <div class="compact-multi-menu analyst-professionals-menu">
+          <button type="button" class="compact-multi-clear" id="cmp-users-clear">Limpar seleção</button>
+          <label class="compact-multi-all">
+            <input type="checkbox" id="cmp-users-all" ${allSelected ? 'checked' : ''}>
+            <span>Todos</span>
+          </label>
+          ${users.map(user => `
+            <label title="${sanitizeTitle(user.email || user.displayName)}">
+              <input type="checkbox" data-cmp-user value="${sanitize(user.id)}" ${selectedSet.has(user.id) ? 'checked' : ''}>
+              <span>${sanitize(user.displayName)}</span>
+            </label>
+          `).join('')}
+        </div>
+      </details>
+    </div>
+  `;
 }
 
 function getSharedAnalystId(users) {
@@ -359,7 +398,7 @@ function renderComparative() {
     <div class="report-page">
       ${renderModeTabs('comparative')}
       <div class="report-toolbar analyst-comparison-toolbar">
-        <label>Profissionais<select id="cmp-users" multiple>${analystOptions(users, selectedIds, { includeEmpty: false })}</select></label>
+        ${renderProfessionalsPicker(users, selectedIds)}
         <label>Projeto<select id="cmp-project">${projectOptions(filters.projectId)}</select></label>
         <label>Inicio<input id="cmp-start" type="date" value="${sanitize(filters.start)}"></label>
         <label>Fim<input id="cmp-end" type="date" value="${sanitize(filters.end)}"></label>
@@ -476,7 +515,7 @@ function colorForIndex(index) {
 
 function bindComparative(selectedIds, filters, view) {
   const apply = () => {
-    const users = [...document.getElementById('cmp-users')?.selectedOptions || []].map(option => option.value);
+    const users = [...document.querySelectorAll('[data-cmp-user]:checked')].map(option => option.value);
     localStorage.setItem(MIN_SAMPLE_KEY, document.getElementById('cmp-min')?.value || '5');
     updateHash('/analysts/comparative', {
       users: users.join(','),
@@ -487,8 +526,31 @@ function bindComparative(selectedIds, filters, view) {
       sort: params().get('sort') || '',
     });
   };
+  const users = dataService.getUsersRanked().filter(user => user.id !== 'unassigned');
+  document.getElementById('cmp-users-picker')?.addEventListener('toggle', event => {
+    comparisonProfessionalsOpen = event.target.open;
+  });
+  document.getElementById('cmp-users-all')?.addEventListener('change', event => {
+    document.querySelectorAll('[data-cmp-user]').forEach(input => {
+      input.checked = event.target.checked;
+    });
+    apply();
+  });
+  document.getElementById('cmp-users-clear')?.addEventListener('click', () => {
+    document.querySelectorAll('[data-cmp-user]').forEach(input => {
+      input.checked = false;
+    });
+    apply();
+  });
+  document.querySelectorAll('[data-cmp-user]').forEach(input => {
+    input.addEventListener('change', () => {
+      const selectedCount = document.querySelectorAll('[data-cmp-user]:checked').length;
+      const allInput = document.getElementById('cmp-users-all');
+      if (allInput) allInput.checked = users.length > 0 && selectedCount === users.length;
+      apply();
+    });
+  });
   ['cmp-project', 'cmp-start', 'cmp-end', 'cmp-view', 'cmp-min'].forEach(id => document.getElementById(id)?.addEventListener('change', apply));
-  document.getElementById('cmp-users')?.addEventListener('change', apply);
   document.querySelectorAll('[data-sort]').forEach(button => button.addEventListener('click', () => updateHash('/analysts/comparative', { ...filters, users: selectedIds.join(','), view, sort: button.dataset.sort })));
   document.getElementById('cmp-export')?.addEventListener('click', () => exportComparison(selectedIds, filters));
 }

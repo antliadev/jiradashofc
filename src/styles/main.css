@@ -879,6 +879,15 @@ input, select, textarea { font-family: inherit; }
   align-items: end;
 }
 
+.analyst-professionals-filter {
+  min-width: 0;
+}
+
+.analyst-professionals-menu {
+  width: min(360px, 82vw);
+  max-height: 300px;
+}
+
 .analyst-general-toolbar {
   display: grid;
   grid-template-columns: minmax(170px, 1.2fr) minmax(150px, 1fr) 112px 112px minmax(130px, 1fr) 110px auto auto;

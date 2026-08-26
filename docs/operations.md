@@ -1,5 +1,11 @@
 # Operação
 
+## Ambientes
+
+- Produção: `https://jiradashofc.vercel.app`
+- API: `https://jiradashofc.vercel.app/api/*`
+- Desenvolvimento local: `http://localhost:5173` e `http://localhost:3001`
+
 ## Desenvolvimento Local
 
 ```bash
@@ -8,15 +14,7 @@ cp .env.example .env
 npm run dev:all
 ```
 
-Preencha a `.env` local com chaves reais fora do Git. A `.env` criada neste workspace contém apenas a URL oficial e campos vazios para segredos.
-
-Frontend local:
-
-- `http://localhost:5173`
-
-Backend local:
-
-- `http://localhost:3001`
+Valores reais devem ficar somente em `.env` local ou em variáveis do ambiente de deploy.
 
 ## Validação Local
 
@@ -35,23 +33,27 @@ O sync deve:
 - validar conexão antes de sincronizar;
 - registrar job;
 - atualizar Supabase em lote;
-- remover dados obsoletos;
-- invalidar cache ao finalizar.
+- remover, substituir ou desativar dados obsoletos;
+- invalidar cache ao finalizar;
+- falhar com erro explícito quando a sincronização for incompleta.
 
-## Vercel
+## Monitoramento Operacional
 
-URLs de dev e produção ainda serão definidas. Antes de conectar ao Vercel:
+Validar periodicamente:
 
-- CI deve estar passando.
-- Variáveis devem estar separadas por ambiente.
-- `develop` deve publicar homologação/dev.
-- `main` deve publicar produção.
-- Produção só deve ser validada após aceite.
+- status do último job de sync;
+- erros de runtime na Vercel;
+- Supabase Advisors;
+- falhas de autenticação;
+- tentativas de acesso sem permissão;
+- crescimento das tabelas sincronizadas;
+- tempo de resposta das APIs pesadas.
 
 ## Troubleshooting
 
-- Supabase não configurado: revisar `SUPABASE_URL` e chave backend.
-- Login indisponível: revisar `SUPABASE_ANON_KEY`, confirmação de email e domínio permitido.
-- Sync sem credenciais: revisar variáveis Jira no ambiente do backend.
-- RLS bloqueando jobs: confirmar uso de service role/secret no backend antes de endurecer policies.
+- Login indisponível: revisar Supabase Auth, `SUPABASE_ANON_KEY`, confirmação de email e domínio permitido.
+- API retorna `401`: sessão ausente, expirada ou inválida.
+- API retorna `403`: usuário autenticado sem permissão suficiente.
+- Sync sem dados: revisar credenciais Jira, JQL, `CRON_SECRET` e último job.
 - Dashboard vazio: confirmar último job de sync e tabelas Jira.
+- Produção sem Supabase: revisar variáveis do projeto Vercel.

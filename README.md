@@ -1,35 +1,21 @@
-# JiraDash Oficial
+# JiraDash
 
-Base oficial limpa do JiraDash para dashboards executivos, Kanban, relatórios de horas e auditoria de dados Jira da Antlia.
+JiraDash é a plataforma interna da Antlia para acompanhamento executivo e operacional de dados do Jira. O sistema reúne dashboards, indicadores de projetos, relatórios de horas, visão de cards, análise por profissionais e gestão de acessos.
 
-Este repositório foi iniciado a partir de uma auditoria do projeto legado em `/Users/PedroOliveira/Documents/repos/Dashboard-jira`. O legado continua sendo referência operacional, mas este repositório deve evoluir com arquitetura, segurança, documentação e esteira de qualidade próprias.
+O Jira permanece como origem externa dos dados. O backend sincroniza e normaliza as informações necessárias, o Supabase mantém o estado operacional usado pelas telas, e a interface web consome somente APIs protegidas do próprio sistema.
 
-## Estado Atual
+## Ambientes
 
-Fase atual: base oficial inicial.
-
-Já preparado:
-
-- Repositório limpo clonado de `https://github.com/antliadev/jiradashofc.git`.
-- Código funcional do legado copiado sem artefatos gerados, cookies, `.env`, `.local-data` ou páginas temporárias.
-- `.gitignore` e `.env.example` oficiais.
-- Scripts de teste, build e lint.
-- CI inicial com lint, teste, build, auditoria de dependências e varredura de segredos.
-- Dependabot e configuração inicial de Sonar.
-
-Ainda não concluído:
-
-- Migração de autenticação para Supabase Auth.
-- RLS final por perfis/permissões.
-- Remoção completa do fallback legado de autenticação.
-- Validação com Supabase oficial e Jira real.
-- Deploy Vercel dev/prod.
+- Produção: `https://jiradashofc.vercel.app`
+- Aplicação web: SPA Vite publicada na Vercel.
+- API: endpoints `/api/*` publicados no mesmo projeto Vercel.
+- Banco/Auth: Supabase.
 
 ## Stack
 
 - Frontend: Vite + JavaScript.
 - Backend: Node.js, Express e Vercel Functions.
-- Banco/Auth alvo: Supabase.
+- Banco e autenticação: Supabase Auth, Postgres e RLS.
 - Integração: Jira REST API v3.
 - Qualidade: Node test runner, ESLint, npm audit, GitHub Actions, Gitleaks e Sonar.
 
@@ -61,16 +47,18 @@ Nunca versionar:
 ## Branches
 
 - `main`: produção.
-- `develop`: desenvolvimento/homologação.
+- `develop`: desenvolvimento e homologação.
 
-Alterações devem passar por CI antes de merge em `main`.
+Alterações devem passar por validação local e CI antes de merge para `main`.
 
 ## Documentação
 
+- [Produto](docs/product.md)
 - [Arquitetura](docs/architecture.md)
 - [Segurança](docs/security.md)
 - [Banco de Dados](docs/database.md)
 - [Regras de Negócio](docs/business-rules.md)
 - [Operação](docs/operations.md)
+- [Deploy](docs/deployment.md)
 - [Release](docs/release-process.md)
-- [Plano de Implementação](docs/implementation-plan.md)
+- [Validação](docs/validation.md)

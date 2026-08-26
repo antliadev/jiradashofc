@@ -15,39 +15,6 @@ export default async function handler(req, res) {
     // background tasks (e.g. sync jobs) after the HTTP response is sent.
     req.waitUntil = waitUntil;
 
-    // Debug: return body info for /api/debug
-    if (req.url === '/api/debug') {
-      // Access raw body directly from Vercel's internal storage
-      // without triggering the potentially-failing getter
-      let rawBody = null;
-      try {
-        // Vercel stores raw body in req.__vc_body or InternalBody
-        if (req.__vc_rawBody) rawBody = req.__vc_rawBody;
-        else if (req.__vc_body) rawBody = req.__vc_body;
-        else {
-          // Last resort: try to read from the stream
-          rawBody = await new Promise((resolve) => {
-            const chunks = [];
-            req.on('data', c => chunks.push(c));
-            req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-            req.on('error', () => resolve(null));
-            // Timeout if stream is already consumed
-            setTimeout(() => resolve(null), 100);
-          });
-        }
-      } catch {}
-      
-      res.statusCode = 200;
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({
-        method: req.method,
-        url: req.url,
-        ct: req.headers['content-type'],
-        rawBody: rawBody ? rawBody.slice(0, 200) : null,
-      }));
-      return;
-    }
-
     // Override Vercel's lazy body getter with a safe one
     const rawCt = req.headers['content-type'] || '';
     if (req.method !== 'GET' && req.method !== 'DELETE' && rawCt.startsWith('application/json')) {

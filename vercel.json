@@ -12,6 +12,12 @@
       "maxDuration": 300
     }
   },
+  "crons": [
+    {
+      "path": "/api/jira/sync/worker",
+      "schedule": "*/30 * * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",

@@ -87,7 +87,12 @@ app.delete('/api/access/users/:id', requireFullAccess, async (req, res) => {
 });
 
 function jiraApiAuth(req, res, next) {
-  if (authConfig.requireApiAuth) {
+  const forceProtectedApi = process.env.NODE_ENV === 'production'
+    || process.env.VERCEL === '1'
+    || process.env.VERCEL === 'true'
+    || authConfig.requireApiAuth;
+
+  if (forceProtectedApi) {
     return auth.requireAppAuth(req, res, () => {
       const permission = permissionForJiraRequest(req);
       if (!canAccessPermission(req.session?.user, permission)) {

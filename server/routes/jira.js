@@ -11,7 +11,7 @@
  */
 import express from 'express';
 import { configService } from '../../lib/configService.js';
-import { checkSupabaseConfig, supabase, supabaseKeyIsPrivileged, supabaseKeySource, supabaseKeyType } from '../../lib/supabaseServer.js';
+import { checkSupabaseConfig, supabase, supabaseKeyIsPrivileged } from '../../lib/supabaseServer.js';
 import {
   testJiraConnection,
   validateJiraPreflight,
@@ -36,12 +36,10 @@ router.get('/system/status', async (req, res) => {
   res.json({
     supabase: {
       configured: supabaseConfig.configured,
-      keySource: supabaseKeySource,
-      keyType: supabaseKeyType,
       privileged: supabaseKeyIsPrivileged,
       warning: supabaseKeyIsPrivileged
         ? null
-        : 'Backend nao esta usando service_role/secret. Nao aplicar hardening RLS ainda.'
+        : 'Backend sem chave privilegiada Supabase.'
     },
     sync: {
       latestJobId: latestJob?.id || null,

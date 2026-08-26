@@ -1,57 +1,69 @@
 # Segurança
 
-## Decisões Obrigatórias
+## Modelo De Identidade
 
-- Identidade oficial via Supabase Auth.
-- Email+senha com confirmação por email.
-- Domínio permitido: `@antlia.com.br`.
-- Exceção: conta administrativa geral existente, com auditoria e documentação.
-- SSO/Microsoft fora desta fase.
-- Perfis oficiais: `full`, `master`, `visualizacao`, `personalizado`.
+O JiraDash utiliza Supabase Auth como provedor de identidade. Sessões são mantidas por cookies `HttpOnly` emitidos pelo backend, e todas as rotas protegidas validam usuário, status do perfil e permissões antes de retornar dados.
 
-## Estado Atual
+Regras de acesso:
 
-O backend já foi preparado para usar Supabase Auth como provedor padrão (`AUTH_PROVIDER=supabase`) e emitir sessão em cookies `HttpOnly`. O fallback legado permanece apenas para transição controlada com `AUTH_PROVIDER=legacy`, sem credenciais padrão.
+- autenticação por email e senha;
+- confirmação por email obrigatória;
+- domínio permitido: `@antlia.com.br`;
+- exceções administrativas controladas por configuração;
+- SSO/Microsoft fora do escopo atual;
+- perfis oficiais: `full`, `master`, `visualizacao` e `personalizado`.
 
-Para funcionar em ambiente real, o projeto precisa de:
+## Autorização
 
-- `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY` ou `SUPABASE_SECRET_KEY` somente no backend
-- `AUTH_ALLOWED_DOMAIN=antlia.com.br`
-- `AUTH_ADMIN_EXCEPTION_EMAILS` com a conta administrativa geral, se ela não for `@antlia.com.br`
+Permissões são aplicadas em três camadas:
 
-## Controles Alvo
+- frontend: controla navegação e visibilidade de ações;
+- backend: bloqueia APIs por sessão, perfil e permissão;
+- banco: RLS protege tabelas expostas.
 
-- Middleware backend valida sessão Supabase em toda rota protegida.
-- Permissões são verificadas no frontend, backend e banco.
-- `localStorage` pode guardar preferências visuais, mas não é fonte de verdade de acesso.
-- Tabelas expostas usam RLS.
-- Ações administrativas geram auditoria.
-- Logs não podem expor tokens, cookies, senhas, JWTs, headers Authorization ou service-role keys.
+O frontend nunca é a única barreira de segurança.
 
 ## Dados Sensíveis
 
-Comentários, descrições e worklogs do Jira devem ser tratados como potencialmente sensíveis. O acesso deve ser protegido por RLS, permissão backend e payload minimizado.
+Comentários, descrições, worklogs, tokens, emails, logs e metadados do Jira devem ser tratados como dados sensíveis. APIs devem retornar apenas o necessário para cada tela.
+
+Logs não podem expor:
+
+- senhas;
+- cookies;
+- JWTs;
+- tokens Jira;
+- headers `Authorization`;
+- `SUPABASE_SERVICE_ROLE_KEY`;
+- `SUPABASE_SECRET_KEY`.
+
+## Variáveis Obrigatórias Em Produção
+
+- `AUTH_PROVIDER=supabase`
+- `AUTH_REQUIRE_API_AUTH=true`
+- `AUTH_REQUIRE_EMAIL_CONFIRMATION=true`
+- `AUTH_ALLOWED_DOMAIN=antlia.com.br`
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY` ou `SUPABASE_SECRET_KEY`
+- `AUTH_SESSION_SECRET`
+- `JIRA_BASE_URL`
+- `JIRA_EMAIL`
+- `JIRA_API_TOKEN`
+- `JIRA_JQL`
+- `JIRA_ENCRYPTION_KEY`
+- `CRON_SECRET`
 
 ## Checklist De Segurança
 
-- Nenhum segredo em diff.
-- `.env` ignorado.
+- `.env` ignorado pelo Git.
+- Nenhum segredo em diff, README, docs, logs ou commits.
 - Varredura de segredos antes de commit/push.
-- `SUPABASE_SERVICE_ROLE_KEY` somente no backend.
-- Security Advisor do Supabase sem alerta crítico de RLS.
-- Teste de domínio permitido e bloqueio de domínio externo.
-- Teste de API protegida sem permissão.
-- Teste de RLS com usuário comum e admin.
-
-## Migration Oficial
-
-A migration [migration-official-auth-rls.sql](../sql/migration-official-auth-rls.sql) define `profiles`, `roles`, `permissions`, `user_roles`, `role_permissions`, `user_permissions`, `audit_logs`, view de permissões efetivas e policies iniciais de RLS.
-
-Não aplicar em produção sem:
-
-- backup ou ambiente de homologação;
-- chave backend privilegiada configurada;
-- teste de usuário comum/admin;
-- revisão do Security Advisor do Supabase.
+- Security Advisor do Supabase sem lints acionáveis.
+- APIs Jira protegidas em produção mesmo se configuração de bypass existir por engano.
+- `GET /api/auth` sem sessão retorna `401`.
+- Rotas administrativas sem sessão retornam `401`.
+- Usuário sem permissão recebe `403`.
+- Domínio externo é bloqueado.
+- Email não confirmado não autentica.
+- RLS validado com usuário comum, admin e anon.

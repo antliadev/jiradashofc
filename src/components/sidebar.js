@@ -22,27 +22,28 @@ const ICONS = {
   access: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/></svg>',
 };
 
-const MENU_STORAGE_KEY = 'rja.sidebar.expanded';
 const SIDEBAR_COLLAPSED_KEY = 'rja.sidebar.collapsed';
 
 function getCurrentPath() {
   return (window.location.hash.replace(/^#\/?/, '/') || '/').split('?')[0];
 }
 
-function getExpandedMenus(currentPath) {
-  const saved = JSON.parse(localStorage.getItem(MENU_STORAGE_KEY) || '{}');
-  return {
-    contracts: currentPath.startsWith('/contracts') || Boolean(saved.contracts),
-    monitoring: currentPath.startsWith('/monitoring') || Boolean(saved.monitoring),
-    projects: currentPath.startsWith('/projects') || currentPath.startsWith('/executive') || Boolean(saved.projects),
-    analysts: currentPath.startsWith('/analysts') || Boolean(saved.analysts),
-  };
+function activeMenuForPath(currentPath) {
+  if (currentPath.startsWith('/contracts')) return 'contracts';
+  if (currentPath.startsWith('/monitoring')) return 'monitoring';
+  if (currentPath.startsWith('/projects') || currentPath.startsWith('/executive')) return 'projects';
+  if (currentPath.startsWith('/analysts')) return 'analysts';
+  return '';
 }
 
-function persistExpandedMenu(menu, expanded) {
-  const saved = JSON.parse(localStorage.getItem(MENU_STORAGE_KEY) || '{}');
-  saved[menu] = expanded;
-  localStorage.setItem(MENU_STORAGE_KEY, JSON.stringify(saved));
+function getExpandedMenus(currentPath) {
+  const activeMenu = activeMenuForPath(currentPath);
+  return {
+    contracts: activeMenu === 'contracts',
+    monitoring: activeMenu === 'monitoring',
+    projects: activeMenu === 'projects',
+    analysts: activeMenu === 'analysts',
+  };
 }
 
 function isSidebarCollapsed() {
@@ -75,12 +76,12 @@ function navLink({ route, label, icon = '', count = null, permission = null }) {
   `;
 }
 
-function navGroup({ id, label, icon, expanded, count = null, children }) {
+function navGroup({ id, label, icon, expanded, active, count = null, children }) {
   const visibleChildren = children.filter(Boolean);
   if (!visibleChildren.length) return '';
   const counter = Number.isFinite(count) ? counterBadge(count) : '';
   return `
-    <div class="nav-group ${expanded ? 'expanded' : ''}" data-menu="${id}">
+    <div class="nav-group ${expanded ? 'expanded' : ''} ${active ? 'active' : ''}" data-menu="${id}" data-active-menu="${active ? 'true' : 'false'}">
       <button class="nav-item nav-parent" data-nav-toggle="${id}" aria-expanded="${expanded ? 'true' : 'false'}" aria-controls="submenu-${id}">
         ${icon}
         <span>${label}</span>
@@ -103,6 +104,7 @@ export function renderSidebar() {
   const source = dataService?.source || 'empty';
   const sidebar = document.getElementById('sidebar');
   const currentPath = getCurrentPath();
+  const activeMenu = activeMenuForPath(currentPath);
   const expandedMenus = getExpandedMenus(currentPath);
   const attentionCounts = getAttentionCounts();
   const sourceLabel = source === 'empty' ? 'Sem dados' : 
@@ -135,6 +137,7 @@ export function renderSidebar() {
         label: 'Contratos Consumo Horas',
         icon: ICONS.clock,
         expanded: expandedMenus.contracts,
+        active: activeMenu === 'contracts',
         children: [
             navLink({ route: '/contracts/crawford', label: 'Crawford', icon: ICONS.clock, permission: 'contracts.crawford' }),
             navLink({ route: '/contracts/docwise', label: 'Docwise', icon: ICONS.clock, permission: 'contracts.docwise' }),
@@ -145,6 +148,7 @@ export function renderSidebar() {
         label: 'Monitoramento de Cards',
         icon: ICONS.cards,
         expanded: expandedMenus.monitoring,
+        active: activeMenu === 'monitoring',
         count: attentionCounts.total,
         children: [
           navLink({ route: '/monitoring/overdue', label: 'Cards com Data em Atraso', icon: ICONS.cards, count: attentionCounts.overdue, permission: 'monitoring.overdue' }),
@@ -157,6 +161,7 @@ export function renderSidebar() {
         label: 'Projetos',
         icon: ICONS.projects,
         expanded: expandedMenus.projects,
+        active: activeMenu === 'projects',
         children: [
           navLink({ route: '/projects', label: 'Issues - Kanban', icon: ICONS.board, permission: 'projects.kanban' }),
           navLink({ route: '/projects/health', label: 'Saude Detalhamento Cards Projetos', icon: ICONS.dashboard, permission: 'projects.health' }),
@@ -169,6 +174,7 @@ export function renderSidebar() {
         label: 'Analistas',
         icon: ICONS.analysts,
         expanded: expandedMenus.analysts,
+        active: activeMenu === 'analysts',
         children: [
           navLink({ route: '/analysts/general', label: 'Geral', icon: ICONS.analysts, permission: 'analysts.general' }),
           navLink({ route: '/analysts/evolution', label: 'Evolucao', icon: ICONS.gantt, permission: 'analysts.evolution' }),
@@ -225,17 +231,24 @@ export function renderSidebar() {
     showToast('Sessão encerrada.', 'success');
   });
 
-  sidebar.querySelectorAll('[data-nav-toggle]').forEach(button => {
-    button.addEventListener('click', () => {
-      const menu = button.dataset.navToggle;
-      const group = sidebar.querySelector(`[data-menu="${menu}"]`);
-      const submenu = sidebar.querySelector(`#submenu-${menu}`);
-      const expanded = button.getAttribute('aria-expanded') !== 'true';
+  const setGroupExpanded = (group, expanded) => {
+    const button = group.querySelector('[data-nav-toggle]');
+    const submenu = group.querySelector('.nav-submenu');
+    button?.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+    group.classList.toggle('expanded', expanded);
+    if (submenu) submenu.hidden = !expanded;
+  };
 
-      button.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-      group?.classList.toggle('expanded', expanded);
-      if (submenu) submenu.hidden = !expanded;
-      persistExpandedMenu(menu, expanded);
+  sidebar.querySelectorAll('.nav-group').forEach(group => {
+    group.addEventListener('mouseenter', () => setGroupExpanded(group, true));
+    group.addEventListener('focusin', () => setGroupExpanded(group, true));
+    group.addEventListener('mouseleave', () => {
+      if (group.dataset.activeMenu !== 'true') setGroupExpanded(group, false);
+    });
+    group.addEventListener('focusout', event => {
+      if (group.dataset.activeMenu !== 'true' && !group.contains(event.relatedTarget)) {
+        setGroupExpanded(group, false);
+      }
     });
   });
 }

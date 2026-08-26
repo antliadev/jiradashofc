@@ -36,11 +36,32 @@ function number(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function formatSeconds(totalSeconds) {
+  const normalized = Math.max(0, Math.round(number(totalSeconds)));
+  const hours = Math.floor(normalized / 3600);
+  const minutes = Math.round((normalized % 3600) / 60);
+  if (minutes === 60) return `${hours + 1}h00`;
+  return `${hours}h${String(minutes).padStart(2, '0')}`;
+}
+
 function formatHours(value) {
-  return `${number(value).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} h`;
+  return formatSeconds(number(value) * 3600);
 }
 
 function formatDuration(entry) {
+  const totalSeconds = number(entry.timeSeconds ?? number(entry.timeHours) * 3600);
+  return formatSeconds(totalSeconds);
+}
+
+function excelDuration(value) {
+  return formatHours(value);
+}
+
+function excelEntryDuration(entry) {
+  return formatDuration(entry);
+}
+
+function durationTitleFromEntry(entry) {
   const totalSeconds = Math.max(0, Math.round(number(entry.timeSeconds ?? number(entry.timeHours) * 3600)));
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
@@ -151,7 +172,7 @@ function monthlyBars(items) {
     const height = Math.max(3, number(item.usedHours) / max * 100);
     const label = competenceLabel(item.competence).replace('/', ' ');
     return `<div class="hours-month-column" title="${sanitize(`${label}: ${formatHours(item.usedHours)}`)}">
-      <strong>${sanitize(number(item.usedHours).toLocaleString('pt-BR', { maximumFractionDigits: 1 }))}</strong>
+      <strong>${sanitize(formatHours(item.usedHours))}</strong>
       <div><i style="height:${height}%"></i></div>
       <span>${sanitize(label)}</span>
     </div>`;
@@ -166,14 +187,13 @@ function entriesTable(entries) {
     </div>`;
   }
   return `<div class="hours-table-wrap"><table class="hours-table">
-    <thead><tr><th>Data</th><th>Ticket</th><th>Aplicativo / Épico</th><th>Descrição</th><th>Responsável</th><th>Tempo</th><th>Mês/Ano</th></tr></thead>
+    <thead><tr><th>Data</th><th>Ticket</th><th>Aplicativo / Épico</th><th>Descrição</th><th>Tempo</th><th>Mês/Ano</th></tr></thead>
     <tbody>${entries.map(entry => `<tr>
       <td>${sanitize(formatDate(entry.date))}</td>
       <td><strong>${sanitize(entry.ticket || '—')}</strong></td>
       <td>${sanitize(entry.application || 'Sem aplicação')}</td>
       <td class="hours-description" title="${sanitize(entry.description || '')}">${sanitize(entry.description || '—')}</td>
-      <td>${sanitize(entry.author || 'Não informado')}</td>
-      <td>${sanitize(formatDuration(entry))}</td>
+      <td title="${sanitize(durationTitleFromEntry(entry))}">${sanitize(formatDuration(entry))}</td>
       <td>${sanitize(entry.monthYear || currentReport.competence)}</td>
     </tr>`).join('')}</tbody>
   </table></div>`;
@@ -184,7 +204,7 @@ function cardsWithoutWorklogTable(cards) {
     return '<div class="hours-inline-empty">Todos os cards do projeto possuem apontamento nesta competência.</div>';
   }
   return `<div class="hours-table-wrap"><table class="hours-table">
-    <thead><tr><th>Ticket</th><th>Descrição</th><th>Status</th><th>Responsável</th><th>Última atualização</th></tr></thead>
+    <thead><tr><th>Ticket</th><th>Descrição</th><th>Status</th><th>Última atualização</th></tr></thead>
     <tbody>${cards.map(card => {
       const ticket = sanitize(card.ticket || '—');
       const ticketCell = card.jiraUrl
@@ -194,7 +214,6 @@ function cardsWithoutWorklogTable(cards) {
       <td><strong>${ticketCell}</strong></td>
       <td class="hours-description" title="${sanitize(card.title || '')}">${sanitize(card.title || '—')}</td>
       <td>${sanitize(card.status || '—')}</td>
-      <td>${sanitize(card.assignee || 'Não informado')}</td>
       <td>${sanitize(formatDate(card.updatedAt))}</td>
     </tr>`;
     }).join('')}</tbody>
@@ -302,28 +321,25 @@ async function exportWorkbook() {
     workbook.created = new Date();
 
     const description = workbook.addWorksheet('Descricao');
-    description.addRow(['DATA', 'TICKET', 'APLICATIVO', 'DESCRIÇÃO DA ATUAÇÃO', 'RESPONSÁVEL', 'TEMPO', 'MES/ANO']);
+    description.addRow(['DATA', 'TICKET', 'APLICATIVO', 'DESCRIÇÃO DA ATUAÇÃO', 'TEMPO', 'MES/ANO']);
     currentReport.entries.forEach(entry => description.addRow([
       formatDate(entry.date), excelSafe(entry.ticket), excelSafe(entry.application || 'Sem aplicação'),
-      excelSafe(entry.description), excelSafe(entry.author || 'Não informado'), formatDuration(entry),
+      excelSafe(entry.description), excelEntryDuration(entry),
       excelSafe(entry.monthYear || currentReport.competence)
     ]));
-    styleWorksheet(description, [14, 16, 28, 58, 24, 12, 14]);
+    styleWorksheet(description, [14, 16, 28, 64, 12, 14]);
 
     const consumption = workbook.addWorksheet('Consumo');
     consumption.addRow(['MES/ANO', 'HORAS DA COMPETÊNCIA', 'HORAS CONTABILIZADAS', 'CONSUMO (%)']);
     currentReport.monthlyHistory.forEach(item => consumption.addRow([
-      excelSafe(item.competence), number(item.usedHours), number(item.accountableUsedHours ?? item.usedHours), number(item.consumptionPercentage) / 100
+      excelSafe(item.competence), excelDuration(item.usedHours), excelDuration(item.accountableUsedHours ?? item.usedHours), number(item.consumptionPercentage) / 100
     ]));
-    consumption.getColumn(2).numFmt = '0.00';
-    consumption.getColumn(3).numFmt = '0.00';
     consumption.getColumn(4).numFmt = '0.00%';
     styleWorksheet(consumption, [16, 24, 24, 18]);
 
     const hours = workbook.addWorksheet('Horas');
     hours.addRow(['PROJETO', 'MES/ANO', 'MODELO', 'HORAS CONTRATADAS', 'HORAS UTILIZADAS', 'HORAS DA COMPETÊNCIA', 'HORAS DISPONÍVEIS', 'HORAS EXCEDENTES']);
-    hours.addRow([excelSafe(currentReport.projectKey), excelSafe(currentReport.competence), currentReport.billingMode === 'cumulative' ? 'ACUMULADO' : 'MENSAL', currentReport.allowanceHours, currentReport.usedHours, currentReport.periodUsedHours, currentReport.availableHours, currentReport.overageHours]);
-    [4, 5, 6, 7, 8].forEach(index => { hours.getColumn(index).numFmt = '0.00'; });
+    hours.addRow([excelSafe(currentReport.projectKey), excelSafe(currentReport.competence), currentReport.billingMode === 'cumulative' ? 'ACUMULADO' : 'MENSAL', excelDuration(currentReport.allowanceHours), excelDuration(currentReport.usedHours), excelDuration(currentReport.periodUsedHours), excelDuration(currentReport.availableHours), excelDuration(currentReport.overageHours)]);
     styleWorksheet(hours, [18, 16, 16, 22, 20, 22, 22, 20]);
 
     const buffer = await workbook.xlsx.writeBuffer();

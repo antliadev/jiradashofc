@@ -47,6 +47,8 @@ let monitoringFilters = {
   sortDir: 'desc',
   showChart: true,
 };
+let openMonitoringFilter = '';
+let monitoringOutsideCloseBound = false;
 
 const MONITORING_MODES = {
   overdue: {
@@ -127,6 +129,8 @@ export function renderCards(params = {}) {
 function renderCardsContent() {
   const content = document.getElementById('page-content');
   const projects = dataService.getProjects();
+  const statusOptions = dataService.getStatusOptions(currentFilters.projectId);
+  if (currentFilters.status && !statusOptions.includes(currentFilters.status)) currentFilters.status = '';
   const cards = dataService.getCards(currentFilters);
   const visibleCards = cards.slice(0, visibleCount);
 
@@ -143,7 +147,7 @@ function renderCardsContent() {
         <span class="filter-label">Status</span>
         <select id="filter-status">
           <option value="">Todos os Status</option>
-          ${dataService.getStatusOptions().map(s => `<option value="${sanitize(s)}" ${currentFilters.status === s ? 'selected' : ''}>${sanitize(s)}</option>`).join('')}
+          ${statusOptions.map(s => `<option value="${sanitize(s)}" ${currentFilters.status === s ? 'selected' : ''}>${sanitize(s)}</option>`).join('')}
         </select>
       </label>
       <label>
@@ -222,14 +226,13 @@ function renderCardsContent() {
 function renderMonitoringContent() {
   const content = document.getElementById('page-content');
   const mode = currentMonitoringMode;
+  const statuses = getMonitoringStatusOptions(mode);
+  monitoringFilters.statuses = monitoringFilters.statuses.filter(status => statuses.includes(status));
   const rows = getMonitoringRows(mode);
   const visibleRows = rows.slice(0, visibleCount);
   const metrics = getMonitoringMetrics(rows, mode);
   const projects = dataService.getProjects();
   const users = dataService.getUsers();
-  const statuses = dataService.getStatusOptions().filter(status => (
-    mode !== 'overdue' || resolveStatusCategory(status) !== StatusCategory.DONE
-  ));
   const pendingOptions = uniqueSorted(
     getBaseMonitoringRows('blocked').map(row => row.pendingWith).filter(Boolean)
   );
@@ -344,6 +347,7 @@ function renderMonitoringFilters({ projects, users, statuses, pendingOptions, ro
 
 function renderCompactMultiFilter(label, filterKey, options) {
   const selected = monitoringFilters[filterKey] || [];
+  const allSelected = options.length > 0 && selected.length === options.length;
   const summary = selected.length === 0
     ? 'Todos'
     : selected.length === 1
@@ -352,13 +356,16 @@ function renderCompactMultiFilter(label, filterKey, options) {
   return `
     <div class="compact-multi-filter">
       <span class="filter-label">${sanitize(label)}</span>
-      <details>
+      <details data-filter-key="${sanitize(filterKey)}" ${openMonitoringFilter === filterKey ? 'open' : ''}>
         <summary>
           <span>${sanitize(summary)}</span>
           <small>${selected.length || 'Todos'}</small>
         </summary>
         <div class="compact-multi-menu">
-          <button type="button" class="compact-multi-clear" data-clear-filter="${sanitize(filterKey)}">Limpar selecao</button>
+          <label class="compact-multi-all">
+            <input type="checkbox" data-monitoring-filter-all="${sanitize(filterKey)}" ${allSelected ? 'checked' : ''} ${options.length ? '' : 'disabled'}>
+            <span>Todos</span>
+          </label>
           ${options.map(option => `
             <label>
               <input type="checkbox" data-monitoring-filter="${sanitize(filterKey)}" value="${sanitize(option.value)}" ${selected.includes(option.value) ? 'checked' : ''}>
@@ -378,7 +385,7 @@ function renderMonitoringToolbar(rows) {
         <button class="tab-btn ${monitoringFilters.view === 'list' ? 'active' : ''}" data-view="list">Lista</button>
         <button class="tab-btn ${monitoringFilters.view === 'cards' ? 'active' : ''}" data-view="cards">Cards</button>
       </div>
-      <div class="monitoring-toolbar-meta">${rows.length ? 'Dados recalculados conforme filtros aplicados' : 'Sem resultados para os filtros atuais'}</div>
+      <div class="monitoring-toolbar-meta" id="monitoring-refresh-status">${rows.length ? 'Dados recalculados conforme filtros aplicados' : 'Sem resultados para os filtros atuais'}</div>
     </div>
   `;
 }
@@ -514,10 +521,7 @@ function renderBlockedChart(rows) {
 }
 
 function bindMonitoringEvents(rows) {
-  document.getElementById('monitoring-refresh')?.addEventListener('click', async () => {
-    await dataService.ensureLoaded({ force: true }).catch(() => null);
-    renderMonitoringContent();
-  });
+  document.getElementById('monitoring-refresh')?.addEventListener('click', refreshMonitoringFromJira);
   document.getElementById('monitoring-export')?.addEventListener('click', () => exportMonitoringRows(rows));
   document.getElementById('monitoring-clear')?.addEventListener('click', () => {
     resetMonitoringFilters();
@@ -535,19 +539,37 @@ function bindMonitoringEvents(rows) {
   document.querySelectorAll('[data-monitoring-filter]').forEach(input => {
     input.addEventListener('change', () => {
       const key = input.dataset.monitoringFilter;
+      openMonitoringFilter = key;
       monitoringFilters[key] = [...document.querySelectorAll(`[data-monitoring-filter="${key}"]:checked`)]
         .map(item => item.value);
       visibleCount = PAGE_SIZE;
       renderMonitoringContent();
     });
   });
-  document.querySelectorAll('[data-clear-filter]').forEach(button => {
-    button.addEventListener('click', () => {
-      monitoringFilters[button.dataset.clearFilter] = [];
+  document.querySelectorAll('[data-monitoring-filter-all]').forEach(input => {
+    input.addEventListener('change', () => {
+      const key = input.dataset.monitoringFilterAll;
+      openMonitoringFilter = key;
+      monitoringFilters[key] = input.checked
+        ? [...document.querySelectorAll(`[data-monitoring-filter="${key}"]`)].map(item => item.value)
+        : [];
       visibleCount = PAGE_SIZE;
       renderMonitoringContent();
     });
   });
+  document.querySelectorAll('.compact-multi-filter details').forEach(details => {
+    details.addEventListener('toggle', () => {
+      if (details.open) {
+        openMonitoringFilter = details.dataset.filterKey || '';
+        document.querySelectorAll('.compact-multi-filter details').forEach(other => {
+          if (other !== details) other.open = false;
+        });
+      } else if (openMonitoringFilter === details.dataset.filterKey) {
+        openMonitoringFilter = '';
+      }
+    });
+  });
+  bindMonitoringOutsideClose();
   document.getElementById('monitoring-sort')?.addEventListener('change', (e) => {
     monitoringFilters.sortBy = e.target.value;
     renderMonitoringContent();
@@ -569,8 +591,74 @@ function bindMonitoringEvents(rows) {
   });
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function waitForSyncJob(jobId) {
+  if (!jobId) return null;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const status = await dataService.getSyncStatus(jobId);
+    const current = status?.status || status?.lastSyncStatus;
+    if (['success', 'completed'].includes(current)) return status;
+    if (['error', 'failed'].includes(current)) {
+      throw new Error(status.error || status.lastSyncError || 'Sincronizacao do Jira falhou.');
+    }
+    await sleep(4000);
+  }
+  throw new Error('Sincronizacao iniciada, mas nao terminou dentro da janela de acompanhamento.');
+}
+
+async function refreshMonitoringFromJira() {
+  const button = document.getElementById('monitoring-refresh');
+  const status = document.getElementById('monitoring-refresh-status');
+  if (!button) return;
+
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Atualizando...';
+  if (status) status.textContent = 'Sincronizando dados recentes do Jira...';
+
+  try {
+    const sync = await dataService.startJiraSyncFromEnv();
+    const jobId = sync.jobId || sync.job?.id || sync.id;
+    if (status) status.textContent = sync.alreadyRunning ? 'Sincronizacao em andamento. Aguardando conclusao...' : 'Sincronizacao iniciada. Aguardando conclusao...';
+    await waitForSyncJob(jobId);
+    await dataService.ensureLoaded({ force: true });
+    renderMonitoringContent();
+  } catch (error) {
+    console.error('[Monitoring] Falha ao atualizar dados do Jira:', error);
+    if (status) status.textContent = error.message || 'Nao foi possivel atualizar os dados do Jira.';
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
+  }
+}
+
+function bindMonitoringOutsideClose() {
+  if (monitoringOutsideCloseBound) return;
+  monitoringOutsideCloseBound = true;
+  document.addEventListener('click', event => {
+    if (event.target.closest('.compact-multi-filter')) return;
+    openMonitoringFilter = '';
+    document.querySelectorAll('.compact-multi-filter details[open]').forEach(details => {
+      details.open = false;
+    });
+  });
+}
+
 function getMonitoringRows(mode) {
   return applyMonitoringFilters(getBaseMonitoringRows(mode), mode);
+}
+
+function getMonitoringStatusOptions(mode) {
+  let rows = getBaseMonitoringRows(mode);
+  if (monitoringFilters.projectIds.length) {
+    rows = rows.filter(row => monitoringFilters.projectIds.includes(row.projectId));
+  }
+  return uniqueSorted(rows
+    .map(row => row.status)
+    .filter(status => status && (mode !== 'overdue' || resolveStatusCategory(status) !== StatusCategory.DONE)));
 }
 
 function getBaseMonitoringRows(mode) {

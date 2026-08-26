@@ -114,9 +114,8 @@ export function initRouter() {
     });
 
     document.querySelectorAll('.nav-group').forEach(group => {
-      const savedExpanded = JSON.parse(localStorage.getItem('rja.sidebar.expanded') || '{}');
-      const menu = group.getAttribute('data-menu');
       const hasActiveChild = Boolean(group.querySelector('.nav-subitem.active'));
+      group.dataset.activeMenu = hasActiveChild ? 'true' : 'false';
       group.classList.toggle('active', hasActiveChild);
       if (hasActiveChild) {
         group.classList.add('expanded');
@@ -124,7 +123,7 @@ export function initRouter() {
         const submenu = group.querySelector('.nav-submenu');
         toggle?.setAttribute('aria-expanded', 'true');
         if (submenu) submenu.hidden = false;
-      } else if (!savedExpanded[menu]) {
+      } else {
         group.classList.remove('expanded');
         const toggle = group.querySelector('.nav-parent');
         const submenu = group.querySelector('.nav-submenu');

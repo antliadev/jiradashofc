@@ -830,7 +830,10 @@ class DataService {
 
   getUsers() { return [...this._users]; }
   getUserById(id) { return this._ensureDerived().userById.get(id) || null; }
-  getStatusOptions() { return [...this._ensureDerived().statusOptions]; }
+  getStatusOptions(projectId = null) {
+    if (!projectId) return [...this._ensureDerived().statusOptions];
+    return [...new Set(this.getCardsByProject(projectId).map(card => card.status).filter(Boolean))].sort();
+  }
 
   getUserStats(userId) {
     const derived = this._ensureDerived();

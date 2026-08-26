@@ -788,6 +788,14 @@ input, select, textarea { font-family: inherit; }
   color: var(--text-primary);
 }
 
+.compact-multi-menu .compact-multi-all {
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-weight: 800;
+}
+
 .compact-multi-menu label span {
   min-width: 0;
   overflow: hidden;

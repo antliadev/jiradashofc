@@ -10,8 +10,9 @@ import { canAccessRoute, firstAllowedRoute, getCurrentUser, HOME_ROUTE, setCurre
 import { sanitize } from './utils/helpers.js';
 import { getTheme, toggleTheme } from './utils/theme.js';
 import { renderPageLoading } from './utils/ui-feedback.js';
+import { initSelectLists } from './utils/select-list.js';
 
-
+initSelectLists();
 
 // Rotas públicas (não requerem autenticação)
 const publicRoutes = ['/login'];

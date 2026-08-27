@@ -4,7 +4,9 @@
 
 export function formatDate(iso) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const date = parseJiraDate(iso);
+  if (!date) return '—';
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 export function formatDateTime(iso) {
@@ -25,7 +27,21 @@ export function timeAgo(iso) {
 
 export function daysUntil(iso) {
   if (!iso) return null;
-  return Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000);
+  const date = parseJiraDate(iso);
+  if (!date) return null;
+  return Math.ceil((date.getTime() - Date.now()) / 86400000);
+}
+
+export function parseJiraDate(value) {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const dateOnly = typeof value === 'string' ? value.match(/^(\d{4})-(\d{2})-(\d{2})$/) : null;
+  if (dateOnly) {
+    const [, year, month, day] = dateOnly;
+    return new Date(Number(year), Number(month) - 1, Number(day));
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 export function priorityLabel(p) {

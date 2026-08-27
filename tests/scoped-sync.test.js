@@ -36,3 +36,22 @@ test('buildScopedJql escapa valores livres', () => {
   assert.match(jql, /project in \("ABC\\"DEF"\)/);
   assert.match(jql, /summary ~ "x y z"/);
 });
+
+test('buildScopedJql inclui cards ja exibidos ao atualizar monitoramento de atrasados', () => {
+  const jql = buildScopedJql({
+    overdue: true,
+    issueKeys: ['P1-1826', 'P1-100']
+  }, 'project is not EMPTY');
+
+  assert.match(jql, /\(\(duedate < now\(\) AND statusCategory != "Done"\) OR issuekey in \("P1-1826","P1-100"\)\)/);
+  assert.doesNotMatch(jql, /AND \(issuekey in/);
+});
+
+test('buildScopedJql inclui cards ja exibidos ao atualizar monitoramento de bloqueados', () => {
+  const jql = buildScopedJql({
+    blocked: true,
+    issueKeys: ['P1-200']
+  }, 'project is not EMPTY');
+
+  assert.match(jql, /\(\(statusCategory = "In Progress" AND status in \("Bloqueado","Blocked"\)\) OR issuekey in \("P1-200"\)\)/);
+});

@@ -117,13 +117,18 @@ function generalSyncScope() {
 }
 
 function monitoringSyncScope() {
+  const issueKeys = uniqueSorted(getMonitoringRows(currentMonitoringMode)
+    .map(row => row.key)
+    .filter(Boolean));
+
   return {
     projectKeys: projectKeysFromIds(monitoringFilters.projectIds),
     assigneeIds: monitoringFilters.assigneeIds || [],
     statuses: monitoringFilters.statuses || [],
     search: monitoringFilters.search || '',
     overdue: currentMonitoringMode === 'overdue',
-    blocked: currentMonitoringMode === 'blocked'
+    blocked: currentMonitoringMode === 'blocked',
+    issueKeys
   };
 }
 

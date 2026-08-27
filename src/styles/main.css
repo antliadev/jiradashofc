@@ -755,48 +755,76 @@ input, select, textarea { font-family: inherit; }
 
 .compact-multi-menu {
   position: absolute;
-  top: calc(100% + 6px);
+  top: calc(100% + 2px);
   left: 0;
   z-index: 60;
-  width: min(320px, 80vw);
-  max-height: 280px;
+  width: min(360px, 82vw);
+  max-height: 360px;
   overflow: auto;
-  padding: 8px;
+  padding: 8px 0;
   background: var(--bg-card);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow);
 }
 
-.compact-multi-menu label {
+.compact-multi-menu label,
+.report-toolbar .compact-multi-menu label {
   min-width: 0;
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
+  flex-direction: initial;
+  grid-template-columns: 22px minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
-  padding: 7px 8px;
-  border-radius: 6px;
-  color: var(--text-secondary);
+  gap: 4px;
+  min-height: 36px;
+  padding: 7px 14px;
+  border-radius: 0;
+  color: var(--text-primary);
   font-size: 12px;
+  font-weight: 650;
   text-transform: none;
   letter-spacing: 0;
   cursor: pointer;
 }
 
-.compact-multi-menu label:hover {
+.compact-multi-menu label input,
+.report-toolbar .compact-multi-menu label input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.compact-multi-menu label::before,
+.report-toolbar .compact-multi-menu label::before {
+  content: '';
+  width: 18px;
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.compact-multi-menu label:has(input:checked)::before,
+.report-toolbar .compact-multi-menu label:has(input:checked)::before {
+  content: '✓';
+}
+
+.compact-multi-menu label:hover,
+.report-toolbar .compact-multi-menu label:hover {
   background: var(--bg-card-hover);
   color: var(--text-primary);
 }
 
-.compact-multi-menu .compact-multi-all {
-  margin-bottom: 6px;
-  border: 1px solid var(--border);
-  background: var(--bg-secondary);
+.compact-multi-menu .compact-multi-all,
+.report-toolbar .compact-multi-menu .compact-multi-all {
+  margin-bottom: 2px;
+  border: 0;
+  background: transparent;
   color: var(--text-primary);
-  font-weight: 800;
 }
 
-.compact-multi-menu label span {
+.compact-multi-menu label span,
+.report-toolbar .compact-multi-menu label span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

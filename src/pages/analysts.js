@@ -113,7 +113,6 @@ function renderProfessionalsPicker(users, selectedIds = []) {
           <small>${selectedUsers.length}</small>
         </summary>
         <div class="compact-multi-menu analyst-professionals-menu">
-          <button type="button" class="compact-multi-clear" id="cmp-users-clear">Limpar seleção</button>
           <label class="compact-multi-all">
             <input type="checkbox" id="cmp-users-all" ${allSelected ? 'checked' : ''}>
             <span>Todos</span>
@@ -533,12 +532,6 @@ function bindComparative(selectedIds, filters, view) {
   document.getElementById('cmp-users-all')?.addEventListener('change', event => {
     document.querySelectorAll('[data-cmp-user]').forEach(input => {
       input.checked = event.target.checked;
-    });
-    apply();
-  });
-  document.getElementById('cmp-users-clear')?.addEventListener('click', () => {
-    document.querySelectorAll('[data-cmp-user]').forEach(input => {
-      input.checked = false;
     });
     apply();
   });

@@ -64,7 +64,7 @@ function renderUserList() {
               <strong>${sanitize(user.name)}</strong>
               <small>${sanitize(user.login)}</small>
             </span>
-            <em class="${user.status === 'inactive' ? 'inactive' : ''}">${sanitize(roleLabel(user.role))} · ${sanitize(statusLabel(user.status))}</em>
+            <em class="${user.status === 'inactive' ? 'inactive' : ''}">${sanitize(roleLabel(user.role))} · ${sanitize(statusLabel(user.status))}${user.pendingFirstLogin ? ' · Aguardando login Google' : ''}</em>
           </button>
         `).join('') || '<p class="muted">Nenhum usuario cadastrado.</p>'}
       </div>
@@ -84,9 +84,8 @@ function renderForm(user) {
       </div>
       <form id="access-form" class="access-form">
         <input type="hidden" id="access-id" value="${sanitize(user?.id || '')}">
-        <label>Nome completo<input id="access-name" required value="${sanitize(user?.name || '')}"></label>
-        <label>Login<input id="access-login" required value="${sanitize(user?.login || '')}"></label>
-        <label>Senha provisoria<input id="access-password" type="password" ${isNew ? 'required' : ''} autocomplete="new-password" placeholder="${isNew ? 'Defina a senha inicial' : 'Preencher apenas para alterar'}"></label>
+        <label>Nome completo<input id="access-name" value="${sanitize(user?.name || '')}" placeholder="Preenchido pelo Google se ficar em branco"></label>
+        <label>E-mail Google autorizado<input id="access-login" type="email" required value="${sanitize(user?.login || '')}" placeholder="nome@antlia.com.br" autocomplete="email"></label>
         <label>Perfil
           <select id="access-role">
             <option value="full" ${role === 'full' ? 'selected' : ''}>Acesso Full</option>
@@ -118,12 +117,12 @@ function renderForm(user) {
         </div>
 
         <div class="access-actions">
-          <button class="btn btn-primary" type="submit">Salvar usuario</button>
+          <button class="btn btn-primary" type="submit">Salvar acesso</button>
           <button class="btn btn-secondary" type="button" id="cancel-access-edit">Cancelar</button>
         </div>
       </form>
       <div class="report-alert info">
-        A senha provisoria definida pelo administrador permite o primeiro acesso imediato. Full acessa tudo e administra usuarios. Master acessa menus funcionais, sem Gestao de Acessos. Visualizacao tem acesso de leitura aos modulos liberados. Personalizado recebe apenas os menus marcados.
+        Libere o e-mail Google da pessoa, escolha o perfil e mantenha o status Ativo. O acesso so sera permitido para e-mails autorizados e dentro do dominio Antlia. Full acessa tudo e administra usuarios. Master acessa menus funcionais, sem Gestao de Acessos. Visualizacao tem acesso de leitura aos modulos liberados. Personalizado recebe apenas os menus marcados.
       </div>
     </section>
   `;
@@ -164,7 +163,6 @@ function formPayload() {
   return {
     name: document.getElementById('access-name')?.value || '',
     login: document.getElementById('access-login')?.value || '',
-    password: document.getElementById('access-password')?.value || '',
     role,
     status: document.getElementById('access-status')?.value || 'active',
     permissions: [...document.querySelectorAll('#access-permissions input:checked')].map(input => input.value),
@@ -176,7 +174,7 @@ async function saveUser(event) {
   const id = document.getElementById('access-id')?.value || '';
   const confirmed = await confirmAction({
     title: id ? 'Salvar alterações?' : 'Criar usuário?',
-    message: id ? 'As permissões e o status deste usuário serão atualizados.' : 'O usuário poderá acessar o sistema conforme o perfil escolhido.',
+    message: id ? 'As permissões e o status deste acesso serão atualizados.' : 'Este e-mail poderá acessar o sistema com Google conforme o perfil escolhido.',
     confirmLabel: 'Salvar'
   });
   if (!confirmed) return;

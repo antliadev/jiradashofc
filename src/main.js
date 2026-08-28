@@ -89,6 +89,42 @@ function captureSupabaseRecoveryState() {
   window.location.hash = '#/login?recovery=1';
 }
 
+async function captureSupabaseOAuthSession() {
+  const hash = window.location.hash || '';
+  if (!hash.startsWith('#access_token=')) return false;
+
+  const authParams = new URLSearchParams(hash.slice(1));
+  if (authParams.get('type') === 'recovery') return false;
+
+  const accessToken = authParams.get('access_token') || '';
+  const refreshToken = authParams.get('refresh_token') || '';
+  if (!accessToken) return false;
+
+  updateLayout(false);
+  const content = document.getElementById('page-content');
+  if (content) content.innerHTML = renderPageLoading('Validando acesso Google');
+
+  try {
+    const response = await fetch('/api/auth/oauth', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accessToken, refreshToken }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Acesso Google nao autorizado.');
+    markAuthenticated(data.user || null);
+    window.history.replaceState({}, '', window.location.pathname);
+    window.location.hash = `#${firstAllowedRoute(data.user || null)}`;
+  } catch (error) {
+    clearSession();
+    sessionStorage.setItem('rja.auth.error', error.message || 'Acesso Google nao autorizado.');
+    window.history.replaceState({}, '', window.location.pathname);
+    window.location.hash = '#/login';
+  }
+  return true;
+}
+
 function renderDataLoading() {
   const header = document.getElementById('page-header');
   const content = document.getElementById('page-content');
@@ -386,6 +422,7 @@ window.clearSession = clearSession;
 
 async function initApp() {
   captureSupabaseRecoveryState();
+  if (await captureSupabaseOAuthSession()) return;
   syncMobileThemeButton();
   initMobileMenu();
   document.getElementById('mobile-theme-toggle')?.addEventListener('click', () => {

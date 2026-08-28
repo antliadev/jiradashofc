@@ -12,6 +12,7 @@ import { MENU_PERMISSIONS, canManageAccess } from '../lib/appPermissions.js';
 const DATA_DIR = path.resolve(process.cwd(), '.local-data');
 const USERS_FILE = path.join(DATA_DIR, 'access-users.json');
 const ACCESS_TABLE = 'rja_access_users';
+const ACCESS_GRANTS_TABLE = 'access_grants';
 const IS_SERVERLESS = process.env.VERCEL === '1' || process.env.VERCEL === 'true' || process.env.NODE_ENV === 'production';
 const ITERATIONS = 120000;
 const KEY_LENGTH = 32;
@@ -189,6 +190,22 @@ function dbProfileToUser(row, permissions = []) {
   };
 }
 
+function dbGrantToUser(row) {
+  const role = normalizeRole(row.primary_role);
+  return {
+    id: `grant:${row.email}`,
+    name: row.display_name || row.email,
+    login: row.email,
+    email: row.email,
+    role,
+    status: normalizeStatus(row.status),
+    permissions: normalizePermissions(role, row.permissions || []),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    pendingFirstLogin: true,
+  };
+}
+
 async function roleIdFor(code) {
   const roleCode = normalizeRole(code);
   const { data, error } = await supabase
@@ -224,6 +241,64 @@ async function listUsersFromSupabaseAuth() {
     users.push(dbProfileToUser(profile, permissions));
   }
   return users;
+}
+
+async function listAccessGrants() {
+  requirePrivilegedSupabase();
+  const { data, error } = await supabase
+    .from(ACCESS_GRANTS_TABLE)
+    .select('email,display_name,status,primary_role,permissions,created_at,updated_at')
+    .order('created_at', { ascending: true });
+  if (error && /does not exist|schema cache/i.test(error.message || '')) return [];
+  if (error) throw error;
+  return (data || []).map(dbGrantToUser);
+}
+
+async function upsertAccessGrant(input = {}) {
+  requirePrivilegedSupabase();
+  const email = assertAllowedEmail(input.login || input.email);
+  const role = normalizeRole(input.role);
+  const displayName = String(input.name || email).trim();
+  const status = normalizeStatus(input.status);
+  const permissions = normalizePermissions(role, input.permissions);
+  const grant = {
+    email,
+    display_name: displayName,
+    status,
+    primary_role: role,
+    permissions,
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await supabase
+    .from(ACCESS_GRANTS_TABLE)
+    .upsert(grant, { onConflict: 'email' });
+  if (error) throw error;
+
+  const { data: profile, error: profileLookupError } = await supabase
+    .from('profiles')
+    .select('user_id')
+    .eq('email', email)
+    .maybeSingle();
+  if (profileLookupError && !/does not exist|schema cache/i.test(profileLookupError.message || '')) throw profileLookupError;
+
+  if (profile?.user_id) {
+    const { error: profileError } = await supabase
+      .from('profiles')
+      .update({
+        display_name: displayName,
+        status,
+        primary_role: role,
+      })
+      .eq('user_id', profile.user_id);
+    if (profileError) throw profileError;
+    await replaceUserRole(profile.user_id, role);
+    await replaceCustomPermissions(profile.user_id, role, permissions);
+    await auditAccessChange(input.actorUserId, 'profile.update', profile.user_id, { email, role });
+    return findProfileById(profile.user_id);
+  }
+
+  await auditAccessChange(input.actorUserId, 'access_grant.upsert', email, { email, role });
+  return dbGrantToUser({ ...grant, created_at: new Date().toISOString() });
 }
 
 async function findProfileById(id) {
@@ -295,7 +370,14 @@ async function auditAccessChange(actorUserId, action, targetId, metadata = {}) {
 }
 
 async function listUsers() {
-  if (authConfig.provider === 'supabase') return listUsersFromSupabaseAuth();
+  if (authConfig.provider === 'supabase') {
+    const [profiles, grants] = await Promise.all([listUsersFromSupabaseAuth(), listAccessGrants()]);
+    const profileEmails = new Set(profiles.map(user => user.login.toLowerCase()));
+    return [
+      ...profiles,
+      ...grants.filter(grant => !profileEmails.has(grant.login.toLowerCase())),
+    ];
+  }
   return (await readUsersRaw()).map(safeUser);
 }
 
@@ -308,6 +390,10 @@ async function findUserByLogin(login) {
 }
 
 async function findUserById(id) {
+  if (authConfig.provider === 'supabase' && String(id || '').startsWith('grant:')) {
+    const email = String(id).slice('grant:'.length);
+    return (await listAccessGrants()).find(user => user.login.toLowerCase() === email.toLowerCase()) || null;
+  }
   if (authConfig.provider === 'supabase') return findProfileById(id);
   return (await readUsersRaw()).find(user => user.id === id) || null;
 }
@@ -320,59 +406,7 @@ async function authenticateUser(login, password) {
 
 async function createUser(input = {}) {
   if (authConfig.provider === 'supabase') {
-    requirePrivilegedSupabase();
-    const login = assertAllowedEmail(input.login || input.email);
-    const name = String(input.name || '').trim();
-    const password = String(input.password || '');
-    const role = normalizeRole(input.role);
-    if (!name || !login || !password) {
-      const error = new Error('Nome, email e senha provisoria sao obrigatorios.');
-      error.status = 400;
-      throw error;
-    }
-
-    console.info('[AccessStore] Iniciando provisionamento de usuario.', { role });
-    const { data, error } = await supabase.auth.admin.createUser({
-      email: login,
-      password,
-      email_confirm: true,
-      user_metadata: { name },
-    });
-    if (error) throw error;
-
-    const userId = data?.user?.id;
-    if (!userId) throw new Error('Supabase nao retornou o usuario convidado.');
-
-    try {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert({
-          user_id: userId,
-          email: login,
-          display_name: name,
-          status: normalizeStatus(input.status),
-          primary_role: role,
-        }, { onConflict: 'user_id' });
-      if (profileError) throw profileError;
-
-      await replaceUserRole(userId, role);
-      await replaceCustomPermissions(userId, role, input.permissions);
-      await auditAccessChange(input.actorUserId, 'profile.create', userId, { email: login, role });
-      const createdUser = await findProfileById(userId);
-      console.info('[AccessStore] Provisionamento de usuario concluido.', { userId, role });
-      return createdUser;
-    } catch (provisionError) {
-      // Auth e tabelas publicas nao compartilham uma transacao. Removemos o
-      // usuario Auth para nao deixar uma conta parcial sem perfil/permissoes.
-      const { error: rollbackError } = await supabase.auth.admin.deleteUser(userId);
-      if (rollbackError) {
-        console.error('[AccessStore] Falha no rollback do usuario Auth.', {
-          userId,
-          rollbackCode: rollbackError.code || null,
-        });
-      }
-      throw provisionError;
-    }
+    return upsertAccessGrant(input);
   }
 
   const users = await readUsersRaw();
@@ -412,6 +446,9 @@ async function createUser(input = {}) {
 async function updateUser(id, input = {}) {
   if (authConfig.provider === 'supabase') {
     requirePrivilegedSupabase();
+    if (String(id || '').startsWith('grant:')) {
+      return upsertAccessGrant(input);
+    }
     const login = assertAllowedEmail(input.login || input.email);
     const name = String(input.name || '').trim();
     const password = String(input.password || '');
@@ -491,6 +528,16 @@ async function updateUser(id, input = {}) {
 async function revokeUser(id, actorUserId = null) {
   if (authConfig.provider === 'supabase') {
     requirePrivilegedSupabase();
+    if (String(id || '').startsWith('grant:')) {
+      const email = String(id).slice('grant:'.length);
+      const { error } = await supabase
+        .from(ACCESS_GRANTS_TABLE)
+        .update({ status: 'inactive', updated_at: new Date().toISOString() })
+        .eq('email', email);
+      if (error) throw error;
+      await auditAccessChange(actorUserId, 'access_grant.revoke', email);
+      return findUserById(id);
+    }
     const { error: profileError } = await supabase
       .from('profiles')
       .update({ status: 'inactive' })

@@ -6,7 +6,7 @@ import { authenticateUser } from './access-store.js';
 
 import { createSignedSession, verifySignedSession } from '../lib/authSession.js';
 import { authConfig } from '../lib/authConfig.js';
-import { resolveSupabaseSession, signInWithSupabase, signOutSupabase } from '../lib/appAuthService.js';
+import { resolveSupabaseSession, signInWithSupabase, signInWithSupabaseOAuthTokens, signOutSupabase } from '../lib/appAuthService.js';
 
 // Fallback legado temporario. A versao oficial deve substituir este fluxo por
 // Supabase Auth; enquanto isso, credenciais precisam ser configuradas fora do repo.
@@ -197,6 +197,42 @@ async function handleLogin(req, res) {
   });
 }
 
+async function handleOAuthSession(req, res) {
+  if (authConfig.provider !== 'supabase') {
+    return res.status(400).json({ error: 'Login Google disponivel apenas com AUTH_PROVIDER=supabase.' });
+  }
+
+  const { accessToken, refreshToken } = req.body || {};
+  if (!accessToken) {
+    return res.status(400).json({ error: 'Sessao Google ausente.' });
+  }
+
+  try {
+    const session = await signInWithSupabaseOAuthTokens(accessToken, refreshToken, res);
+    return res.json({
+      success: true,
+      sessionId: session.sessionId,
+      email: session.email,
+      user: session.user,
+    });
+  } catch (error) {
+    return res.status(error.status || 500).json({
+      error: error.message,
+      code: error.code || 'AUTH_GOOGLE_FAILED',
+    });
+  }
+}
+
+function handlePublicConfig(_req, res) {
+  res.json({
+    provider: authConfig.provider,
+    allowedDomain: authConfig.allowedDomain,
+    supabaseUrl: process.env.SUPABASE_URL || '',
+    supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '',
+    googleEnabled: authConfig.provider === 'supabase' && Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY),
+  });
+}
+
 /**
  * Endpoint de logout
  */
@@ -254,6 +290,8 @@ async function handleCheckSession(req, res) {
 
 export {
   handleLogin,
+  handleOAuthSession,
+  handlePublicConfig,
   handleLogout,
   handleCheckSession,
   requireAppAuth,

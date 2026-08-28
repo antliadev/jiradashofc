@@ -45,6 +45,8 @@ app.use((req, _res, next) => {
 app.post('/api/auth', auth.handleLogin);
 app.get('/api/auth', auth.handleCheckSession);
 app.delete('/api/auth', auth.handleLogout);
+app.get('/api/auth/config', auth.handlePublicConfig);
+app.post('/api/auth/oauth', auth.handleOAuthSession);
 app.post('/api/auth/login', auth.handleLogin);
 app.post('/api/auth/logout', auth.handleLogout);
 app.get('/api/auth/check', auth.handleCheckSession);

@@ -1,6 +1,7 @@
 /**
  * login.js — Página de Login
  */
+import { sanitize } from '../utils/helpers.js';
 export function renderLogin() {
   const content = document.getElementById('page-content');
   document.getElementById('page-header')?.replaceChildren();
@@ -8,6 +9,7 @@ export function renderLogin() {
   const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
   const recoveryRequested = params.get('recovery') === '1';
   const recoveryState = readRecoveryState();
+  const authError = readAuthError();
   const recoveryMode = recoveryRequested || Boolean(recoveryState.accessToken || recoveryState.error);
   const recoveryError = recoveryState.error ? formatRecoveryError(recoveryState) : '';
   
@@ -36,6 +38,12 @@ export function renderLogin() {
             </button>
           </div>
         ` : `
+          <div class="login-form">
+            <button type="button" class="btn btn-primary btn-login btn-google" id="google-login-btn">
+              Entrar com Google
+            </button>
+            <div class="login-divider"><span>ou use senha provisoria</span></div>
+          </div>
           <form id="login-form" class="login-form">
             <div class="form-group">
               <label for="login-email">Email</label>
@@ -61,7 +69,7 @@ export function renderLogin() {
               >
             </div>
             
-            <div id="login-error" class="login-error" style="display: none;"></div>
+            <div id="login-error" class="login-error" style="${authError ? '' : 'display: none;'}">${sanitize(authError)}</div>
             
             <button type="submit" class="btn btn-primary btn-login" id="login-btn">
               Entrar
@@ -81,6 +89,7 @@ export function renderLogin() {
   
   // Configurar o formulário
   const errorDiv = document.getElementById('login-error');
+  clearAuthError();
 
   if (recoveryMode) {
     const backButton = document.getElementById('back-to-login-btn');
@@ -93,7 +102,9 @@ export function renderLogin() {
   }
 
   const btn = document.getElementById('login-btn');
+  const googleBtn = document.getElementById('google-login-btn');
   const form = document.getElementById('login-form');
+  googleBtn?.addEventListener('click', startGoogleLogin);
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     
@@ -145,6 +156,43 @@ export function renderLogin() {
   });
 }
 
+async function startGoogleLogin() {
+  const button = document.getElementById('google-login-btn');
+  const errorDiv = document.getElementById('login-error');
+  errorDiv.style.display = 'none';
+  button.disabled = true;
+  button.textContent = 'Abrindo Google...';
+  try {
+    const configResponse = await fetch('/api/auth/config', { credentials: 'include' });
+    const config = await configResponse.json();
+    if (!configResponse.ok || !config.googleEnabled) {
+      throw new Error('Login Google ainda nao esta configurado no Supabase.');
+    }
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(config.supabaseUrl, config.supabaseAnonKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    });
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: {
+          hd: config.allowedDomain,
+        },
+      },
+    });
+    if (error) throw error;
+  } catch (error) {
+    errorDiv.textContent = error.message || 'Nao foi possivel iniciar o login Google.';
+    errorDiv.style.display = 'block';
+    button.disabled = false;
+    button.textContent = 'Entrar com Google';
+  }
+}
+
 function readRecoveryState() {
   try {
     return JSON.parse(sessionStorage.getItem('rja.auth.recovery') || '{}');
@@ -155,6 +203,14 @@ function readRecoveryState() {
 
 function clearRecoveryState() {
   sessionStorage.removeItem('rja.auth.recovery');
+}
+
+function readAuthError() {
+  return sessionStorage.getItem('rja.auth.error') || '';
+}
+
+function clearAuthError() {
+  sessionStorage.removeItem('rja.auth.error');
 }
 
 function formatRecoveryError(recoveryState) {
@@ -296,6 +352,36 @@ function addLoginStyles() {
       font-size: 15px;
       font-weight: 600;
       margin-top: 8px;
+    }
+
+    .btn-google {
+      background: #ffffff;
+      color: #1f2937;
+      border-color: #d1d5db;
+      margin-top: 0;
+      width: 100%;
+    }
+
+    .btn-google:hover {
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .login-divider {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text-muted);
+      font-size: 12px;
+      margin: 2px 0;
+    }
+
+    .login-divider::before,
+    .login-divider::after {
+      content: "";
+      height: 1px;
+      flex: 1;
+      background: var(--border);
     }
     
     .btn-login:disabled {

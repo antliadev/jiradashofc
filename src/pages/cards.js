@@ -22,7 +22,7 @@ const NOT_INFORMED = 'Nao informado';
 
 let visibleCount = PAGE_SIZE;
 let currentMonitoringMode = '';
-let blockedChart = null;
+let monitoringProjectChart = null;
 
 let currentFilters = {
   projectId: '',
@@ -72,9 +72,9 @@ function applyMonitoringMode(mode = '') {
   currentMonitoringMode = mode;
   visibleCount = PAGE_SIZE;
 
-  if (blockedChart) {
-    blockedChart.destroy();
-    blockedChart = null;
+  if (monitoringProjectChart) {
+    monitoringProjectChart.destroy();
+    monitoringProjectChart = null;
   }
 
   if (mode) {
@@ -258,22 +258,21 @@ function renderCardsContent() {
 function renderMonitoringContent() {
   const content = document.getElementById('page-content');
   const mode = currentMonitoringMode;
-  const statuses = getMonitoringStatusOptions(mode);
-  monitoringFilters.statuses = monitoringFilters.statuses.filter(status => statuses.includes(status));
+  const baseRows = getBaseMonitoringRows(mode);
+  const filterOptions = getMonitoringFilterOptions(baseRows, mode);
+  monitoringFilters.projectIds = monitoringFilters.projectIds.filter(projectId => filterOptions.projects.some(option => option.value === projectId));
+  monitoringFilters.assigneeIds = monitoringFilters.assigneeIds.filter(assigneeId => filterOptions.assignees.some(option => option.value === assigneeId));
+  monitoringFilters.statuses = monitoringFilters.statuses.filter(status => filterOptions.statuses.some(option => option.value === status));
+  monitoringFilters.pendingWith = monitoringFilters.pendingWith.filter(value => filterOptions.pendingWith.some(option => option.value === value));
   const rows = getMonitoringRows(mode);
   const visibleRows = rows.slice(0, visibleCount);
   const metrics = getMonitoringMetrics(rows, mode);
-  const projects = dataService.getProjects();
-  const users = dataService.getUsers();
-  const pendingOptions = uniqueSorted(
-    getBaseMonitoringRows('blocked').map(row => row.pendingWith).filter(Boolean)
-  );
 
   content.innerHTML = `
     <section class="monitoring-shell" data-monitoring-mode="${sanitize(mode)}">
       ${renderMonitoringKpis(metrics, mode)}
-      ${renderMonitoringFilters({ projects, users, statuses, pendingOptions, rows })}
-      ${mode === 'blocked' ? renderBlockedChart(rows) : ''}
+      ${renderMonitoringFilters({ filterOptions, rows })}
+      ${renderMonitoringProjectChart(rows, mode)}
       ${renderMonitoringToolbar(rows)}
       ${monitoringFilters.view === 'cards'
         ? renderMonitoringCardsView(visibleRows, mode)
@@ -289,7 +288,7 @@ function renderMonitoringContent() {
   `;
 
   bindMonitoringEvents(rows);
-  if (mode === 'blocked') drawBlockedChart(rows);
+  drawMonitoringProjectChart(rows, mode);
   updateExportButton(rows.length > 0);
 }
 
@@ -339,7 +338,7 @@ function renderMonitoringKpis(metrics, mode) {
   `;
 }
 
-function renderMonitoringFilters({ projects, users, statuses, pendingOptions, rows }) {
+function renderMonitoringFilters({ filterOptions, rows }) {
   const isBlocked = currentMonitoringMode === 'blocked';
   return `
     <div class="monitoring-panel">
@@ -348,13 +347,11 @@ function renderMonitoringFilters({ projects, users, statuses, pendingOptions, ro
           <span class="filter-label">Pesquisa</span>
           <input type="search" id="monitoring-search" placeholder="${isBlocked ? 'Chave, nome, motivo, acao, responsavel...' : 'Chave ou nome do card...'}" value="${sanitizeTitle(monitoringFilters.search)}">
         </label>
-        ${renderCompactMultiFilter('Projeto', 'projectIds', projects.map(p => ({ value: p.id, label: p.name })))}
-        ${renderCompactMultiFilter('Responsavel', 'assigneeIds', users.map(u => ({ value: u.id, label: u.displayName })))}
+        ${renderCompactMultiFilter('Projeto', 'projectIds', filterOptions.projects)}
+        ${renderCompactMultiFilter('Responsavel', 'assigneeIds', filterOptions.assignees)}
         ${isBlocked ? `
-          ${renderCompactMultiFilter('Pendente com?', 'pendingWith', pendingOptions.map(value => ({ value, label: value })))}
-        ` : `
-          ${renderCompactMultiFilter('Status', 'statuses', statuses.map(s => ({ value: s, label: s })))}
-        `}
+          ${renderCompactMultiFilter('Pendente com?', 'pendingWith', filterOptions.pendingWith)}
+        ` : ''}
         <label>
           <span class="filter-label">Ordenacao</span>
           <select id="monitoring-sort">
@@ -537,17 +534,18 @@ function renderBlockedCard(row) {
   `;
 }
 
-function renderBlockedChart(rows) {
+function renderMonitoringProjectChart(rows, mode) {
   if (!monitoringFilters.showChart) return '';
+  const isBlocked = mode === 'blocked';
   return `
-    <div class="monitoring-panel blocked-chart-panel">
+    <div class="monitoring-panel monitoring-project-chart-panel">
       <div class="monitoring-panel-header">
         <div>
-          <h3>Bloqueios por Projeto</h3>
+          <h3>${isBlocked ? 'Bloqueios por Projeto' : 'Atrasos por Projeto'}</h3>
           <p>Selecione uma barra para filtrar a tela pelo projeto.</p>
         </div>
       </div>
-      ${rows.length ? '<canvas id="blocked-project-chart" height="96"></canvas>' : '<div class="monitoring-chart-empty">Sem dados para o grafico.</div>'}
+      ${rows.length ? '<canvas id="monitoring-project-chart" height="96"></canvas>' : '<div class="monitoring-chart-empty">Sem dados para o grafico.</div>'}
     </div>
   `;
 }
@@ -683,16 +681,6 @@ function getMonitoringRows(mode) {
   return applyMonitoringFilters(getBaseMonitoringRows(mode), mode);
 }
 
-function getMonitoringStatusOptions(mode) {
-  let rows = getBaseMonitoringRows(mode);
-  if (monitoringFilters.projectIds.length) {
-    rows = rows.filter(row => monitoringFilters.projectIds.includes(row.projectId));
-  }
-  return uniqueSorted(rows
-    .map(row => row.status)
-    .filter(status => status && (mode !== 'overdue' || resolveStatusCategory(status) !== StatusCategory.DONE)));
-}
-
 function getBaseMonitoringRows(mode) {
   const cards = dataService.getCards();
   return cards
@@ -700,6 +688,26 @@ function getBaseMonitoringRows(mode) {
       ? resolveStatusCategory(card.status) === StatusCategory.BLOCKED
       : isCardOverdue(card))
     .map(card => buildMonitoringRow(card));
+}
+
+export function getMonitoringFilterOptions(rows, mode) {
+  const projects = countRowsBy(rows, 'projectId')
+    .map(item => ({
+      value: item.value,
+      label: `${item.label} (${item.total})`,
+    }));
+  const assignees = countRowsBy(rows, 'assigneeId')
+    .map(item => ({
+      value: item.value,
+      label: `${item.label} (${item.total})`,
+    }));
+  const statuses = mode === 'overdue'
+    ? []
+    : countRowsBy(rows, 'status').map(item => ({ value: item.value, label: item.label }));
+  const pendingWith = countRowsBy(rows.filter(row => row.pendingWith), 'pendingWith')
+    .map(item => ({ value: item.value, label: item.label }));
+
+  return { projects, assignees, statuses, pendingWith };
 }
 
 function buildMonitoringRow(card) {
@@ -823,22 +831,22 @@ function resetMonitoringFilters() {
   visibleCount = PAGE_SIZE;
 }
 
-async function drawBlockedChart(rows) {
-  const canvas = document.getElementById('blocked-project-chart');
+async function drawMonitoringProjectChart(rows, mode) {
+  const canvas = document.getElementById('monitoring-project-chart');
   if (!canvas) return;
 
   const grouped = groupRowsByProject(rows);
   const Chart = await loadChart();
-  if (blockedChart) blockedChart.destroy();
+  if (monitoringProjectChart) monitoringProjectChart.destroy();
 
-  blockedChart = new Chart(canvas, {
+  monitoringProjectChart = new Chart(canvas, {
     type: 'bar',
     data: {
       labels: grouped.map(item => item.projectName),
       datasets: [{
-        label: 'Cards bloqueados',
+        label: mode === 'blocked' ? 'Cards bloqueados' : 'Cards em atraso',
         data: grouped.map(item => item.total),
-        backgroundColor: '#ef4444',
+        backgroundColor: mode === 'blocked' ? '#ef4444' : '#f59e0b',
         borderRadius: 6,
       }],
     },
@@ -975,13 +983,25 @@ function getEpicLabel(card) {
 }
 
 function groupRowsByProject(rows) {
+  return countRowsBy(rows, 'projectId')
+    .map(item => ({ projectId: item.value, projectName: item.label, total: item.total }));
+}
+
+function countRowsBy(rows, valueKey) {
+  const labelKey = valueKey === 'projectId'
+    ? 'projectName'
+    : valueKey === 'assigneeId'
+      ? 'assigneeName'
+      : valueKey;
   const map = new Map();
   rows.forEach(row => {
-    const current = map.get(row.projectId) || { projectId: row.projectId, projectName: row.projectName, total: 0 };
+    const value = row[valueKey];
+    if (!value) return;
+    const current = map.get(value) || { value, label: row[labelKey] || value, total: 0 };
     current.total++;
-    map.set(row.projectId, current);
+    map.set(value, current);
   });
-  return [...map.values()].sort((a, b) => b.total - a.total);
+  return [...map.values()].sort((a, b) => b.total - a.total || a.label.localeCompare(b.label, 'pt-BR'));
 }
 
 function getSortOptions(mode) {

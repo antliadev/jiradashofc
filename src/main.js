@@ -13,6 +13,11 @@ import { renderPageLoading } from './utils/ui-feedback.js';
 import { initSelectLists } from './utils/select-list.js';
 
 initSelectLists();
+dataService.subscribe(() => {
+  if (!document.getElementById('sidebar')?.classList.contains('hidden')) {
+    renderSidebar();
+  }
+});
 
 // Rotas públicas (não requerem autenticação)
 const publicRoutes = ['/login'];

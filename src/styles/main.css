@@ -1640,13 +1640,15 @@ input, select, textarea { font-family: inherit; }
   color: var(--text-muted); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
 }
 .monitoring-card dd { margin: 0; color: var(--text-secondary); overflow-wrap: anywhere; }
-.blocked-chart-panel { min-height: 220px; }
+.blocked-chart-panel,
+.monitoring-project-chart-panel { min-height: 220px; }
 .monitoring-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .monitoring-panel-header h3 { font-size: 15px; margin-bottom: 2px; }
 .monitoring-panel-header p,
 .monitoring-count-note,
 .monitoring-chart-empty { color: var(--text-muted); font-size: 12px; }
-.blocked-chart-panel canvas { width: 100% !important; max-height: 180px; }
+.blocked-chart-panel canvas,
+.monitoring-project-chart-panel canvas { width: 100% !important; max-height: 180px; }
 .monitoring-empty { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); }
 
 /* Loading */

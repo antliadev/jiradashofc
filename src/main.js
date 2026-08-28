@@ -424,8 +424,10 @@ window.clearSession = clearSession;
 // ─── Inicialização ──────────────────────────────────────
 
 async function initApp() {
-  if (await captureSupabaseOAuthSession()) return;
-  captureSupabaseRecoveryState();
+  const handledOAuthCallback = await captureSupabaseOAuthSession();
+  if (!handledOAuthCallback) {
+    captureSupabaseRecoveryState();
+  }
   syncMobileThemeButton();
   initMobileMenu();
   document.getElementById('mobile-theme-toggle')?.addEventListener('click', () => {

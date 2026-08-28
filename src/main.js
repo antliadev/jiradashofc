@@ -57,8 +57,11 @@ function captureSupabaseRecoveryState() {
   let authParams = null;
 
   if (hash.startsWith('#access_token=') || hash.startsWith('#error=')) {
-    authParams = new URLSearchParams(hash.slice(1));
-  } else if (searchParams.get('type') === 'recovery' || searchParams.get('error')) {
+    const hashParams = new URLSearchParams(hash.slice(1));
+    if (hashParams.get('type') === 'recovery') {
+      authParams = hashParams;
+    }
+  } else if (searchParams.get('type') === 'recovery') {
     authParams = searchParams;
   }
 
@@ -421,8 +424,8 @@ window.clearSession = clearSession;
 // ─── Inicialização ──────────────────────────────────────
 
 async function initApp() {
-  captureSupabaseRecoveryState();
   if (await captureSupabaseOAuthSession()) return;
+  captureSupabaseRecoveryState();
   syncMobileThemeButton();
   initMobileMenu();
   document.getElementById('mobile-theme-toggle')?.addEventListener('click', () => {

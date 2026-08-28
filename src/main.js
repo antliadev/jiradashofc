@@ -39,12 +39,14 @@ const dataRoutes = new Set([
   '/executive',
   '/gantt',
 ]);
-const AUTH_CACHE_TTL_MS = 30000;
+const AUTH_CACHE_TTL_MS = 0;
+const SESSION_MONITOR_INTERVAL_MS = 15000;
 let authCache = {
   authenticated: false,
   checkedAt: 0
 };
 let authValidationPromise = null;
+let sessionMonitorStarted = false;
 const RECOVERY_STORAGE_KEY = 'rja.auth.recovery';
 
 function normalizePath(path) {
@@ -115,17 +117,35 @@ async function captureSupabaseOAuthSession() {
       body: JSON.stringify({ accessToken, refreshToken }),
     });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.error || 'Acesso Google nao autorizado.');
+    if (!response.ok) {
+      const authError = new Error(authErrorMessage(data));
+      authError.code = data.code || '';
+      throw authError;
+    }
     markAuthenticated(data.user || null);
     window.history.replaceState({}, '', window.location.pathname);
     window.location.hash = `#${firstAllowedRoute(data.user || null)}`;
   } catch (error) {
     clearSession();
-    sessionStorage.setItem('rja.auth.error', error.message || 'Acesso Google nao autorizado.');
+    const message = error.message || 'Acesso Google nao autorizado.';
+    sessionStorage.setItem('rja.auth.error', message);
     window.history.replaceState({}, '', window.location.pathname);
-    window.location.hash = '#/login';
+    window.location.hash = `#/login?authError=${encodeURIComponent(message)}`;
   }
   return true;
+}
+
+function authErrorMessage(data = {}) {
+  if (data.code === 'AUTH_DOMAIN_NOT_ALLOWED') {
+    return 'Este sistema e exclusivo para colaboradores com e-mail @antlia.com.br.';
+  }
+  if (data.code === 'AUTH_EMAIL_NOT_GRANTED') {
+    return 'Seu e-mail ainda nao esta liberado para acessar o Radar Jira Antlia. Entre em contato com o administrador do sistema.';
+  }
+  if (data.code === 'AUTH_EMAIL_NOT_CONFIRMED') {
+    return 'Confirme o e-mail da sua conta Google antes de acessar o Radar Jira Antlia.';
+  }
+  return data.error || 'Acesso Google nao autorizado. Entre em contato com o administrador do sistema.';
 }
 
 function renderDataLoading() {
@@ -362,6 +382,50 @@ async function authGuard(path) {
   return authenticated;
 }
 
+async function validateActiveSession({ redirectOnFailure = true } = {}) {
+  const path = normalizePath(window.location.hash.replace(/^#\/?/, '/') || '/');
+  if (publicRoutes.includes(path)) return true;
+  try {
+    const response = await fetchWithTimeout('/api/auth', {
+      method: 'GET',
+      credentials: 'include',
+      headers: localStorage.getItem('sessionId')
+        ? { 'x-session-id': localStorage.getItem('sessionId') }
+        : {},
+    }, 5000);
+    const data = await response.json().catch(() => ({ authenticated: false }));
+    if (!response.ok || !data.authenticated) {
+      clearSession();
+      if (redirectOnFailure) {
+        const message = 'Seu acesso foi removido ou expirou. Entre em contato com o administrador do sistema.';
+        sessionStorage.setItem('rja.auth.error', message);
+        window.location.hash = `#/login?authError=${encodeURIComponent(message)}`;
+      }
+      return false;
+    }
+    setCurrentUser(data.user || null);
+    authCache = { authenticated: true, checkedAt: Date.now() };
+    return true;
+  } catch (err) {
+    console.warn('[Auth] Monitoramento de sessao indisponivel:', err.message);
+    return true;
+  }
+}
+
+function startSessionMonitor() {
+  if (sessionMonitorStarted) return;
+  sessionMonitorStarted = true;
+  setInterval(() => {
+    validateActiveSession().catch(() => null);
+  }, SESSION_MONITOR_INTERVAL_MS);
+  window.addEventListener('focus', () => {
+    validateActiveSession().catch(() => null);
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') validateActiveSession().catch(() => null);
+  });
+}
+
 // ─── Layout do Sistema ──────────────────────────────────
 
 function updateLayout(authenticated) {
@@ -430,6 +494,7 @@ async function initApp() {
   }
   syncMobileThemeButton();
   initMobileMenu();
+  startSessionMonitor();
   document.getElementById('mobile-theme-toggle')?.addEventListener('click', () => {
     toggleTheme();
     syncMobileThemeButton();

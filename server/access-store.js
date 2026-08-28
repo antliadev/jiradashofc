@@ -369,6 +369,22 @@ async function auditAccessChange(actorUserId, action, targetId, metadata = {}) {
     .throwOnError();
 }
 
+async function deleteUserAccessRows(userId) {
+  if (!userId) return;
+  for (const table of ['user_permissions', 'user_roles']) {
+    const { error } = await supabase
+      .from(table)
+      .delete()
+      .eq('user_id', userId);
+    if (error && !/does not exist|schema cache/i.test(error.message || '')) throw error;
+  }
+  const { error } = await supabase
+    .from('profiles')
+    .delete()
+    .eq('user_id', userId);
+  if (error && !/does not exist|schema cache/i.test(error.message || '')) throw error;
+}
+
 async function listUsers() {
   if (authConfig.provider === 'supabase') {
     const [profiles, grants] = await Promise.all([listUsersFromSupabaseAuth(), listAccessGrants()]);
@@ -532,25 +548,34 @@ async function revokeUser(id, actorUserId = null) {
       const email = String(id).slice('grant:'.length);
       const { error } = await supabase
         .from(ACCESS_GRANTS_TABLE)
-        .update({ status: 'inactive', updated_at: new Date().toISOString() })
+        .delete()
         .eq('email', email);
       if (error) throw error;
-      await auditAccessChange(actorUserId, 'access_grant.revoke', email);
-      return findUserById(id);
+      await auditAccessChange(actorUserId, 'access_grant.delete', email);
+      return null;
     }
-    const { error: profileError } = await supabase
+
+    const { data: profile, error: profileLookupError } = await supabase
       .from('profiles')
-      .update({ status: 'inactive' })
-      .eq('user_id', id);
-    if (profileError) throw profileError;
+      .select('email')
+      .eq('user_id', id)
+      .maybeSingle();
+    if (profileLookupError && !/does not exist|schema cache/i.test(profileLookupError.message || '')) throw profileLookupError;
 
-    const { error: authError } = await supabase.auth.admin.updateUserById(id, {
-      ban_duration: '876000h',
-    });
-    if (authError) throw authError;
+    if (profile?.email) {
+      const { error: grantError } = await supabase
+        .from(ACCESS_GRANTS_TABLE)
+        .delete()
+        .eq('email', profile.email);
+      if (grantError && !/does not exist|schema cache/i.test(grantError.message || '')) throw grantError;
+    }
 
-    await auditAccessChange(actorUserId, 'profile.revoke', id);
-    return findProfileById(id);
+    await deleteUserAccessRows(id);
+    const { error: authError } = await supabase.auth.admin.deleteUser(id);
+    if (authError && !/User not found/i.test(authError.message || '')) throw authError;
+
+    await auditAccessChange(actorUserId, 'profile.delete', id, { email: profile?.email || null });
+    return null;
   }
 
   const users = await readUsersRaw();

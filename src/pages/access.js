@@ -80,7 +80,7 @@ function renderForm(user) {
     <section class="access-editor">
       <div class="access-editor-head">
         <h3>${isNew ? 'Novo usuario' : 'Editar usuario'}</h3>
-        ${!isNew ? '<button class="btn btn-secondary" id="revoke-access-user">Revogar acesso</button>' : ''}
+        ${!isNew ? '<button class="btn btn-secondary" id="revoke-access-user">Excluir acesso</button>' : ''}
       </div>
       <form id="access-form" class="access-form">
         <input type="hidden" id="access-id" value="${sanitize(user?.id || '')}">
@@ -122,7 +122,7 @@ function renderForm(user) {
         </div>
       </form>
       <div class="report-alert info">
-        Libere o e-mail Google da pessoa, escolha o perfil e mantenha o status Ativo. O acesso so sera permitido para e-mails autorizados e dentro do dominio Antlia. Full acessa tudo e administra usuarios. Master acessa menus funcionais, sem Gestao de Acessos. Visualizacao tem acesso de leitura aos modulos liberados. Personalizado recebe apenas os menus marcados.
+        Libere o e-mail Google da pessoa, escolha o perfil e mantenha o status Ativo. O acesso so sera permitido para e-mails autorizados e dentro do dominio Antlia. Full acessa tudo e administra usuarios. Master acessa todos os menus funcionais, sem Gestao de Acessos. Visualizacao tem acesso de leitura aos modulos liberados. Personalizado recebe apenas os menus marcados.
       </div>
     </section>
   `;
@@ -204,15 +204,15 @@ async function revokeSelectedUser() {
   if (!selectedId) return;
   const user = currentUser();
   const confirmed = await confirmAction({
-    title: 'Revogar acesso?',
-    message: `O acesso de ${user?.name || 'este usuário'} será desativado.`,
-    confirmLabel: 'Revogar acesso',
+    title: 'Excluir acesso?',
+    message: `O acesso de ${user?.name || 'este usuário'} será removido. Se houver uma sessao ativa, ela sera encerrada na proxima validacao do app.`,
+    confirmLabel: 'Excluir acesso',
     danger: true
   });
   if (!confirmed) return;
 
   const revokeButton = document.getElementById('revoke-access-user');
-  setButtonBusy(revokeButton, true, 'Revogando...');
+  setButtonBusy(revokeButton, true, 'Excluindo...');
   try {
     const response = await fetch(`/api/access/users/${encodeURIComponent(selectedId)}`, {
       method: 'DELETE',
@@ -223,7 +223,7 @@ async function revokeSelectedUser() {
     if (!response.ok) throw new Error(data.error || 'Nao foi possivel revogar o acesso.');
     await requestUsers();
     renderAccessPage();
-    showToast('Acesso revogado.', 'success');
+    showToast('Acesso excluido.', 'success');
   } catch (error) {
     setButtonBusy(revokeButton, false);
     showToast(error.message, 'error');

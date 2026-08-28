@@ -9,7 +9,7 @@ export function renderLogin() {
   const params = new URLSearchParams(window.location.hash.split('?')[1] || '');
   const recoveryRequested = params.get('recovery') === '1';
   const recoveryState = readRecoveryState();
-  const authError = readAuthError();
+  const authError = params.get('authError') || readAuthError();
   const recoveryMode = recoveryRequested || Boolean(recoveryState.accessToken || recoveryState.error);
   const recoveryError = recoveryState.error ? formatRecoveryError(recoveryState) : '';
   
@@ -42,39 +42,8 @@ export function renderLogin() {
             <button type="button" class="btn btn-primary btn-login btn-google" id="google-login-btn">
               Entrar com Google
             </button>
-            <div class="login-divider"><span>ou use senha provisoria</span></div>
-          </div>
-          <form id="login-form" class="login-form">
-            <div class="form-group">
-              <label for="login-email">Email</label>
-              <input 
-                type="email" 
-                id="login-email" 
-                name="email" 
-                placeholder="seu.nome@antlia.com.br"
-                required
-                autocomplete="email"
-              >
-            </div>
-            
-            <div class="form-group">
-              <label for="login-password">Senha</label>
-              <input 
-                type="password" 
-                id="login-password" 
-                name="password" 
-                placeholder="••••••••"
-                required
-                autocomplete="current-password"
-              >
-            </div>
-            
             <div id="login-error" class="login-error" style="${authError ? '' : 'display: none;'}">${sanitize(authError)}</div>
-            
-            <button type="submit" class="btn btn-primary btn-login" id="login-btn">
-              Entrar
-            </button>
-          </form>
+          </div>
         `}
         
         <div class="login-footer">
@@ -88,7 +57,6 @@ export function renderLogin() {
   addLoginStyles();
   
   // Configurar o formulário
-  const errorDiv = document.getElementById('login-error');
   clearAuthError();
 
   if (recoveryMode) {
@@ -101,59 +69,8 @@ export function renderLogin() {
     return;
   }
 
-  const btn = document.getElementById('login-btn');
   const googleBtn = document.getElementById('google-login-btn');
-  const form = document.getElementById('login-form');
   googleBtn?.addEventListener('click', startGoogleLogin);
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const email = document.getElementById('login-email').value;
-    const password = document.getElementById('login-password').value;
-    
-    errorDiv.style.display = 'none';
-    btn.disabled = true;
-    btn.textContent = 'Entrando...';
-    
-    try {
-      const response = await fetch('/api/auth', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ email, password })
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Erro ao fazer login');
-      }
-      
-      if (window.setSessionUser) {
-        window.setSessionUser(data.user || null);
-      }
-      if (window.markAuthenticated) {
-        window.markAuthenticated(data.user || null);
-      }
-      
-      if (window.updateLayout) {
-        window.updateLayout(true);
-      }
-      
-      // O destino inicial deve respeitar exatamente os acessos configurados
-      // para o usuario, em vez de assumir que todos possuem acesso a Home.
-      const { firstAllowedRoute } = await import('../utils/access-control.js');
-      window.location.hash = `#${firstAllowedRoute(data.user || null)}`;
-      
-    } catch (err) {
-      errorDiv.textContent = err.message;
-      errorDiv.style.display = 'block';
-      btn.disabled = false;
-      btn.textContent = 'Entrar';
-    }
-  });
 }
 
 async function startGoogleLogin() {

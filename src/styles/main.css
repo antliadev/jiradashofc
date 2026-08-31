@@ -203,7 +203,7 @@ input, select, textarea { font-family: inherit; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
 /* Layout */
-.app-layout { display: flex; min-height: 100vh; min-width: 0; }
+.app-layout { display: flex; min-height: 100vh; min-width: 0; width: 100%; }
 .sidebar-backdrop { display: none; }
 
 /* Sidebar */
@@ -334,7 +334,7 @@ input, select, textarea { font-family: inherit; }
 .data-source-badge .dot.api { background: var(--success); }
 
 /* Main Content */
-.main-content { margin-left: var(--sidebar-w); flex: 1; min-width: 0; width: 100%; min-height: 100vh; }
+.main-content { margin-left: var(--sidebar-w); flex: 1; min-width: 0; width: 100%; min-height: 100vh; overflow-x: hidden; }
 .sidebar-collapsed .sidebar { width: 76px; }
 .sidebar-collapsed .main-content { margin-left: 76px; }
 .sidebar-collapsed .sidebar-header { padding: 20px 14px; }
@@ -407,7 +407,7 @@ input, select, textarea { font-family: inherit; }
 .page-header h2, .page-header .subtitle { overflow-wrap: anywhere; }
 .page-header h2 { font-size: 20px; font-weight: 700; }
 .page-header .subtitle { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
-.page-content { width: 100%; margin: 0; padding: 24px clamp(16px, 3vw, 32px); }
+.page-content { width: 100%; margin: 0; padding: 24px clamp(16px, 3vw, 32px); min-width: 0; }
 
 /* Feedback global de navegação e transações */
 .page-loading { min-height: min(52vh, 420px); display: grid; place-content: center; justify-items: center; gap: 10px; color: var(--text-secondary); text-align: center; }
@@ -434,6 +434,7 @@ input, select, textarea { font-family: inherit; }
 .filter-bar {
   display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin-bottom: 14px;
   padding: 10px 12px; background: var(--bg-card); border-radius: var(--radius-sm); border: 1px solid var(--border);
+  width: 100%;
 }
 .filter-bar select, .filter-bar input {
   background: var(--bg-input); border: 1px solid var(--border); color: var(--text-primary);
@@ -460,6 +461,7 @@ input, select, textarea { font-family: inherit; }
   align-items: end;
   overflow: hidden;
   max-width: 100%;
+  width: 100%;
 }
 
 .dashboard-filter-bar .filter-field {
@@ -478,6 +480,14 @@ input, select, textarea { font-family: inherit; }
   align-items: center;
   gap: 4px;
   min-height: 34px;
+  min-width: 0;
+}
+
+.report-toolbar,
+.monitoring-toolbar,
+.monitoring-panel,
+.table-container {
+  width: 100%;
   min-width: 0;
 }
 
@@ -2139,6 +2149,7 @@ img, canvas, svg { max-width: 100%; }
   .dashboard-filter-bar .quick-filter-group { grid-column: 1 / -1; }
   .page-header { gap: 12px; }
   .page-header .subtitle { max-width: 70vw; }
+  .page-content { padding-inline: 24px; }
 }
 
 @media (max-width: 768px) {

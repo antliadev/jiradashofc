@@ -349,6 +349,7 @@ function renderMonitoringFilters({ filterOptions, rows }) {
         </label>
         ${renderCompactMultiFilter('Projeto', 'projectIds', filterOptions.projects)}
         ${renderCompactMultiFilter('Responsavel', 'assigneeIds', filterOptions.assignees)}
+        ${renderCompactMultiFilter('Status', 'statuses', filterOptions.statuses)}
         ${isBlocked ? `
           ${renderCompactMultiFilter('Pendente com?', 'pendingWith', filterOptions.pendingWith)}
         ` : ''}
@@ -701,9 +702,11 @@ export function getMonitoringFilterOptions(rows, mode) {
       value: item.value,
       label: `${item.label} (${item.total})`,
     }));
-  const statuses = mode === 'overdue'
-    ? []
-    : countRowsBy(rows, 'status').map(item => ({ value: item.value, label: item.label }));
+  const statuses = countRowsBy(rows, 'status')
+    .map(item => ({
+      value: item.value,
+      label: `${item.label} (${item.total})`,
+    }));
   const pendingWith = countRowsBy(rows.filter(row => row.pendingWith), 'pendingWith')
     .map(item => ({ value: item.value, label: item.label }));
 
@@ -752,11 +755,11 @@ function applyMonitoringFilters(rows, mode) {
   if (monitoringFilters.assigneeIds.length) {
     result = result.filter(row => monitoringFilters.assigneeIds.includes(row.assigneeId));
   }
+  if (monitoringFilters.statuses.length) {
+    result = result.filter(row => monitoringFilters.statuses.includes(row.status));
+  }
   if (mode === 'blocked' && monitoringFilters.pendingWith.length) {
     result = result.filter(row => monitoringFilters.pendingWith.includes(row.pendingWith));
-  }
-  if (mode === 'overdue' && monitoringFilters.statuses.length) {
-    result = result.filter(row => monitoringFilters.statuses.includes(row.status));
   }
   if (q) {
     result = result.filter(row => {

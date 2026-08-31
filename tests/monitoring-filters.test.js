@@ -14,11 +14,12 @@ test('opcoes do monitoramento usam apenas linhas com ocorrencia e mostram contag
 
   assert.deepEqual(options.projects.map(option => option.label), ['Projeto Um (2)', 'Projeto Dois (1)']);
   assert.deepEqual(options.assignees.map(option => option.label), ['Ana (2)', 'Bruno (1)']);
+  assert.deepEqual(options.statuses.map(option => option.label), ['Em andamento (2)', 'Bloqueado (1)', 'Concluido (1)']);
   assert.deepEqual(options.pendingWith.map(option => option.label), ['Cliente', 'Antlia']);
 });
 
-test('opcoes de status dos atrasados nao incluem concluidos', () => {
+test('opcoes de status dos atrasados tambem ficam disponiveis', () => {
   const options = getMonitoringFilterOptions(rows, 'overdue');
 
-  assert.deepEqual(options.statuses, []);
+  assert.deepEqual(options.statuses.map(option => option.label), ['Em andamento (2)', 'Bloqueado (1)', 'Concluido (1)']);
 });

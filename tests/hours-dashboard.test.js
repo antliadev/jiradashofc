@@ -18,13 +18,14 @@ test('competencia respeita America/Sao_Paulo na virada UTC', () => {
 });
 
 test('faixas de consumo distinguem 80, 90, 100 e excedido', () => {
-  assert.equal(capacityStatus(79 * 3600).level, 'normal');
-  assert.equal(capacityStatus(80 * 3600).level, 'attention');
-  assert.equal(capacityStatus(90 * 3600).level, 'critical');
-  assert.equal(capacityStatus(100 * 3600).level, 'exhausted');
-  assert.equal(capacityStatus(101 * 3600).level, 'exceeded');
-  assert.equal(capacityStatus(101 * 3600).availableSeconds, 0);
-  assert.equal(capacityStatus(101 * 3600).overageSeconds, 3600);
+  const capacity = 100 * 3600;
+  assert.equal(capacityStatus(79 * 3600, capacity).level, 'normal');
+  assert.equal(capacityStatus(80 * 3600, capacity).level, 'attention');
+  assert.equal(capacityStatus(90 * 3600, capacity).level, 'critical');
+  assert.equal(capacityStatus(100 * 3600, capacity).level, 'exhausted');
+  assert.equal(capacityStatus(101 * 3600, capacity).level, 'exceeded');
+  assert.equal(capacityStatus(101 * 3600, capacity).availableSeconds, 0);
+  assert.equal(capacityStatus(101 * 3600, capacity).overageSeconds, 3600);
 });
 
 test('dashboard agrupa por competencia e epic/aplicacao sem solicitante', () => {
@@ -39,7 +40,7 @@ test('dashboard agrupa por competencia e epic/aplicacao sem solicitante', () => 
   ];
   const result = buildCrawfordHoursDashboard(worklogs, issues, '2026-08');
   assert.equal(result.capacity.usedHours, 1.5);
-  assert.equal(result.capacity.availableHours, 98.5);
+  assert.equal(result.capacity.availableHours, 198.5);
   assert.deepEqual(result.hoursByApplication, [{ application: 'Integracao API', name: 'Integracao API', seconds: 5400, hours: 1.5 }]);
   assert.equal(result.details[0].activityDescription, 'Validacao');
   assert.equal(result.monthlyConsumption.length, 2);
@@ -117,7 +118,7 @@ test('Docwise acumula consumo entre competencias e Crawford reinicia mensalmente
   assert.equal(docwiseJuly.usedHours, 10);
   assert.equal(crawfordAugust.billingMode, 'monthly');
   assert.equal(crawfordAugust.usedHours, 5);
-  assert.equal(crawfordAugust.availableHours, 95);
+  assert.equal(crawfordAugust.availableHours, 195);
 });
 
 test('fallback consulta apenas worklogs Crawford e normaliza tickets do banco', async () => {

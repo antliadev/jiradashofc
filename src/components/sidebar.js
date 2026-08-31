@@ -221,13 +221,19 @@ export function renderSidebar() {
     if (!confirmed) return;
     const logoutButton = document.getElementById('logout-button');
     setButtonBusy(logoutButton, true, 'Saindo...');
-    await fetch('/api/auth', {
-      method: 'DELETE',
-      credentials: 'include',
-    }).catch(() => null);
+    try {
+      await fetch('/api/auth', {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+    } catch {
+      // Se a sessão já tiver expirado ou a API falhar, seguimos para limpar o estado local.
+    }
     window.clearSession?.();
     window.updateLayout?.(false);
+    window.history.replaceState({}, '', `${window.location.pathname}#/login`);
     window.location.hash = '#/login';
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
     showToast('Sessão encerrada.', 'success');
   });
 

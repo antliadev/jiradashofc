@@ -124,6 +124,33 @@ test('Docwise acumula consumo entre competencias e Crawford reinicia mensalmente
   assert.equal(crawfordAugust.availableHours, 195);
 });
 
+test('Docwise separa horas do mesmo card pela data do apontamento', () => {
+  const issues = [
+    {
+      issue_key: 'P1-1828',
+      project_key: 'P1',
+      title: 'DocWise — Ajustes solicitados',
+      parent_title: 'Docwise - Workspace Creator'
+    }
+  ];
+  const worklogs = [
+    { worklog_id: 'aug-1', issue_key: 'P1-1828', author_name: 'Nelson', started_at: '2026-08-27T13:36:56.268Z', time_spent_seconds: 4 * 3600 },
+    { worklog_id: 'aug-2', issue_key: 'P1-1828', author_name: 'Nelson', started_at: '2026-08-31T15:22:23.080Z', time_spent_seconds: 4 * 3600 },
+    { worklog_id: 'sep-1', issue_key: 'P1-1828', author_name: 'Nelson', started_at: '2026-09-01T14:30:00.000Z', time_spent_seconds: 5 * 3600 }
+  ];
+
+  const august = buildProjectHoursDashboard(worklogs, issues, '2026-08', 'DOCW');
+  const september = buildProjectHoursDashboard(worklogs, issues, '2026-09', 'DOCW');
+
+  assert.equal(august.periodUsedHours, 8);
+  assert.equal(august.usedHours, 8);
+  assert.deepEqual(august.entries.map(entry => entry.monthYear), ['2026-08', '2026-08']);
+  assert.equal(september.periodUsedHours, 5);
+  assert.equal(september.usedHours, 13);
+  assert.deepEqual(september.entries.map(entry => entry.monthYear), ['2026-09']);
+  assert.equal(september.allEntries.length, 3);
+});
+
 test('fallback consulta apenas worklogs Crawford e normaliza tickets do banco', async () => {
   const originalFetch = global.fetch;
   const requested = [];

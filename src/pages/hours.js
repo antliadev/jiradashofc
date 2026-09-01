@@ -185,12 +185,19 @@ function cardBreakdown(entries) {
 function renderHoursBreakdown(report) {
   const target = document.getElementById('hours-breakdown-bars');
   if (!target) return;
-  target.innerHTML = applicationBars(hoursBreakdownMode === 'card' ? cardBreakdown(report.entries) : report.byApplication);
+  target.innerHTML = applicationBars(hoursBreakdownItems(report));
   document.querySelectorAll('[data-hours-breakdown]').forEach(button => {
     const active = button.dataset.hoursBreakdown === hoursBreakdownMode;
     button.classList.toggle('active', active);
     button.setAttribute('aria-pressed', String(active));
   });
+}
+
+function hoursBreakdownItems(report) {
+  let items = cardBreakdown(report.entries);
+  if (hoursBreakdownMode === 'epic') items = report.byApplication;
+  if (hoursBreakdownMode === 'all') items = cardBreakdown(report.allEntries);
+  return items;
 }
 
 function monthlyBars(items) {
@@ -302,11 +309,12 @@ function renderReport(report) {
           <div class="hours-panel-heading">
           <div><h2>Distribuição das horas ${businessHelp('Regra da distribuição', 'Agrupa as horas por card ou por projeto, conforme o modo selecionado.')}</h2><span>Visualize todos os cards ou o consolidado executivo</span></div>
             <div class="hours-segmented" aria-label="Agrupamento das horas">
-              <button type="button" data-hours-breakdown="card" aria-pressed="true">Por card (${cardBreakdown(report.entries).length})</button>
-              <button type="button" data-hours-breakdown="epic" aria-pressed="false">Por projeto (${report.byApplication.length})</button>
+              <button type="button" data-hours-breakdown="card" class="${hoursBreakdownMode === 'card' ? 'active' : ''}" aria-pressed="${hoursBreakdownMode === 'card' ? 'true' : 'false'}">Por card (${cardBreakdown(report.entries).length})</button>
+              <button type="button" data-hours-breakdown="epic" class="${hoursBreakdownMode === 'epic' ? 'active' : ''}" aria-pressed="${hoursBreakdownMode === 'epic' ? 'true' : 'false'}">Por projeto (${report.byApplication.length})</button>
+              <button type="button" data-hours-breakdown="all" class="${hoursBreakdownMode === 'all' ? 'active' : ''}" aria-pressed="${hoursBreakdownMode === 'all' ? 'true' : 'false'}">Todos (${cardBreakdown(report.allEntries).length})</button>
             </div>
           </div>
-          <div id="hours-breakdown-bars">${applicationBars(cardBreakdown(report.entries))}</div>
+          <div id="hours-breakdown-bars">${applicationBars(hoursBreakdownItems(report))}</div>
         </article>
         <article class="hours-panel"><div class="hours-panel-heading"><h2>Consumo por mês ${businessHelp('Regra do histórico mensal', 'Exibe as horas utilizadas agrupadas por competência mensal, respeitando o modelo de cobrança do contrato.')}</h2><span>Histórico de horas utilizadas</span></div>${monthlyBars(report.monthlyHistory)}</article>
       </div>

@@ -132,7 +132,8 @@ test('Crawford aplica capacidade contratual por competencia em agosto e setembro
     { worklog_id: 'c3', issue_key: 'CRAWFORD-12', started_at: '2026-08-24T13:00:00.000Z', time_spent_seconds: 6 * 3600 },
     { worklog_id: 'c4', issue_key: 'CRAWFORD-12', started_at: '2026-08-25T07:49:00.000Z', time_spent_seconds: 6 * 3600 },
     { worklog_id: 'c5', issue_key: 'CRAWFORD-12', started_at: '2026-08-27T12:43:47.276Z', time_spent_seconds: 4 * 3600 },
-    { worklog_id: 'c6', issue_key: 'CRAWFORD-13', started_at: '2026-08-31T15:21:52.787Z', time_spent_seconds: 4 * 3600 }
+    { worklog_id: 'c6', issue_key: 'CRAWFORD-13', started_at: '2026-08-31T15:21:52.787Z', time_spent_seconds: 4 * 3600 },
+    { worklog_id: 'c7', issue_key: 'CRAWFORD-13', started_at: '2026-10-02T15:00:00.000Z', time_spent_seconds: 2 * 3600 }
   ];
   const issues = [
     { issue_key: 'CRAWFORD-10', project_key: 'CRAWFORD', title: 'Entendimento tecnico' },
@@ -142,6 +143,7 @@ test('Crawford aplica capacidade contratual por competencia em agosto e setembro
 
   const august = buildProjectHoursDashboard(worklogs, issues, '2026-08', 'CRAWFORD');
   const september = buildProjectHoursDashboard(worklogs, issues, '2026-09', 'CRAWFORD');
+  const october = buildProjectHoursDashboard(worklogs, issues, '2026-10', 'CRAWFORD');
 
   assert.equal(august.allowanceHours, 100);
   assert.equal(august.usedHours, 24.5);
@@ -153,6 +155,10 @@ test('Crawford aplica capacidade contratual por competencia em agosto e setembro
   assert.equal(september.availableHours, 175.5);
   assert.equal(september.utilizationPercent, 0);
   assert.equal(september.monthlyHistory.some(item => item.competence === '2026-09' && item.allowanceHours === 200), true);
+  assert.equal(october.allowanceHours, 100);
+  assert.equal(october.usedHours, 2);
+  assert.equal(october.accountableUsedHours, 2);
+  assert.equal(october.availableHours, 98);
 });
 
 test('Docwise separa horas do mesmo card pela data do apontamento', () => {

@@ -14,6 +14,7 @@ let hoursBreakdownMode = 'card';
 let entriesPage = 1;
 let entriesPageSize = 10;
 let entriesSortDir = 'desc';
+let hoursRefreshMessage = '';
 
 function currentCompetence() {
   return new Intl.DateTimeFormat('sv-SE', {
@@ -281,10 +282,10 @@ function renderReport(report) {
           <label for="hours-competence">Competência
             <input type="month" id="hours-competence" value="${sanitize(report.competence)}" aria-label="Selecionar competência">
           </label>
-          <button class="btn btn-secondary" id="hours-refresh">Atualizar ${sanitize(currentProject.name)}</button>
+          <button class="btn btn-secondary" id="hours-refresh">Atualizar</button>
           <button class="btn btn-primary" id="hours-export" ${report.allEntries.length ? '' : 'disabled'}>Exportar planilha</button>
           <button class="btn btn-secondary" id="hours-export-pdf" ${report.allEntries.length ? '' : 'disabled'}>Exportar PDF</button>
-          <span class="hours-refresh-status" id="hours-refresh-status" aria-live="polite"></span>
+          <span class="hours-refresh-status ${hoursRefreshMessage ? 'success' : ''}" id="hours-refresh-status" aria-live="polite">${sanitize(hoursRefreshMessage)}</span>
         </div>
       </div>
 
@@ -451,18 +452,24 @@ async function refreshCurrentHoursProject() {
   const originalText = button.textContent;
   button.disabled = true;
   button.textContent = 'Atualizando...';
-  if (status) status.textContent = `Sincronizando somente ${currentProject.name} no Jira...`;
+  hoursRefreshMessage = '';
+  if (status) {
+    status.classList.remove('success');
+    status.textContent = `Sincronizando somente ${currentProject.name} no Jira...`;
+  }
 
   try {
     const sync = await dataService.startScopedJiraSync(hoursSyncScope(currentProject.key));
     const jobId = sync.jobId || sync.job?.id || sync.id;
     if (status) status.textContent = sync.alreadyRunning ? 'Sincronizacao em andamento. Aguardando conclusao...' : 'Sincronizacao iniciada. Aguardando conclusao...';
     await waitForSyncJob(jobId);
-    if (status) status.textContent = 'Dados atualizados. Recarregando relatorio...';
+    hoursRefreshMessage = 'Atualizado com sucesso.';
     entriesPage = 1;
     await loadReport(currentProject.key, currentReport?.competence);
   } catch (error) {
     console.error('[Hours] Falha ao atualizar dados do Jira:', error);
+    hoursRefreshMessage = '';
+    if (status) status.classList.remove('success');
     if (status) status.textContent = error.message || 'Nao foi possivel atualizar os dados do Jira.';
   } finally {
     button.disabled = false;
@@ -485,6 +492,7 @@ export function renderHours(options = {}) {
   const requestedKey = String(options.projectKey || 'CRAWFORD').toUpperCase();
   currentProject = HOURS_PROJECTS[requestedKey] || HOURS_PROJECTS.CRAWFORD;
   hoursBreakdownMode = 'card';
+  hoursRefreshMessage = '';
   entriesPage = 1;
   const header = document.getElementById('page-header');
   if (header) header.innerHTML = `<div><h2>Controle de Horas</h2><div class="subtitle">${sanitize(currentProject.name)} · dados automáticos do Jira</div></div>`;

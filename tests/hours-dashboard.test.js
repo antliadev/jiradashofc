@@ -148,8 +148,10 @@ test('Crawford aplica capacidade contratual por competencia em agosto e setembro
   assert.equal(august.availableHours, 75.5);
   assert.equal(september.allowanceHours, 200);
   assert.equal(september.periodUsedHours, 0);
-  assert.equal(september.usedHours, 24.5);
+  assert.equal(september.usedHours, 0);
+  assert.equal(september.accountableUsedHours, 24.5);
   assert.equal(september.availableHours, 175.5);
+  assert.equal(september.utilizationPercent, 0);
   assert.equal(september.monthlyHistory.some(item => item.competence === '2026-09' && item.allowanceHours === 200), true);
 });
 

@@ -132,6 +132,28 @@ function renderError(error, competence) {
   document.getElementById('hours-retry')?.addEventListener('click', () => loadReport(currentProject.key, competence));
 }
 
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function waitForSyncJob(jobId) {
+  if (!jobId) return null;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const status = await dataService.getSyncStatus(jobId);
+    const current = status?.status || status?.lastSyncStatus;
+    if (['success', 'completed'].includes(current)) return status;
+    if (['error', 'failed'].includes(current)) {
+      throw new Error(status.error || status.lastSyncError || 'Sincronizacao do Jira falhou.');
+    }
+    await sleep(4000);
+  }
+  throw new Error('Sincronizacao iniciada, mas nao terminou dentro da janela de acompanhamento.');
+}
+
+function hoursSyncScope(projectKey) {
+  return { hoursProjectKey: projectKey };
+}
+
 function applicationBars(items) {
   if (!items.length) return '<div class="hours-inline-empty">Nenhum projeto com horas nesta competência.</div>';
   const max = Math.max(...items.map(item => number(item.hours)), 1);
@@ -259,8 +281,10 @@ function renderReport(report) {
           <label for="hours-competence">Competência
             <input type="month" id="hours-competence" value="${sanitize(report.competence)}" aria-label="Selecionar competência">
           </label>
+          <button class="btn btn-secondary" id="hours-refresh">Atualizar ${sanitize(currentProject.name)}</button>
           <button class="btn btn-primary" id="hours-export" ${report.allEntries.length ? '' : 'disabled'}>Exportar planilha</button>
           <button class="btn btn-secondary" id="hours-export-pdf" ${report.allEntries.length ? '' : 'disabled'}>Exportar PDF</button>
+          <span class="hours-refresh-status" id="hours-refresh-status" aria-live="polite"></span>
         </div>
       </div>
 
@@ -293,6 +317,7 @@ function renderReport(report) {
     </section>`;
 
   document.getElementById('hours-competence')?.addEventListener('change', event => loadReport(currentProject.key, event.target.value));
+  document.getElementById('hours-refresh')?.addEventListener('click', refreshCurrentHoursProject);
   document.getElementById('hours-export')?.addEventListener('click', exportWorkbook);
   document.getElementById('hours-export-pdf')?.addEventListener('click', exportPdf);
   bindEntriesControls();
@@ -415,6 +440,33 @@ async function exportPdf() {
   } finally {
     button.disabled = false;
     button.textContent = 'Exportar PDF';
+  }
+}
+
+async function refreshCurrentHoursProject() {
+  const button = document.getElementById('hours-refresh');
+  const status = document.getElementById('hours-refresh-status');
+  if (!button) return;
+
+  const originalText = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Atualizando...';
+  if (status) status.textContent = `Sincronizando somente ${currentProject.name} no Jira...`;
+
+  try {
+    const sync = await dataService.startScopedJiraSync(hoursSyncScope(currentProject.key));
+    const jobId = sync.jobId || sync.job?.id || sync.id;
+    if (status) status.textContent = sync.alreadyRunning ? 'Sincronizacao em andamento. Aguardando conclusao...' : 'Sincronizacao iniciada. Aguardando conclusao...';
+    await waitForSyncJob(jobId);
+    if (status) status.textContent = 'Dados atualizados. Recarregando relatorio...';
+    entriesPage = 1;
+    await loadReport(currentProject.key, currentReport?.competence);
+  } catch (error) {
+    console.error('[Hours] Falha ao atualizar dados do Jira:', error);
+    if (status) status.textContent = error.message || 'Nao foi possivel atualizar os dados do Jira.';
+  } finally {
+    button.disabled = false;
+    button.textContent = originalText;
   }
 }
 

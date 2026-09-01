@@ -14,6 +14,7 @@
 .hours-actions input { display:block; min-width:165px; margin-top:6px; padding:9px 11px; color:var(--text-primary); color-scheme:dark; background:var(--bg-input); border:1px solid var(--border-light); border-radius:8px; }
 .hours-actions .btn { min-height:37px; }
 .hours-actions .btn:disabled { opacity:.45; cursor:not-allowed; }
+.hours-refresh-status { flex-basis:100%; min-height:16px; color:var(--text-secondary); font-size:11px; text-align:right; }
 .hours-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
 .hours-kpi { min-height:124px; padding:20px; position:relative; overflow:visible; }
 .hours-kpi > .business-help { position:absolute; top:10px; right:10px; }
@@ -40,7 +41,7 @@
 .hours-pagination > div { display:flex; gap:8px; }
 .hours-loading,.hours-state { min-height:320px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; text-align:center; padding:32px; border:1px dashed var(--border-light); border-radius:12px; color:var(--text-secondary); }.hours-loading .spinner { margin:0; }.hours-state h3 { color:var(--text-primary); }.hours-state p { max-width:580px; }.hours-error { border-color:rgba(239,68,68,.35); }.hours-inline-empty { min-height:180px; display:flex; align-items:center; justify-content:center; text-align:center; color:var(--text-muted); }
 @media(max-width:1100px){.hours-kpis{grid-template-columns:repeat(2,1fr)}.hours-chart-grid{grid-template-columns:1fr}.hours-toolbar{align-items:flex-start;flex-direction:column}.hours-actions{width:100%}}
-@media(max-width:640px){.hours-kpis{grid-template-columns:1fr}.hours-report-intro{align-items:flex-start;flex-direction:column;width:100%}.hours-client-brand{box-sizing:border-box;flex-basis:auto;width:100%}.hours-client-logo{height:56px}.hours-actions,.hours-actions label,.hours-actions input,.hours-actions .btn{width:100%}.hours-toolbar{padding:18px}.hours-toolbar h1{font-size:22px}.hours-bar-row{grid-template-columns:minmax(0,1fr) 72px}.hours-bar-track{display:none}.hours-panel{padding:15px}.hours-panel-heading{align-items:flex-start;flex-direction:column}.hours-segmented{box-sizing:border-box;width:100%}.hours-segmented button{flex:1}.hours-pagination{align-items:stretch;flex-direction:column}.hours-pagination>div{width:100%}.hours-pagination .btn{flex:1}}
+@media(max-width:640px){.hours-kpis{grid-template-columns:1fr}.hours-report-intro{align-items:flex-start;flex-direction:column;width:100%}.hours-client-brand{box-sizing:border-box;flex-basis:auto;width:100%}.hours-client-logo{height:56px}.hours-actions,.hours-actions label,.hours-actions input,.hours-actions .btn{width:100%}.hours-refresh-status{text-align:left}.hours-toolbar{padding:18px}.hours-toolbar h1{font-size:22px}.hours-bar-row{grid-template-columns:minmax(0,1fr) 72px}.hours-bar-track{display:none}.hours-panel{padding:15px}.hours-panel-heading{align-items:flex-start;flex-direction:column}.hours-segmented{box-sizing:border-box;width:100%}.hours-segmented button{flex:1}.hours-pagination{align-items:stretch;flex-direction:column}.hours-pagination>div{width:100%}.hours-pagination .btn{flex:1}}
 
 [data-theme="light"] .hours-toolbar,
 [data-theme="light"] .hours-panel,

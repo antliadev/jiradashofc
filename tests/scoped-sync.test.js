@@ -37,6 +37,21 @@ test('buildScopedJql escapa valores livres', () => {
   assert.match(jql, /summary ~ "x y z"/);
 });
 
+test('buildScopedJql filtra sincronizacao de horas Crawford sem atualizar todos os projetos', () => {
+  const jql = buildScopedJql({ hoursProjectKey: 'CRAWFORD' }, 'project is not EMPTY ORDER BY updated DESC');
+
+  assert.match(jql, /^\(project is not EMPTY\) AND/);
+  assert.match(jql, /\(project = "CRAWFORD"\)/);
+  assert.match(jql, /ORDER BY updated DESC$/);
+});
+
+test('buildScopedJql filtra sincronizacao de horas Docwise incluindo DOCW e P1 relacionado', () => {
+  const jql = buildScopedJql({ hoursProjectKey: 'DOCW' }, 'project is not EMPTY ORDER BY updated DESC');
+
+  assert.match(jql, /\(project = "DOCW" OR \(project = "P1" AND text ~ "Docwise"\)\)/);
+  assert.match(jql, /ORDER BY updated DESC$/);
+});
+
 test('buildScopedJql inclui cards ja exibidos ao atualizar monitoramento de atrasados', () => {
   const jql = buildScopedJql({
     overdue: true,

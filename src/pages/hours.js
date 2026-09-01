@@ -41,11 +41,13 @@ function number(value) {
 }
 
 function formatSeconds(totalSeconds) {
-  const normalized = Math.max(0, Math.round(number(totalSeconds)));
+  const signed = Math.round(number(totalSeconds));
+  const normalized = Math.abs(signed);
+  const sign = signed < 0 ? '-' : '';
   const hours = Math.floor(normalized / 3600);
   const minutes = Math.round((normalized % 3600) / 60);
-  if (minutes === 60) return `${hours + 1}:00hrs`;
-  return `${hours}:${String(minutes).padStart(2, '0')}hrs`;
+  if (minutes === 60) return `${sign}${hours + 1}:00hrs`;
+  return `${sign}${hours}:${String(minutes).padStart(2, '0')}hrs`;
 }
 
 function formatHours(value) {
@@ -66,10 +68,12 @@ function excelEntryDuration(entry) {
 }
 
 function durationTitleFromEntry(entry) {
-  const totalSeconds = Math.max(0, Math.round(number(entry.timeSeconds ?? number(entry.timeHours) * 3600)));
+  const signed = Math.round(number(entry.timeSeconds ?? number(entry.timeHours) * 3600));
+  const totalSeconds = Math.abs(signed);
+  const sign = signed < 0 ? '-' : '';
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
-  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  return `${sign}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
 function formatDate(value) {
@@ -157,12 +161,13 @@ function hoursSyncScope(projectKey) {
 
 function applicationBars(items) {
   if (!items.length) return '<div class="hours-inline-empty">Nenhum projeto com horas nesta competência.</div>';
-  const max = Math.max(...items.map(item => number(item.hours)), 1);
+  const max = Math.max(...items.map(item => Math.abs(number(item.hours))), 1);
   return items.map(item => {
-    const width = Math.max(2, number(item.hours) / max * 100);
+    const width = Math.max(2, Math.abs(number(item.hours)) / max * 100);
+    const tone = number(item.hours) < 0 ? ' negative' : '';
     return `<div class="hours-bar-row">
       <span title="${sanitize(item.name || 'Sem projeto')}">${sanitize(item.name || 'Sem projeto')}</span>
-      <div class="hours-bar-track"><i style="width:${width}%"></i></div>
+      <div class="hours-bar-track${tone}"><i style="width:${width}%"></i></div>
       <strong>${sanitize(formatHours(item.hours))}</strong>
     </div>`;
   }).join('');

@@ -5,6 +5,7 @@ import {
   buildCrawfordHoursDashboard,
   capacityStatus,
   competenceFromStarted,
+  parseDocwiseAdjustmentIssue,
   validateCompetence
 } from '../lib/hoursDashboardService.js';
 import {
@@ -149,6 +150,67 @@ test('Docwise separa horas do mesmo card pela data do apontamento', () => {
   assert.equal(september.usedHours, 13);
   assert.deepEqual(september.entries.map(entry => entry.monthYear), ['2026-09']);
   assert.equal(september.allEntries.length, 3);
+});
+
+test('Docwise reconcilia ajustes historicos sem duplicar worklogs legados', () => {
+  const issues = [
+    {
+      issue_key: 'P1-802',
+      project_key: 'P1',
+      title: 'Docwise_WorkspaceCreator_Container_RF-013',
+      parent_title: 'Docwise - Workspace Creator',
+      jira_url: 'https://example.test/browse/P1-802'
+    },
+    {
+      issue_key: 'P1-805',
+      project_key: 'P1',
+      title: 'Docwise_WorkspaceCreator_Desenvolvimento_RF-013',
+      parent_key: 'P1-802',
+      parent_title: 'Docwise_WorkspaceCreator_Container_RF-013'
+    },
+    {
+      issue_key: 'P1-1808',
+      project_key: 'P1',
+      title: 'Docwise_WorkspaceCreator_Windows_Service',
+      parent_title: 'Docwise - Workspace Creator'
+    },
+    {
+      issue_key: 'DOCW-33',
+      project_key: 'DOCW',
+      status_name: 'Concluído',
+      title: '[AJUSTE DOCWISE +] P1-802 2024-09 20h00m00s - Docwise_WorkspaceCreator_Container_RF-013'
+    },
+    {
+      issue_key: 'DOCW-26',
+      project_key: 'DOCW',
+      status_name: 'Tarefas pendentes',
+      title: '[DUPLICADO-IGNORAR] [AJUSTE DOCWISE +] P1-802 2024-09 20h00m00s - Docwise_WorkspaceCreator_Container_RF-013'
+    },
+    {
+      issue_key: 'DOCW-61',
+      project_key: 'DOCW',
+      status_name: 'Concluído',
+      title: '[AJUSTE DOCWISE -] P1-1808 2026-08 -6h00m00s - Docwise_WorkspaceCreator_Windows_Service'
+    }
+  ];
+  const worklogs = [
+    { worklog_id: '10091', issue_key: 'P1-805', started_at: '2024-09-16T13:00:00.000Z', time_spent_seconds: 20 * 3600 },
+    { worklog_id: 'keep-1', issue_key: 'P1-1808', started_at: '2026-08-04T14:00:00.000Z', time_spent_seconds: 6 * 3600 }
+  ];
+
+  const september2024 = buildProjectHoursDashboard(worklogs, issues, '2024-09', 'DOCW');
+  const august2026 = buildProjectHoursDashboard(worklogs, issues, '2026-08', 'DOCW');
+
+  assert.equal(parseDocwiseAdjustmentIssue(issues[3]).time_spent_seconds, 20 * 3600);
+  assert.equal(parseDocwiseAdjustmentIssue(issues[4]), null);
+  assert.equal(parseDocwiseAdjustmentIssue(issues[5]), null);
+  assert.equal(september2024.periodUsedHours, 20);
+  assert.equal(september2024.entries.length, 1);
+  assert.equal(september2024.entries[0].ticket, 'P1-802');
+  assert.equal(september2024.entries[0].reconciliation.adjustmentIssueKey, 'DOCW-33');
+  assert.equal(august2026.periodUsedHours, 6);
+  assert.equal(august2026.usedHours, 26);
+  assert.equal(august2026.entries[0].ticket, 'P1-1808');
 });
 
 test('fallback consulta apenas worklogs Crawford e normaliza tickets do banco', async () => {

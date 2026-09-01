@@ -41,7 +41,7 @@ test('dashboard agrupa por competencia e epic/aplicacao sem solicitante', () => 
   ];
   const result = buildCrawfordHoursDashboard(worklogs, issues, '2026-08');
   assert.equal(result.capacity.usedHours, 1.5);
-  assert.equal(result.capacity.availableHours, 198.5);
+  assert.equal(result.capacity.availableHours, 98.5);
   assert.deepEqual(result.hoursByApplication, [{ application: 'Integracao API', name: 'Integracao API', seconds: 5400, hours: 1.5 }]);
   assert.equal(result.details[0].activityDescription, 'Validacao');
   assert.equal(result.monthlyConsumption.length, 2);
@@ -122,7 +122,35 @@ test('Docwise acumula consumo entre competencias e Crawford reinicia mensalmente
   assert.equal(docwiseJuly.usedHours, 10);
   assert.equal(crawfordAugust.billingMode, 'monthly');
   assert.equal(crawfordAugust.usedHours, 5);
-  assert.equal(crawfordAugust.availableHours, 195);
+  assert.equal(crawfordAugust.availableHours, 95);
+});
+
+test('Crawford aplica capacidade contratual por competencia em agosto e setembro de 2026', () => {
+  const worklogs = [
+    { worklog_id: 'c1', issue_key: 'CRAWFORD-10', started_at: '2026-08-18T14:00:00.000Z', time_spent_seconds: 30 * 60 },
+    { worklog_id: 'c2', issue_key: 'CRAWFORD-10', started_at: '2026-08-20T16:21:00.000Z', time_spent_seconds: 4 * 3600 },
+    { worklog_id: 'c3', issue_key: 'CRAWFORD-12', started_at: '2026-08-24T13:00:00.000Z', time_spent_seconds: 6 * 3600 },
+    { worklog_id: 'c4', issue_key: 'CRAWFORD-12', started_at: '2026-08-25T07:49:00.000Z', time_spent_seconds: 6 * 3600 },
+    { worklog_id: 'c5', issue_key: 'CRAWFORD-12', started_at: '2026-08-27T12:43:47.276Z', time_spent_seconds: 4 * 3600 },
+    { worklog_id: 'c6', issue_key: 'CRAWFORD-13', started_at: '2026-08-31T15:21:52.787Z', time_spent_seconds: 4 * 3600 }
+  ];
+  const issues = [
+    { issue_key: 'CRAWFORD-10', project_key: 'CRAWFORD', title: 'Entendimento tecnico' },
+    { issue_key: 'CRAWFORD-12', project_key: 'CRAWFORD', title: 'Recepcao e indexacao' },
+    { issue_key: 'CRAWFORD-13', project_key: 'CRAWFORD', title: 'Ajustes setembro' }
+  ];
+
+  const august = buildProjectHoursDashboard(worklogs, issues, '2026-08', 'CRAWFORD');
+  const september = buildProjectHoursDashboard(worklogs, issues, '2026-09', 'CRAWFORD');
+
+  assert.equal(august.allowanceHours, 100);
+  assert.equal(august.usedHours, 24.5);
+  assert.equal(august.availableHours, 75.5);
+  assert.equal(september.allowanceHours, 200);
+  assert.equal(september.periodUsedHours, 0);
+  assert.equal(september.usedHours, 24.5);
+  assert.equal(september.availableHours, 175.5);
+  assert.equal(september.monthlyHistory.some(item => item.competence === '2026-09' && item.allowanceHours === 200), true);
 });
 
 test('Docwise separa horas do mesmo card pela data do apontamento', () => {

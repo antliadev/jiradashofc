@@ -51,6 +51,9 @@ test('dashboard agrupa por competencia e epic/aplicacao sem solicitante', () => 
   assert.equal(result.monthlyHistory[0].usedHours, 1.5);
   assert.equal(result.entries[0].description, 'Validacao');
   assert.equal(result.entries[0].timeSeconds, 5400);
+  assert.equal(result.entries.length, 1);
+  assert.equal(result.allEntries.length, 2);
+  assert.deepEqual(result.allEntries.map(entry => entry.monthYear), ['2026-09', '2026-08']);
   assert.equal(result.totalProjectCards, 3);
   assert.equal(result.cardsWithWorklog, 1);
   assert.equal(result.cardsWithoutWorklog.length, 2);

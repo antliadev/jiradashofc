@@ -11,6 +11,9 @@ const TIME_ZONE = 'America/Sao_Paulo';
 let currentReport = null;
 let currentProject = HOURS_PROJECTS.CRAWFORD;
 let hoursBreakdownMode = 'card';
+let entriesPage = 1;
+let entriesPageSize = 10;
+let entriesSortDir = 'desc';
 
 function currentCompetence() {
   return new Intl.DateTimeFormat('sv-SE', {
@@ -87,6 +90,7 @@ function alertInfo(level, utilization) {
 function reportModel(payload, competence, projectKey) {
   const usedHours = number(payload.usedHours);
   const allowanceHours = number(payload.allowanceHours || 100);
+  const entries = Array.isArray(payload.entries) ? payload.entries : [];
   const utilizationPercent = number(payload.utilizationPercent ?? (allowanceHours ? usedHours / allowanceHours * 100 : 0));
   return {
     ...payload,
@@ -101,7 +105,8 @@ function reportModel(payload, competence, projectKey) {
     utilizationPercent,
     byApplication: Array.isArray(payload.byApplication) ? payload.byApplication : [],
     monthlyHistory: Array.isArray(payload.monthlyHistory) ? payload.monthlyHistory : [],
-    entries: Array.isArray(payload.entries) ? payload.entries : [],
+    entries,
+    allEntries: Array.isArray(payload.allEntries) ? payload.allEntries : entries,
     totalProjectCards: number(payload.totalProjectCards),
     cardsWithWorklog: number(payload.cardsWithWorklog),
     cardsWithoutWorklog: Array.isArray(payload.cardsWithoutWorklog) ? payload.cardsWithoutWorklog : []
@@ -128,12 +133,12 @@ function renderError(error, competence) {
 }
 
 function applicationBars(items) {
-  if (!items.length) return '<div class="hours-inline-empty">Nenhuma aplicação ou épico com horas nesta competência.</div>';
+  if (!items.length) return '<div class="hours-inline-empty">Nenhum projeto com horas nesta competência.</div>';
   const max = Math.max(...items.map(item => number(item.hours)), 1);
   return items.map(item => {
     const width = Math.max(2, number(item.hours) / max * 100);
     return `<div class="hours-bar-row">
-      <span title="${sanitize(item.name || 'Sem aplicação')}">${sanitize(item.name || 'Sem aplicação')}</span>
+      <span title="${sanitize(item.name || 'Sem projeto')}">${sanitize(item.name || 'Sem projeto')}</span>
       <div class="hours-bar-track"><i style="width:${width}%"></i></div>
       <strong>${sanitize(formatHours(item.hours))}</strong>
     </div>`;
@@ -179,45 +184,56 @@ function monthlyBars(items) {
   }).join('')}</div>`;
 }
 
+function jiraTicketLink(entry) {
+  const ticket = sanitize(entry.ticket || '—');
+  if (!entry.jiraUrl) return `<strong>${ticket}</strong>`;
+  return `<a href="${sanitize(entry.jiraUrl)}" target="_blank" rel="noopener noreferrer"><strong>${ticket}</strong></a>`;
+}
+
+function sortedEntries(entries) {
+  const direction = entriesSortDir === 'asc' ? 1 : -1;
+  return [...entries].sort((left, right) => {
+    const monthCompare = String(left.monthYear || '').localeCompare(String(right.monthYear || ''), 'pt-BR');
+    if (monthCompare) return monthCompare * direction;
+    return (new Date(left.date).getTime() - new Date(right.date).getTime()) * direction;
+  });
+}
+
 function entriesTable(entries) {
   if (!entries.length) {
     return `<div class="hours-state hours-empty">
-      <h3>Nenhum apontamento em ${sanitize(competenceLabel(currentReport.competence))}</h3>
-      <p>Registre worklogs nos cards ${sanitize(currentProject.name)} para que o consumo seja calculado automaticamente.</p>
+      <h3>Nenhum apontamento encontrado</h3>
+      <p>Registre worklogs nos cards ${sanitize(currentProject.name)} para que o histórico seja calculado automaticamente.</p>
     </div>`;
   }
+  const sorted = sortedEntries(entries);
+  const totalPages = Math.max(1, Math.ceil(sorted.length / entriesPageSize));
+  entriesPage = Math.min(Math.max(1, entriesPage), totalPages);
+  const start = (entriesPage - 1) * entriesPageSize;
+  const visibleEntries = sorted.slice(start, start + entriesPageSize);
   return `<div class="hours-table-wrap"><table class="hours-table">
-    <thead><tr><th>Data</th><th>Ticket</th><th>Aplicativo / Épico</th><th>Descrição</th><th>Tempo</th><th>Mês/Ano</th></tr></thead>
-    <tbody>${entries.map(entry => `<tr>
+    <thead><tr><th>Data</th><th>Ticket</th><th>Projeto</th><th>Descrição</th><th>Tempo</th><th><button class="hours-sort-button" id="hours-sort-month" type="button">Mês/Ano ${entriesSortDir === 'asc' ? '↑' : '↓'}</button></th></tr></thead>
+    <tbody>${visibleEntries.map(entry => `<tr>
       <td>${sanitize(formatDate(entry.date))}</td>
-      <td><strong>${sanitize(entry.ticket || '—')}</strong></td>
-      <td>${sanitize(entry.application || 'Sem aplicação')}</td>
+      <td>${jiraTicketLink(entry)}</td>
+      <td>${sanitize(entry.application || 'Sem projeto')}</td>
       <td class="hours-description" title="${sanitize(entry.description || '')}">${sanitize(entry.description || '—')}</td>
       <td title="${sanitize(durationTitleFromEntry(entry))}">${sanitize(formatDuration(entry))}</td>
       <td>${sanitize(entry.monthYear || currentReport.competence)}</td>
     </tr>`).join('')}</tbody>
-  </table></div>`;
-}
-
-function cardsWithoutWorklogTable(cards) {
-  if (!cards.length) {
-    return '<div class="hours-inline-empty">Todos os cards do projeto possuem apontamento nesta competência.</div>';
-  }
-  return `<div class="hours-table-wrap"><table class="hours-table">
-    <thead><tr><th>Ticket</th><th>Descrição</th><th>Status</th><th>Última atualização</th></tr></thead>
-    <tbody>${cards.map(card => {
-      const ticket = sanitize(card.ticket || '—');
-      const ticketCell = card.jiraUrl
-        ? `<a href="${sanitize(card.jiraUrl)}" target="_blank" rel="noopener noreferrer">${ticket}</a>`
-        : ticket;
-      return `<tr>
-      <td><strong>${ticketCell}</strong></td>
-      <td class="hours-description" title="${sanitize(card.title || '')}">${sanitize(card.title || '—')}</td>
-      <td>${sanitize(card.status || '—')}</td>
-      <td>${sanitize(formatDate(card.updatedAt))}</td>
-    </tr>`;
-    }).join('')}</tbody>
-  </table></div>`;
+  </table></div>
+  <div class="hours-pagination">
+    <label>Exibir
+      <select id="hours-page-size">
+        ${[10, 50, 100].map(size => `<option value="${size}" ${entriesPageSize === size ? 'selected' : ''}>${size}</option>`).join('')}
+      </select>
+    </label>
+    <span>Mostrando ${start + 1}-${Math.min(start + entriesPageSize, sorted.length)} de ${sorted.length}</span>
+    <div>
+      <button class="btn btn-secondary btn-sm" id="hours-prev-page" ${entriesPage <= 1 ? 'disabled' : ''}>Anterior</button>
+      <button class="btn btn-secondary btn-sm" id="hours-next-page" ${entriesPage >= totalPages ? 'disabled' : ''}>Próxima</button>
+    </div>
+  </div>`;
 }
 
 function renderReport(report) {
@@ -243,7 +259,8 @@ function renderReport(report) {
           <label for="hours-competence">Competência
             <input type="month" id="hours-competence" value="${sanitize(report.competence)}" aria-label="Selecionar competência">
           </label>
-          <button class="btn btn-primary" id="hours-export" ${report.entries.length ? '' : 'disabled'}>Exportar planilha</button>
+          <button class="btn btn-primary" id="hours-export" ${report.allEntries.length ? '' : 'disabled'}>Exportar planilha</button>
+          <button class="btn btn-secondary" id="hours-export-pdf" ${report.allEntries.length ? '' : 'disabled'}>Exportar PDF</button>
         </div>
       </div>
 
@@ -258,10 +275,10 @@ function renderReport(report) {
       <div class="hours-chart-grid">
         <article class="hours-panel">
           <div class="hours-panel-heading">
-            <div><h2>Distribuição das horas ${businessHelp('Regra da distribuição', 'Agrupa as horas por card ou por aplicação/épico, conforme o modo selecionado.')}</h2><span>Visualize todos os cards ou o consolidado executivo</span></div>
+          <div><h2>Distribuição das horas ${businessHelp('Regra da distribuição', 'Agrupa as horas por card ou por projeto, conforme o modo selecionado.')}</h2><span>Visualize todos os cards ou o consolidado executivo</span></div>
             <div class="hours-segmented" aria-label="Agrupamento das horas">
               <button type="button" data-hours-breakdown="card" aria-pressed="true">Por card (${cardBreakdown(report.entries).length})</button>
-              <button type="button" data-hours-breakdown="epic" aria-pressed="false">Por épico (${report.byApplication.length})</button>
+              <button type="button" data-hours-breakdown="epic" aria-pressed="false">Por projeto (${report.byApplication.length})</button>
             </div>
           </div>
           <div id="hours-breakdown-bars">${applicationBars(cardBreakdown(report.entries))}</div>
@@ -270,22 +287,40 @@ function renderReport(report) {
       </div>
 
       <article class="hours-panel hours-detail-panel">
-        <div class="hours-panel-heading"><h2>Detalhamento dos apontamentos</h2><span>${report.entries.length} registro${report.entries.length === 1 ? '' : 's'} nesta competência</span></div>
-        ${entriesTable(report.entries)}
-      </article>
-
-      <article class="hours-panel hours-detail-panel">
-        <div class="hours-panel-heading"><h2>Cards sem apontamento na competência</h2><span>${report.cardsWithoutWorklog.length} card${report.cardsWithoutWorklog.length === 1 ? '' : 's'} sem horas registradas</span></div>
-        ${cardsWithoutWorklogTable(report.cardsWithoutWorklog)}
+        <div class="hours-panel-heading"><h2>Detalhamento dos apontamentos</h2><span>${report.allEntries.length} registro${report.allEntries.length === 1 ? '' : 's'} no histórico</span></div>
+        ${entriesTable(report.allEntries)}
       </article>
     </section>`;
 
   document.getElementById('hours-competence')?.addEventListener('change', event => loadReport(currentProject.key, event.target.value));
   document.getElementById('hours-export')?.addEventListener('click', exportWorkbook);
+  document.getElementById('hours-export-pdf')?.addEventListener('click', exportPdf);
+  bindEntriesControls();
   document.querySelectorAll('[data-hours-breakdown]').forEach(button => button.addEventListener('click', () => {
     hoursBreakdownMode = button.dataset.hoursBreakdown;
     renderHoursBreakdown(report);
   }));
+}
+
+function bindEntriesControls() {
+  document.getElementById('hours-page-size')?.addEventListener('change', event => {
+    entriesPageSize = Number(event.target.value) || 10;
+    entriesPage = 1;
+    renderReport(currentReport);
+  });
+  document.getElementById('hours-prev-page')?.addEventListener('click', () => {
+    entriesPage = Math.max(1, entriesPage - 1);
+    renderReport(currentReport);
+  });
+  document.getElementById('hours-next-page')?.addEventListener('click', () => {
+    entriesPage += 1;
+    renderReport(currentReport);
+  });
+  document.getElementById('hours-sort-month')?.addEventListener('click', () => {
+    entriesSortDir = entriesSortDir === 'asc' ? 'desc' : 'asc';
+    entriesPage = 1;
+    renderReport(currentReport);
+  });
 }
 
 function excelSafe(value) {
@@ -309,7 +344,7 @@ function styleWorksheet(sheet, widths) {
 }
 
 async function exportWorkbook() {
-  if (!currentReport?.entries?.length) return;
+  if (!currentReport?.allEntries?.length) return;
   const button = document.getElementById('hours-export');
   button.disabled = true;
   button.textContent = 'Gerando…';
@@ -321,9 +356,9 @@ async function exportWorkbook() {
     workbook.created = new Date();
 
     const description = workbook.addWorksheet('Descricao');
-    description.addRow(['DATA', 'TICKET', 'APLICATIVO', 'DESCRIÇÃO DA ATUAÇÃO', 'TEMPO', 'MES/ANO']);
-    currentReport.entries.forEach(entry => description.addRow([
-      formatDate(entry.date), excelSafe(entry.ticket), excelSafe(entry.application || 'Sem aplicação'),
+    description.addRow(['DATA', 'TICKET', 'PROJETO', 'DESCRIÇÃO DA ATUAÇÃO', 'TEMPO', 'MES/ANO']);
+    currentReport.allEntries.forEach(entry => description.addRow([
+      formatDate(entry.date), excelSafe(entry.ticket), excelSafe(entry.application || 'Sem projeto'),
       excelSafe(entry.description), excelEntryDuration(entry),
       excelSafe(entry.monthYear || currentReport.competence)
     ]));
@@ -361,6 +396,28 @@ async function exportWorkbook() {
   }
 }
 
+async function exportPdf() {
+  if (!currentReport?.allEntries?.length) return;
+  const button = document.getElementById('hours-export-pdf');
+  button.disabled = true;
+  button.textContent = 'Gerando PDF...';
+  try {
+    const { default: html2canvas } = await import('html2canvas');
+    const { jsPDF } = await import('jspdf');
+    const element = document.querySelector('.hours-page');
+    const canvas = await html2canvas(element, { backgroundColor: '#0f1117', scale: Math.min(2, window.devicePixelRatio || 1), useCORS: true });
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [canvas.width, canvas.height] });
+    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, canvas.width, canvas.height);
+    pdf.save(`Relatorio-Horas-${currentReport.projectKey}-${currentReport.competence}.pdf`);
+  } catch (error) {
+    console.error('[Hours] Falha ao exportar PDF:', error);
+    window.alert('Não foi possível gerar o PDF. Tente novamente.');
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Exportar PDF';
+  }
+}
+
 async function loadReport(projectKey, competence) {
   const normalized = normalizeCompetence(competence);
   renderLoading(normalized);
@@ -376,6 +433,7 @@ export function renderHours(options = {}) {
   const requestedKey = String(options.projectKey || 'CRAWFORD').toUpperCase();
   currentProject = HOURS_PROJECTS[requestedKey] || HOURS_PROJECTS.CRAWFORD;
   hoursBreakdownMode = 'card';
+  entriesPage = 1;
   const header = document.getElementById('page-header');
   if (header) header.innerHTML = `<div><h2>Controle de Horas</h2><div class="subtitle">${sanitize(currentProject.name)} · dados automáticos do Jira</div></div>`;
   const hashQuery = window.location.hash.split('?')[1] || '';

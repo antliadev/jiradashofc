@@ -691,7 +691,7 @@ function getBaseMonitoringRows(mode) {
     .map(card => buildMonitoringRow(card));
 }
 
-export function getMonitoringFilterOptions(rows, mode) {
+export function getMonitoringFilterOptions(rows, _mode) {
   const projects = countRowsBy(rows, 'projectId')
     .map(item => ({
       value: item.value,

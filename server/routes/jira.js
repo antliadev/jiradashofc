@@ -10,6 +10,7 @@
  *  - dashboard/issues/etc → lê do Supabase (nunca do Jira diretamente)
  */
 import express from 'express';
+import sprintReviewRoutes from './sprint-review.js';
 import { configService } from '../../lib/configService.js';
 import { checkSupabaseConfig, supabase, supabaseKeyIsPrivileged } from '../../lib/supabaseServer.js';
 import {
@@ -28,6 +29,7 @@ import { createSyncJob, createSyncJobFromEnv, createScopedSyncJobFromEnv, getSyn
 import { fetchHoursDashboard } from '../../lib/hoursDashboardService.js';
 
 const router = express.Router();
+router.use('/sprint-review', sprintReviewRoutes);
 
 router.get('/system/status', async (req, res) => {
   const supabaseConfig = checkSupabaseConfig();

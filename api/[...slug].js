@@ -7,9 +7,12 @@
  */
 import app from '../server/index.js';
 import { waitUntil } from '@vercel/functions';
+import { normalizePngBody } from '../lib/binaryRequest.js';
 
-export default function handler(req, res) {
+export default async function handler(req, res) {
   req.waitUntil = waitUntil;
+  try { await normalizePngBody(req); }
+  catch (error) { return res.status(error.status || 400).json({ error: error.message }); }
 
   // Para requisições JSON não-GET, garante que req.body seja um objeto válido
   // ANTES do middleware express.json() do Express ser executado.

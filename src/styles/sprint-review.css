@@ -1,0 +1,51 @@
+.sprint-review { --border-color: var(--border); display: grid; gap: 20px; min-width: 0; }
+.sprint-review fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.sr-panel { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 22px; min-width: 0; }
+.sr-panel > summary { cursor: pointer; font-weight: 600; }
+.sr-panel p { margin: 10px 0; }
+.sr-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 14px; margin: 14px 0; }
+.sr-toolbar, .sr-tabs { display: flex; gap: 12px; flex-wrap: wrap; align-items: end; margin: 12px 0; }
+.sprint-review label { display: grid; gap: 6px; font-size: 14px; }
+.sprint-review input:not([type=checkbox]), .sprint-review select, .sprint-review textarea { width: 100%; min-width: 0; max-width: 100%; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; padding: 10px; font: inherit; }
+.sr-toolbar > label { flex: 1 1 190px; }
+.sprint-review .sr-check { display: inline-flex; align-items: center; gap: 8px; margin: 10px 10px 10px 0; }
+.sprint-review .sr-check input { width: auto; }
+.sr-preflight { border-left: 3px solid #5b83ad; padding: 9px 12px; margin: 8px 0; overflow-wrap: anywhere; }
+.sr-warning { border-color: #d89a28; }
+.sr-error { border-color: #d54a48; color: var(--danger, #db6565); }
+.sr-statement { margin: 20px 0; }
+.sr-evidence { border-bottom: 1px solid var(--border-color); padding: 16px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.sprint-review .table-container { overflow-x: auto; }
+.sprint-review td { vertical-align: top; min-width: 140px; max-width: 440px; overflow-wrap: anywhere; }
+.sprint-review dialog { color: var(--text-primary); background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px; padding: 24px; width: min(840px,90vw); max-height: 85vh; margin: auto; }
+.sprint-review dialog::backdrop { background: #0009; }
+.sr-slide-shell { overflow-x: auto; margin: 20px 0; }
+.sr-slide { box-sizing: border-box; width: 1600px; height: 900px; background: #fff; color: #173450; padding: 44px 64px; font-family: 'Segoe UI', sans-serif; display: grid; grid-template-rows: 148px 126px 1fr 72px; gap: 16px; overflow-wrap: anywhere; }
+.sr-slide * { box-sizing: border-box; }
+.sr-slide header { display: flex; justify-content: space-between; border-bottom: 3px solid #176393; gap: 24px; }
+.sr-slide header span { color: #347ea0; font-size: 17px; letter-spacing: 2px; }
+.sr-slide h1 { margin: 8px 0; font-size: 34px; line-height: 1.15; }
+.sr-slide h2 { margin: 6px 0; font-size: 23px; line-height: 1.2; }
+.sr-slide header b { font-size: 14px; max-width: 150px; }
+.sr-slide header > div { flex: 1; min-width: 0; }
+.sr-slide header aside { width: 160px; display: flex; flex-direction: column; align-items: end; gap: 7px; text-align: right; }
+.sr-slide-logo { width: 110px; height: 45px; object-fit: contain; }
+.sr-slide p { margin: 7px 0; line-height: 1.3; font-size: 23px; }
+.sr-slide-score { display: flex; align-items: center; gap: 26px; padding: 18px 28px; background: #e9f3f5; border-left: 8px solid #207a86; }
+.sr-slide-score > strong { font-size: 64px; }
+.sr-slide main { min-height: 0; }
+.sr-slide-columns, .sr-slide-row { display: grid; grid-template-columns: 2fr 1fr; gap: 30px; }
+.sr-slide-columns { height: 30px; color: #39738d; font-size: 18px; }
+.sr-slide-row { min-height: 86px; padding: 10px 0; border-bottom: 1px solid #d4e0e6; }
+.sr-slide-row p { font-size: 22px; }
+.sr-slide-row small { color: #506e80; font-size: 15px; }
+.sr-slide-row strong { font-size: 23px; }
+.sr-slide-statement { padding: 12px 0; border-bottom: 1px solid #d4e0e6; }
+.sr-slide-statement strong { font-size: 18px; color: #33718a; }
+.sr-slide-statement p { font-size: 20px; }
+.sr-slide footer { border-top: 2px solid #176393; padding-top: 10px; }
+.sr-slide footer p { font-size: 22px; }
+.sr-slide footer small { font-size: 16px; }
+.sr-export { position: absolute; left: -20000px; top: 0; }
+.sr-export .sr-slide-shell { overflow: visible; margin: 0; }
+@media (max-width: 600px) { .sr-panel { padding: 14px; } .sr-toolbar > label { flex-basis: 100%; } .sr-tabs button { flex: 1 1 100%; } }

@@ -162,7 +162,7 @@ function calcAnalystMetrics(user, filters = {}) {
     const due = cardEndDate(card) ? new Date(cardEndDate(card)) : null;
     return resolved && due ? resolved <= due : true;
   });
-  const overdue = cards.filter(isCardOverdue);
+  const overdue = cards.filter(card => isCardOverdue(card));
   const blocked = cards.filter(card => resolveStatusCategory(card.status) === StatusCategory.BLOCKED);
   const projects = [...new Set(cards.map(card => card.projectId).filter(Boolean))];
   const noDue = cards.filter(card => !cardEndDate(card));
@@ -685,7 +685,7 @@ function buildBuckets(cards, grouping, start, end) {
     label,
     cards: bucketCards,
     done: bucketCards.filter(card => resolveStatusCategory(card.status) === StatusCategory.DONE).length,
-    overdue: bucketCards.filter(isCardOverdue).length,
+    overdue: bucketCards.filter(card => isCardOverdue(card)).length,
     blocked: bucketCards.filter(card => resolveStatusCategory(card.status) === StatusCategory.BLOCKED).length,
     projects: new Set(bucketCards.map(card => card.projectId)).size,
   }));

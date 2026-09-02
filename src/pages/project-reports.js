@@ -85,7 +85,7 @@ function summarizeEpic(epic, projectCards) {
   const children = getEpicChildren(epic, projectCards).filter(card => !isCanceled(card));
   const done = children.filter(card => resolveStatusCategory(card.status) === StatusCategory.DONE).length;
   const blocked = children.filter(card => resolveStatusCategory(card.status) === StatusCategory.BLOCKED).length;
-  const overdue = children.filter(isCardOverdue).length;
+  const overdue = children.filter(card => isCardOverdue(card)).length;
   const starts = children.map(cardStartDate).filter(Boolean).map(value => new Date(value));
   const ends = children.map(cardEndDate).filter(Boolean).map(value => new Date(value));
   const progress = pct(done, children.length) || 0;
@@ -587,7 +587,7 @@ function renderDetailedReport() {
   const done = filtered.filter(card => resolveStatusCategory(card.status) === StatusCategory.DONE).length;
   const inProgress = filtered.filter(card => resolveStatusCategory(card.status) === StatusCategory.IN_PROGRESS).length;
   const blocked = filtered.filter(card => resolveStatusCategory(card.status) === StatusCategory.BLOCKED).length;
-  const overdue = filtered.filter(isCardOverdue).length;
+  const overdue = filtered.filter(card => isCardOverdue(card)).length;
   const epics = [...new Set(filtered.map(card => card.parentKey || card.epicKey).filter(Boolean))];
   const assignees = [...new Set(filtered.map(card => card.assigneeId).filter(Boolean))];
   const coverage = commentAvailability() ? pct(filtered.filter(card => classifyCommentHealth(card).key === 'healthy').length, filtered.length) : null;
@@ -635,7 +635,7 @@ function renderDetailedReport() {
                     <td>${doneCount} (${pct(doneCount, cards.length) || 0}%)</td>
                     <td>${cards.filter(card => resolveStatusCategory(card.status) === StatusCategory.IN_PROGRESS).length}</td>
                     <td>${cards.filter(card => resolveStatusCategory(card.status) === StatusCategory.BLOCKED).length}</td>
-                    <td>${cards.filter(isCardOverdue).length}</td>
+                    <td>${cards.filter(card => isCardOverdue(card)).length}</td>
                     <td>${formatDate(ends.length ? new Date(Math.max(...ends.map(date => date.getTime()))).toISOString() : null)}</td>
                   </tr>
                 `;

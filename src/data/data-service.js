@@ -870,7 +870,7 @@ class DataService {
     const inProgress = cards.filter(c => resolveStatusCategory(c.status) === StatusCategory.IN_PROGRESS).length;
     const blocked = cards.filter(c => resolveStatusCategory(c.status) === StatusCategory.BLOCKED).length;
     const todo = cards.filter(c => resolveStatusCategory(c.status) === StatusCategory.TODO).length;
-    const overdue = cards.filter(isCardOverdue).length;
+    const overdue = cards.filter(card => isCardOverdue(card)).length;
     const progress = calculateProjectProgress(cards);
     const health = calculateProjectHealth(cards);
     const team = [...new Set(cards.map(c => c.assigneeId).filter(Boolean))];
@@ -901,7 +901,7 @@ class DataService {
     if (filters.statusCategory) result = result.filter(c => resolveStatusCategory(c.status) === filters.statusCategory);
     if (filters.priority) result = result.filter(c => c.priority === filters.priority);
     if (filters.type) result = result.filter(c => c.type === filters.type);
-    if (filters.overdue) result = result.filter(isCardOverdue);
+    if (filters.overdue) result = result.filter(card => isCardOverdue(card));
     if (filters.search) {
       const q = filters.search.toLowerCase();
       result = result.filter(c =>
@@ -942,7 +942,7 @@ class DataService {
 
     const canceled = cards.filter(c => this.isCanceledStatus(c.status)).length;
     const inProgress = total - (done + canceled);
-    const overdue = cards.filter(isCardOverdue).length;
+    const overdue = cards.filter(card => isCardOverdue(card)).length;
     const blocked = cards.filter(c => resolveStatusCategory(c.status) === StatusCategory.BLOCKED).length;
     const projects = [...new Set(cards.map(c => c.projectId))];
     const storyPoints = cards.reduce((s, c) => s + (c.storyPoints || 0), 0);

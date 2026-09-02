@@ -219,6 +219,7 @@ export function toLocalDateOnly(value) {
 /**
  * Verifica se um card está atrasado.
  * Regra de negocio: somente data limite menor que hoje conta como atraso.
+ * Em filtros de arrays, usar card => isCardOverdue(card) para nao receber o indice como data.
  */
 export function isCardOverdue(card, todayReference = new Date()) {
   if (!card.dueDate) return false;
@@ -247,7 +248,7 @@ export function calculateProjectProgress(cards) {
 export function calculateProjectHealth(cards) {
   if (!cards || cards.length === 0) return ProjectHealth.HEALTHY;
   
-  const overdueCount = cards.filter(isCardOverdue).length;
+  const overdueCount = cards.filter(card => isCardOverdue(card)).length;
   const blockedCount = cards.filter(c => resolveStatusCategory(c.status) === StatusCategory.BLOCKED).length;
   const total = cards.length;
   

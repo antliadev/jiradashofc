@@ -207,7 +207,7 @@ export function buildDeliverables(cards) {
       .sort((a, b) => b - a);
     const completionPercentage = calculateCompletionPercentage(deliverable.tickets);
     const blocked = deliverable.tickets.filter(isBlocked).length;
-    const overdue = deliverable.tickets.filter(isCardOverdue).length;
+    const overdue = deliverable.tickets.filter(card => isCardOverdue(card)).length;
     const end = ends[0] ? toISODate(ends[0]) : null;
     const isDelayed = !!(end && toDate(end) < today && completionPercentage < 100);
 

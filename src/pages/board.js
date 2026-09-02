@@ -36,7 +36,7 @@ export function applyIssueViewFilters(cards, filters, lookups = {}) {
   if (filters.type) result = result.filter(card => card.type === filters.type);
   if (filters.dueDate) result = result.filter(card => card.dueDate && String(card.dueDate).slice(0, 10) <= filters.dueDate);
   if (filters.showBlocked) result = result.filter(card => resolveStatusCategory(card.status) === StatusCategory.BLOCKED);
-  if (filters.showOverdue) result = result.filter(isCardOverdue);
+  if (filters.showOverdue) result = result.filter(card => isCardOverdue(card));
   if (filters.showNoDate) result = result.filter(card => !card.dueDate);
   if (filters.showNoAnalyst) result = result.filter(card => !card.assigneeId || card.assigneeId === 'unassigned');
   if (filters.search) {
@@ -151,7 +151,7 @@ function renderIssueExplorer() {
   const cards = filteredCards();
   const blockedCards = baseCards.filter(card => resolveStatusCategory(card.status) === StatusCategory.BLOCKED);
   const blockedCount = blockedCards.length;
-  const overdueCount = baseCards.filter(isCardOverdue).length;
+  const overdueCount = baseCards.filter(card => isCardOverdue(card)).length;
   const affectedProjects = new Set(blockedCards.map(card => card.projectId)).size;
   content.innerHTML = `<section class="issue-control-panel" aria-label="Filtros e resumo das issues">
       ${filtersTemplate()}

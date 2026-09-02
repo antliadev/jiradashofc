@@ -924,6 +924,12 @@ input, select, textarea { font-family: inherit; }
   gap: 12px;
 }
 
+.health-card-filters { align-items: end; flex-wrap: wrap; }
+.health-card-filters > label { flex: 1 1 150px; min-width: 0; }
+.health-pagination, .health-pagination > div { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.health-weight-fields { display: flex; flex-wrap: wrap; gap: 12px; padding-top: 12px; }
+.health-weight-fields label { flex: 1 1 90px; }
+
 .report-toolbar {
   display: flex;
   flex-wrap: wrap;

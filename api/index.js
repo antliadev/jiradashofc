@@ -6,6 +6,7 @@
  * e normalizamos o body antes do processamento pelo Express.
  */
 import { waitUntil } from '@vercel/functions';
+import { normalizePngBody } from '../lib/binaryRequest.js';
 
 export default async function handler(req, res) {
   try {
@@ -17,6 +18,7 @@ export default async function handler(req, res) {
 
     // Sobrescreve o getter preguiçoso de body da Vercel com um acessor seguro
     const rawCt = req.headers['content-type'] || '';
+    await normalizePngBody(req);
     if (req.method !== 'GET' && req.method !== 'DELETE' && rawCt.startsWith('application/json')) {
       // Lê o corpo bruto da requisição com segurança
       let raw = null;
@@ -55,7 +57,7 @@ export default async function handler(req, res) {
 
     app(req, res);
   } catch (err) {
-    res.statusCode = 500;
+    res.statusCode = err.status || 500;
     res.setHeader('Content-Type', 'application/json');
     res.end(JSON.stringify({ error: err.message }));
   }

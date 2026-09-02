@@ -199,23 +199,36 @@ export function resolveStatusCategory(status, customMap = {}) {
   return customMap[normalized] || DEFAULT_STATUS_MAP[normalized] || StatusCategory.TODO;
 }
 
+export function toLocalDateOnly(value) {
+  if (!value) return null;
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null;
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+  }
+  if (typeof value === 'string') {
+    const dateOnly = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (dateOnly) {
+      return new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]));
+    }
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+}
+
 /**
  * Verifica se um card está atrasado.
- * Normaliza datas para início do dia UTC para evitar erros de timezone.
+ * Regra de negocio: somente data limite menor que hoje conta como atraso.
  */
-export function isCardOverdue(card) {
+export function isCardOverdue(card, todayReference = new Date()) {
   if (!card.dueDate) return false;
   const category = resolveStatusCategory(card.status);
   if (category === StatusCategory.DONE) return false;
-  
-  // Normalizar para startOfDay UTC — evita que timezone do browser mude o dia
-  const due = new Date(card.dueDate);
-  if (isNaN(due.getTime())) return false;
-  const dueDay = new Date(Date.UTC(due.getFullYear(), due.getMonth(), due.getDate()));
-  
-  const now = new Date();
-  const todayDay = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
-  
+
+  const dueDay = toLocalDateOnly(card.dueDate);
+  const todayDay = toLocalDateOnly(todayReference);
+  if (!dueDay || !todayDay) return false;
+
   return dueDay < todayDay;
 }
 

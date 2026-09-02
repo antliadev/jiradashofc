@@ -13,7 +13,7 @@ import {
   getJiraIssueUrl,
 } from '../utils/helpers.js';
 import { exportRowsWorkbook } from '../utils/excel-export.js';
-import { isCardOverdue, resolveStatusCategory, StatusCategory } from '../data/models.js';
+import { isCardOverdue, resolveStatusCategory, StatusCategory, toLocalDateOnly } from '../data/models.js';
 import { businessHelp } from '../utils/ui-feedback.js';
 
 const PAGE_SIZE = 100;
@@ -909,9 +909,9 @@ function updateExportButton(enabled) {
 
 function calculateBusinessDaysOverdue(dueDate) {
   if (!dueDate) return 0;
-  const due = startOfDay(new Date(dueDate));
-  const today = startOfDay(new Date());
-  if (isNaN(due.getTime()) || due >= today) return 0;
+  const due = toLocalDateOnly(dueDate);
+  const today = toLocalDateOnly(new Date());
+  if (!due || !today || due >= today) return 0;
 
   let total = 0;
   const cursor = new Date(due);
@@ -922,10 +922,6 @@ function calculateBusinessDaysOverdue(dueDate) {
     cursor.setDate(cursor.getDate() + 1);
   }
   return total;
-}
-
-function startOfDay(date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
 function getBlockField(card, directKeys, labels) {

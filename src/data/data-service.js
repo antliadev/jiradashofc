@@ -772,6 +772,7 @@ class DataService {
         assigneeId: assigneeId || 'unassigned',
         status: statusName,
         priority: this.mapPriority(priorityName),
+        rawPriority: Boolean(priorityName),
         type: this.mapIssueType(typeName),
         createdAt,
         updatedAt,

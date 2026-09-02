@@ -3,12 +3,26 @@
  */
 import { dataService } from '../data/data-service.js';
 import { isCardOverdue, resolveStatusCategory, StatusCategory } from '../data/models.js';
-import { formatDate, formatDateTime, sanitize, typeLabel } from '../utils/helpers.js';
+import { formatDate, formatDateTime, getJiraIssueUrl, sanitize, sanitizeUrl, typeLabel } from '../utils/helpers.js';
 import { exportRowsWorkbook } from '../utils/excel-export.js';
-import { businessHelp } from '../utils/ui-feedback.js';
+import { businessHelp, showToast } from '../utils/ui-feedback.js';
+import { calculateCardImpact, calculateProjectHealth, DEFAULT_HEALTH_CONFIG } from '../data/project-health.js';
+import { filterHealthRows, syncHealthProject } from '../utils/health-list.js';
 
 const HEALTH_MIN_KEY = 'rja.projectHealth.minimumPercent';
 const REPORT_CONFIG_KEY = 'rja.clientReport.config';
+const HEALTH_PAGE_SIZE_KEY = 'rja.projectHealth.pageSize';
+const HEALTH_PAGE_SIZES = [10, 25, 50, 100];
+let healthPageSize = 25;
+let healthPage = 1;
+let healthSearch = '';
+let healthStatusFilter = '';
+let healthRiskFilter = '';
+let healthAssigneeFilter = '';
+let healthSort = 'risk';
+let healthSortDirection = 'desc';
+let healthRefreshing = false;
+let healthActiveProject = null;
 
 function pct(value, total) {
   if (!total) return null;
@@ -51,8 +65,8 @@ function getProjectFromState() {
   return dataService.getProjectByKey(requestedKey) || projects[0] || null;
 }
 
-function projectOptions(selectedId) {
-  return dataService.getProjects().map(project => (
+function projectOptions(selectedId, { exclude = [] } = {}) {
+  return dataService.getProjects().filter(project => !exclude.includes(project.key.toUpperCase())).map(project => (
     `<option value="${sanitize(project.id)}" ${project.id === selectedId ? 'selected' : ''}>${sanitize(project.key)} - ${sanitize(project.name)}</option>`
   )).join('');
 }
@@ -259,7 +273,7 @@ function bindReportControls(project, visibleEpics) {
 }
 
 function commentAvailability() {
-  const sample = dataService.getRawJiraData()?.issues?.find(issue => issue.comments || issue.comment_count || issue.comments_count);
+  const sample = dataService.getRawJiraData()?.issues?.find(issue => issue.comments || Object.hasOwn(issue, 'comment_count') || Object.hasOwn(issue, 'comments_count'));
   return Boolean(sample);
 }
 
@@ -278,23 +292,82 @@ function healthMinimum() {
   return Number(localStorage.getItem(HEALTH_MIN_KEY) || 90);
 }
 
+function readHealthPageSize() {
+  const stored = Number(localStorage.getItem(HEALTH_PAGE_SIZE_KEY) || 25);
+  return HEALTH_PAGE_SIZES.includes(stored) ? stored : 25;
+}
+
+function cardJiraLink(card) {
+  const url = getJiraIssueUrl(card, dataService.config?.baseUrl);
+  return url === '#' ? `<span class="issue-link unavailable" title="URL do Jira nao configurada">${sanitize(card.key)}</span>` : `<a href="${sanitizeUrl(url)}" target="_blank" rel="noopener noreferrer" class="issue-link">${sanitize(card.key)}</a>`;
+}
+
+function healthConfig(projectKey) {
+  const saved = reportConfig(`health:${projectKey}`);
+  const weights = Object.fromEntries(Object.entries(DEFAULT_HEALTH_CONFIG.weights).map(([key, fallback]) => [key, Number(saved.weights?.[key] ?? fallback)]));
+  const total = Object.values(weights).reduce((sum, value) => sum + value, 0);
+  return { ...DEFAULT_HEALTH_CONFIG, weights: total === 100 ? weights : DEFAULT_HEALTH_CONFIG.weights };
+}
+
+const HEALTH_HISTORY_KEY = 'rja.projectHealth.history';
+
+function readHealthHistory(projectKey) {
+  try {
+    const history = JSON.parse(localStorage.getItem(HEALTH_HISTORY_KEY) || '{}');
+    return Array.isArray(history[projectKey]) ? history[projectKey] : [];
+  } catch { return []; }
+}
+
+function saveHealthSnapshot(projectKey, score) {
+  if (score === null) return [];
+  const history = readHealthHistory(projectKey);
+  const today = new Date().toISOString().slice(0, 10);
+  const next = [...history.filter(item => item.date !== today), { date: today, score }].slice(-30);
+  try {
+    const all = JSON.parse(localStorage.getItem(HEALTH_HISTORY_KEY) || '{}');
+    all[projectKey] = next;
+    localStorage.setItem(HEALTH_HISTORY_KEY, JSON.stringify(all));
+  } catch { /* storage unavailable must not break the report */ }
+  return next;
+}
+
+function healthTrend(history) {
+  if (history.length < 2) return 'Sem historico suficiente';
+  const delta = history.at(-1).score - history.at(-2).score;
+  return `${delta > 0 ? '+' : ''}${delta} pontos desde a ultima analise`;
+}
+
 function renderHealthReport() {
   const content = document.getElementById('page-content');
-  const project = getProjectFromState();
-  renderHeader('Saude Detalhamento Cards Projetos', 'Cobertura de comentarios humanos para apoiar relatorios gerenciais');
+  const requestedProject = getProjectFromState();
+  const healthProjects = dataService.getProjects().filter(item => !DEFAULT_HEALTH_CONFIG.excludedProjectKeys.includes(item.key.toUpperCase()));
+  const project = healthProjects.find(item => item.id === requestedProject?.id) || healthProjects[0] || null;
+  if (healthActiveProject !== project?.key) {
+    healthActiveProject = project?.key;
+    healthPage = 1;
+    healthSearch = healthStatusFilter = healthAssigneeFilter = healthRiskFilter = '';
+  }
+  renderHeader('Saude Detalhamento Cards Projetos', 'Leitura executiva e explicavel da saude operacional do projeto');
   if (!project) {
     content.innerHTML = '<div class="empty-state"><h3>Sem projetos carregados</h3></div>';
     return;
   }
 
   const minimum = healthMinimum();
-  const allProjectSummaries = dataService.getProjects().map(p => {
+  healthPageSize = readHealthPageSize();
+  const syncMetadata = dataService.getSyncMetadata();
+  const configured = healthConfig(project.key);
+  const allProjectSummaries = dataService.getProjects()
+    .filter(p => !configured.excludedProjectKeys.includes(p.key.toUpperCase()))
+    .map(p => {
     const eligible = cardsForProject(p.id, { includeEpics: false });
     const enriched = eligible.map(card => ({ card, health: classifyCommentHealth(card) }));
     const healthy = enriched.filter(item => item.health.key === 'healthy').length;
     const automation = enriched.filter(item => item.health.key === 'automation').length;
     const unavailable = enriched.filter(item => item.health.key === 'unavailable').length;
     const percent = unavailable ? null : pct(healthy, eligible.length);
+    const health = calculateProjectHealth(eligible, { ...healthConfig(p.key), metadata: syncMetadata });
+    const history = saveHealthSnapshot(p.key, health.score);
     return {
       project: p,
       eligible,
@@ -305,56 +378,72 @@ function renderHealthReport() {
       unavailable,
       percent,
       analysts: new Set(eligible.map(card => card.assigneeId)).size,
+      health,
+      history,
+      lastSyncedAt: syncMetadata.lastSyncedAt,
     };
   });
   const summary = allProjectSummaries.find(item => item.project.id === project.id) || allProjectSummaries[0];
-  const filteredCards = summary.enriched.filter(item => item.health.key !== 'healthy').slice(0, 200);
-  const status = summary.percent === null
-    ? 'Sem dados suficientes'
-    : summary.percent >= minimum
-      ? 'Apto para gerar relatorio'
-      : 'Abaixo do minimo';
+  const riskCards = summary.enriched
+    .map(item => ({ ...item, impact: calculateCardImpact(item.card, configured), assigneeName: dataService.getUserById(item.card.assigneeId)?.displayName || 'Sem responsavel definido' }))
+    .filter(item => item.impact.risk > 0)
+    .sort((a, b) => b.impact.risk - a.impact.risk);
+  const filteredCards = filterHealthRows(riskCards, { search: healthSearch, status: healthStatusFilter, risk: healthRiskFilter, assignee: healthAssigneeFilter, sort: healthSort, direction: healthSortDirection });
+  const totalPages = Math.max(1, Math.ceil(filteredCards.length / healthPageSize));
+  healthPage = Math.min(healthPage, totalPages);
+  const visibleCards = filteredCards.slice((healthPage - 1) * healthPageSize, healthPage * healthPageSize);
+  const status = summary.health.classification.label;
+
+  document.getElementById('page-header')?.insertAdjacentHTML('beforeend', `<div class="page-actions"><button class="btn btn-primary" id="health-refresh" ${healthRefreshing ? 'disabled aria-busy="true"' : ''}>${healthRefreshing ? 'Atualizando...' : 'Atualizar projeto'}</button></div>`);
 
   content.innerHTML = `
     <div class="report-page">
       <div class="report-toolbar">
-        <label>Projeto<select id="health-project">${projectOptions(project.id)}</select></label>
+        <label>Projeto<select id="health-project">${projectOptions(project.id, { exclude: configured.excludedProjectKeys })}</select></label>
         <label>Minimo esperado<input id="health-minimum" type="number" min="0" max="100" value="${minimum}"></label>
         <button class="btn btn-primary" id="save-health-minimum">Salvar minimo</button>
-        <button class="btn btn-secondary" id="export-health-xlsx">Exportar Excel</button>
+        <details class="health-weight-config"><summary>Configurar pesos</summary><div class="health-weight-fields">${Object.entries(configured.weights).map(([key, value]) => `<label>${sanitize(key)}<input data-health-weight="${sanitize(key)}" type="number" min="0" max="100" value="${value}"></label>`).join('')}<button class="btn btn-secondary" id="save-health-weights">Aplicar pesos</button></div></details>
+        <button class="btn btn-secondary" id="export-health-xlsx" ${filteredCards.length ? '' : 'disabled'}>Exportar resultado (Excel)</button>
       </div>
+      <p class="muted" role="status" aria-live="polite">${healthRefreshing ? 'Sincronizando o projeto selecionado com o Jira...' : `Ultima sincronizacao informada: ${formatDateTime(syncMetadata.lastSyncedAt)}`}. Atualizar busca todos os cards de ${sanitize(project.key)} para manter o score completo.</p>
 
       ${!commentAvailability() ? `
         <div class="report-alert warning">
-          Comentarios do Jira ainda nao estao presentes na carga atual. A tela foi preparada, mas a saude real so pode ser calculada quando a sincronizacao trouxer comentarios e autor do comentario.
+          Comentarios indisponiveis nesta carga. O score usa os campos estruturados disponiveis; a cobertura de comentarios nao pode ser avaliada.
         </div>
       ` : ''}
 
       <div class="kpi-grid">
-        <div class="kpi-card kpi-info">${businessHelp('Regra: percentual de saúde', `Percentual de cards elegíveis com comentário humano. Mínimo esperado: ${minimum}%.`)}<div class="kpi-value">${pctLabel(summary.percent)}</div><div class="kpi-label">Percentual de saude</div><div class="kpi-trend">Minimo esperado: ${minimum}%</div></div>
+        <div class="kpi-card kpi-info">${businessHelp('Regra: Project Health Score', 'Nota ponderada de prazo, execucao, bloqueios, qualidade, escopo e governanca. O score e deterministico e nao e alterado por IA.')}<div class="kpi-value">${summary.health.score === null ? '—' : summary.health.score}</div><div class="kpi-label">Project Health Score</div><div class="kpi-trend">${sanitize(summary.health.classification.label)} · ${sanitize(healthTrend(summary.history))}</div></div>
+        <div class="kpi-card ${summary.health.confidence.level === 'high' ? 'kpi-success' : 'kpi-warning'}">${businessHelp('Regra: Confidence Score', 'Confianca separada do score, composta por cobertura de status, campos obrigatorios, datas, historico, hierarquia e frescor da sincronizacao.')}<div class="kpi-value">${summary.health.confidence.score}</div><div class="kpi-label">Confianca (${summary.health.confidence.level === 'high' ? 'alta' : summary.health.confidence.level === 'medium' ? 'media' : 'baixa'})</div><div class="kpi-trend">${summary.health.confidence.stale ? 'Dados desatualizados' : 'Dados dentro da janela de frescor'}</div></div>
         <div class="kpi-card">${businessHelp('Regra: cards elegíveis', 'Cards que podem ser avaliados pela regra de cobertura de comentários.') }<div class="kpi-value">${summary.eligible.length}</div><div class="kpi-label">Cards elegiveis</div></div>
         <div class="kpi-card kpi-success">${businessHelp('Regra: comentário humano', 'Cards elegíveis que possuem pelo menos um comentário feito por uma pessoa.') }<div class="kpi-value">${summary.healthy}</div><div class="kpi-label">Com comentario humano</div></div>
         <div class="kpi-card kpi-warning">${businessHelp('Regra: sem comentário humano', 'Cards elegíveis sem comentário humano identificado na carga sincronizada.') }<div class="kpi-value">${summary.missing}</div><div class="kpi-label">Sem comentario humano</div></div>
         <div class="kpi-card kpi-danger">${businessHelp('Regra: somente automação', 'Cards que possuem apenas comentários automáticos, sem comentário humano.') }<div class="kpi-value">${summary.automation}</div><div class="kpi-label">Somente automacao</div></div>
-        <div class="kpi-card">${businessHelp('Regra: projetos abaixo do mínimo', `Projetos com percentual de saúde abaixo de ${minimum}%, desconsiderando projetos sem dados suficientes.`) }<div class="kpi-value">${allProjectSummaries.filter(item => item.percent !== null && item.percent < minimum).length}</div><div class="kpi-label">Projetos abaixo do minimo</div></div>
+        <div class="kpi-card">${businessHelp('Regra: projetos abaixo do mínimo', `Projetos com score ou cobertura abaixo do mínimo configurado (${minimum}%).`) }<div class="kpi-value">${allProjectSummaries.filter(item => item.health.score !== null && item.health.score < minimum).length}</div><div class="kpi-label">Projetos abaixo do minimo</div></div>
       </div>
+
+      <section class="report-section health-score-panel">
+        <h3>Por que este projeto esta ${sanitize(summary.health.classification.label.toLowerCase())}?</h3>
+        <p class="muted">${summary.health.reasons.length ? `Principais sinais: ${sanitize(summary.health.reasons.join(' · '))}.` : 'Nao foram identificados sinais de deterioracao na carga atual.'} ${summary.health.hardCap !== null ? `O score foi limitado a ${summary.health.hardCap} por uma regra critica.` : ''}</p>
+        <div class="kpi-grid">
+          ${summary.health.dimensions.map(dimension => `<div class="kpi-card"><div class="kpi-value">${dimension.score}</div><div class="kpi-label">${sanitize(dimension.label)} · peso ${dimension.weight}%</div><div class="progress-bar"><div class="fill" style="width:${dimension.score}%"></div></div></div>`).join('')}
+        </div>
+      </section>
 
       <section class="report-section">
         <h3>Resumo por projeto</h3>
         <div class="table-container">
           <table class="data-table">
-            <thead><tr><th>Projeto</th><th>Elegiveis</th><th>Com humano</th><th>Sem humano</th><th>Somente automacao</th><th>Saude</th><th>Situacao</th><th>Analistas</th></tr></thead>
+            <thead><tr><th>Projeto</th><th>Score</th><th>Prazo</th><th>Execucao</th><th>Bloqueios</th><th>Qualidade</th><th>Situacao</th><th>Atualizado</th></tr></thead>
             <tbody>
               ${allProjectSummaries.map(item => `
                 <tr>
-                  <td><strong>${sanitize(item.project.key)}</strong><br><span class="muted">${sanitize(item.project.name)}</span></td>
-                  <td>${item.eligible.length}</td>
-                  <td>${item.healthy}</td>
-                  <td>${item.missing}</td>
-                  <td>${item.automation}</td>
-                  <td>${pctLabel(item.percent)}</td>
-                  <td><span class="badge ${item.percent === null ? 'badge-warning' : item.percent >= minimum ? 'badge-done' : 'badge-blocked'}">${item.percent === null ? 'Sem dados suficientes' : item.percent >= minimum ? 'Apto' : 'Abaixo do minimo'}</span></td>
-                  <td>${item.analysts}</td>
+                  <td><a href="#/projects/health?projectKey=${encodeURIComponent(item.project.key)}">${sanitize(item.project.key)}</a><br><span class="muted">${sanitize(item.project.name)}</span></td>
+                  <td><strong>${item.health.score === null ? '—' : item.health.score}</strong></td>
+              ${['prazo', 'execucao', 'bloqueios', 'qualidade'].map(key => `<td>${item.health.dimensions.find(d => d.key === key)?.score ?? '—'}</td>`).join('')}
+                  <td><span class="badge ${item.health.classification.key === 'healthy' ? 'badge-done' : item.health.classification.key === 'critical' ? 'badge-blocked' : 'badge-warning'}">${sanitize(item.health.classification.label)}</span></td>
+                  <td>${formatDateTime(item.lastSyncedAt)}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -363,43 +452,123 @@ function renderHealthReport() {
       </section>
 
       <section class="report-section">
-        <h3>Cards pendentes de cobertura - ${sanitize(project.key)}</h3>
-        <p class="muted">Situacao do projeto: ${sanitize(status)}</p>
+        <h3>Cards que mais impactam a leitura - ${sanitize(project.key)}</h3>
+        <p class="muted">Situacao do projeto: ${sanitize(status)}. Os filtros abaixo afetam apenas os cards e a aba de detalhamento do Excel; o score considera o projeto completo.</p>
+        <div class="filter-bar health-card-filters">
+          <label><span class="filter-label">Buscar card</span><input type="search" id="health-card-search" placeholder="Chave, titulo ou responsavel" value="${sanitize(healthSearch)}"></label>
+          <label><span class="filter-label">Status</span><select id="health-card-status"><option value="">Todos</option>${[...new Set(riskCards.map(item => item.card.status))].sort().map(option => `<option value="${sanitize(option)}" ${option === healthStatusFilter ? 'selected' : ''}>${sanitize(option)}</option>`).join('')}</select></label>
+          <label><span class="filter-label">Responsavel</span><select id="health-card-assignee"><option value="">Todos</option>${[...new Map(riskCards.map(item => [item.card.assigneeId || 'unassigned', item.assigneeName]))].map(([id, name]) => `<option value="${sanitize(id)}" ${healthAssigneeFilter === id ? 'selected' : ''}>${sanitize(name)}</option>`).join('')}</select></label>
+          <label><span class="filter-label">Risco do card</span><select id="health-card-risk"><option value="">Todos</option><option value="critical" ${healthRiskFilter === 'critical' ? 'selected' : ''}>Critico (85-100)</option><option value="high" ${healthRiskFilter === 'high' ? 'selected' : ''}>Alto (60-84)</option><option value="attention" ${healthRiskFilter === 'attention' ? 'selected' : ''}>Atencao (1-59)</option></select></label>
+          <label><span class="filter-label">Ordenar por</span><select id="health-sort">${[['risk', 'Risco'], ['key', 'Chave'], ['title', 'Titulo'], ['updatedAt', 'Atualizacao']].map(([key, label]) => `<option value="${key}" ${healthSort === key ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
+          <label><span class="filter-label">Ordem</span><select id="health-sort-direction"><option value="desc" ${healthSortDirection === 'desc' ? 'selected' : ''}>Decrescente</option><option value="asc" ${healthSortDirection === 'asc' ? 'selected' : ''}>Crescente</option></select></label>
+          <label><span class="filter-label">Exibir</span><select id="health-page-size">${HEALTH_PAGE_SIZES.map(size => `<option value="${size}" ${size === healthPageSize ? 'selected' : ''}>${size}</option>`).join('')}</select></label>
+          <button class="btn btn-secondary" id="health-clear-filters">Limpar filtros</button>
+        </div>
         <div class="table-container">
           <table class="data-table">
-            <thead><tr><th>Card</th><th>Tipo</th><th>Status</th><th>Responsavel</th><th>Atualizado</th><th>Humanos</th><th>Automacao</th><th>Situacao</th></tr></thead>
+            <thead><tr><th>Card</th><th>Tipo</th><th>Status</th><th>Responsavel</th><th>Atualizado</th><th>Prazo</th><th>Bloqueio</th><th>Comentarios</th></tr></thead>
             <tbody>
-              ${filteredCards.map(({ card, health }) => {
+              ${!visibleCards.length ? '<tr><td colspan="8"><div class="empty-state"><h3>Nenhum card de risco encontrado</h3><p>Limpe os filtros para conferir todos os cards de risco do projeto.</p></div></td></tr>' : visibleCards.map(({ card, health, impact }) => {
                 const user = dataService.getUserById(card.assigneeId);
                 return `
                   <tr>
-                    <td><a href="${sanitize(card.jiraUrl || '#')}" target="_blank" rel="noopener noreferrer">${sanitize(card.key)}</a><br><span class="muted">${sanitize(card.title)}</span></td>
+                    <td>${cardJiraLink(card)}<br><span class="muted">${sanitize(card.title)}</span></td>
                     <td>${sanitize(rawTypeLabel(card))}</td>
                     <td>${sanitize(card.status)}</td>
                     <td>${sanitize(user?.displayName || 'Sem responsavel definido')}</td>
                     <td>${formatDate(card.updatedAt)}</td>
-                    <td>${health.human}</td>
-                    <td>${health.automation}</td>
-                    <td><span class="badge badge-warning">${sanitize(health.label)}</span></td>
+                    <td>${formatDate(cardEndDate(card))}<br>${!cardEndDate(card) ? 'Sem prazo informado' : impact.risks.meta?.overdue ? 'Atrasado' : 'No prazo'}</td>
+                    <td>${resolveStatusCategory(card.status) === StatusCategory.BLOCKED ? 'Bloqueado' : '—'}</td>
+                    <td><span class="badge badge-warning">${sanitize(health.label)} · impacto ${impact.impact}</span><br><span class="muted">${sanitize(impact.reasons.join(', '))}</span></td>
                   </tr>
                 `;
               }).join('')}
             </tbody>
           </table>
         </div>
+        <div class="load-more-row health-pagination" aria-label="Paginacao dos cards"><span role="status">Exibindo ${filteredCards.length ? (healthPage - 1) * healthPageSize + 1 : 0}-${Math.min(healthPage * healthPageSize, filteredCards.length)} de ${filteredCards.length} cards de risco</span><div><button class="btn btn-secondary" id="health-page-prev" ${healthPage <= 1 ? 'disabled' : ''}>Anterior</button><span class="muted">Pagina ${healthPage} de ${totalPages}</span><button class="btn btn-secondary" id="health-page-next" ${healthPage >= totalPages ? 'disabled' : ''}>Proxima</button></div></div>
       </section>
     </div>
   `;
 
   document.getElementById('health-project')?.addEventListener('change', event => {
     const selected = dataService.getProjectById(event.target.value);
-    if (selected) window.location.hash = `#/projects/health?projectKey=${selected.key}`;
+    if (selected) {
+      healthPage = 1;
+      healthStatusFilter = '';
+      healthAssigneeFilter = '';
+      window.location.hash = `#/projects/health?projectKey=${selected.key}`;
+    }
   });
+  document.getElementById('health-card-search')?.addEventListener('input', event => {
+    healthSearch = event.target.value;
+    const cursor = event.target.selectionStart;
+    healthPage = 1;
+    renderHealthReport();
+    const input = document.getElementById('health-card-search');
+    input.focus({ preventScroll: true });
+    input.setSelectionRange(cursor, cursor);
+  });
+  document.getElementById('health-card-assignee')?.addEventListener('change', event => { healthAssigneeFilter = event.target.value; healthPage = 1; renderHealthReport(); });
+  document.getElementById('health-sort')?.addEventListener('change', event => { healthSort = event.target.value; healthPage = 1; renderHealthReport(); });
+  document.getElementById('health-sort-direction')?.addEventListener('change', event => { healthSortDirection = event.target.value; healthPage = 1; renderHealthReport(); });
+  document.getElementById('health-clear-filters')?.addEventListener('click', () => {
+    healthSearch = healthStatusFilter = healthAssigneeFilter = healthRiskFilter = '';
+    healthSort = 'risk'; healthSortDirection = 'desc'; healthPage = 1;
+    renderHealthReport();
+  });
+  document.getElementById('health-card-status')?.addEventListener('change', event => { healthStatusFilter = event.target.value; healthPage = 1; renderHealthReport(); });
+  document.getElementById('health-card-risk')?.addEventListener('change', event => { healthRiskFilter = event.target.value; healthPage = 1; renderHealthReport(); });
+  document.getElementById('health-page-size')?.addEventListener('change', event => {
+    healthPageSize = Number(event.target.value);
+    localStorage.setItem(HEALTH_PAGE_SIZE_KEY, String(healthPageSize));
+    healthPage = 1;
+    renderHealthReport();
+  });
+  document.getElementById('health-page-prev')?.addEventListener('click', () => { healthPage = Math.max(1, healthPage - 1); renderHealthReport(); });
+  document.getElementById('health-page-next')?.addEventListener('click', () => { healthPage += 1; renderHealthReport(); });
+  document.getElementById('health-refresh')?.addEventListener('click', () => refreshHealthProject(project));
   document.getElementById('save-health-minimum')?.addEventListener('click', () => {
     localStorage.setItem(HEALTH_MIN_KEY, document.getElementById('health-minimum')?.value || '90');
     renderHealthReport();
   });
-  document.getElementById('export-health-xlsx')?.addEventListener('click', () => exportHealthWorkbook(allProjectSummaries, summary));
+  document.getElementById('save-health-weights')?.addEventListener('click', () => {
+    const weights = Object.fromEntries([...document.querySelectorAll('[data-health-weight]')].map(input => [input.dataset.healthWeight, Number(input.value)]));
+    if (Object.values(weights).reduce((sum, value) => sum + value, 0) !== 100) {
+      showToast('A soma dos pesos deve ser exatamente 100%.', 'error');
+      return;
+    }
+    saveReportConfig(`health:${project.key}`, { weights });
+    renderHealthReport();
+  });
+  document.getElementById('export-health-xlsx')?.addEventListener('click', async event => {
+    event.currentTarget.disabled = true;
+    try { await exportHealthWorkbook(allProjectSummaries, summary, filteredCards); }
+    catch { showToast('Nao foi possivel exportar o resultado. Tente novamente.', 'error'); }
+    finally { const button = document.getElementById('export-health-xlsx'); if (button) button.disabled = !filteredCards.length; }
+  });
+}
+
+async function refreshHealthProject(project) {
+  const button = document.getElementById('health-refresh');
+  if (!button || healthRefreshing) return;
+  healthRefreshing = true;
+  const route = window.location.hash;
+  button.disabled = true;
+  button.textContent = 'Atualizando...';
+  try {
+    await syncHealthProject(dataService, project.key);
+    showToast(`Projeto ${project.key} atualizado.`, 'success');
+  } catch (error) {
+    showToast(error.message || 'Nao foi possivel atualizar os dados do Jira.', 'error');
+  } finally {
+    healthRefreshing = false;
+    if (window.location.hash === route) renderHealthReport();
+    else {
+      const current = document.getElementById('health-refresh');
+      if (current) { current.disabled = false; current.removeAttribute('aria-busy'); current.textContent = 'Atualizar projeto'; }
+    }
+  }
 }
 
 function renderDetailedReport() {
@@ -542,7 +711,7 @@ async function exportElementAsPdf(elementId, filename) {
   pdf.save(`${filename}_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.pdf`);
 }
 
-async function exportHealthWorkbook(projectSummaries, selectedSummary) {
+async function exportHealthWorkbook(projectSummaries, selectedSummary, filteredRows) {
   await exportRowsWorkbook([
     {
       name: 'Resumo por projeto',
@@ -554,11 +723,47 @@ async function exportHealthWorkbook(projectSummaries, selectedSummary) {
         sem_humano: item.missing,
         somente_automacao: item.automation,
         saude: pctLabel(item.percent),
+        project_health_score: item.health.score ?? '',
+        classificacao: item.health.classification.label,
+        tendencia: healthTrend(item.history),
+        principais_sinais: item.health.reasons.join(' | '),
       })),
     },
     {
+      name: 'Dimensoes',
+      rows: projectSummaries.flatMap(item => item.health.dimensions.map(dimension => ({
+        projeto: item.project.key,
+        dimensao: dimension.label,
+        peso: dimension.weight,
+        score: dimension.score,
+        impacto: dimension.impact,
+      }))),
+    },
+    {
+      name: 'Resumo por analista',
+      rows: projectSummaries.flatMap(item => {
+        const groups = new Map();
+        item.eligible.forEach(card => {
+          const key = card.assigneeId || 'unassigned';
+          const group = groups.get(key) || { cards: 0, human: 0, missing: 0 };
+          group.cards += 1;
+          group.human += card.humanCommentCount > 0 ? 1 : 0;
+          group.missing += card.humanCommentCount > 0 ? 0 : 1;
+          groups.set(key, group);
+        });
+        return [...groups].map(([assigneeId, group]) => ({
+          projeto: item.project.key,
+          analista: dataService.getUserById(assigneeId)?.displayName || 'Sem responsavel definido',
+          cards: group.cards,
+          com_humano: group.human,
+          sem_humano: group.missing,
+          preenchimento: pctLabel(pct(group.human, group.cards)),
+        }));
+      }),
+    },
+    {
       name: 'Cards pendentes',
-      rows: selectedSummary.enriched.filter(item => item.health.key !== 'healthy').map(({ card, health }) => ({
+      rows: filteredRows.map(({ card, health, impact }) => ({
         card: card.key,
         titulo: card.title,
         tipo: rawTypeLabel(card),
@@ -567,10 +772,12 @@ async function exportHealthWorkbook(projectSummaries, selectedSummary) {
         humanos: health.human,
         automacao: health.automation,
         situacao: health.label,
-        jira: card.jiraUrl || '',
+        impacto: impact.risk,
+        fatores_impacto: impact.reasons.join(' | '),
+        jira: getJiraIssueUrl(card, dataService.config?.baseUrl),
       })),
     },
-  ], `saude_cards_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  ], `saude_cards_${selectedSummary.project.key}_${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
 async function exportDetailedWorkbook(cards, project) {

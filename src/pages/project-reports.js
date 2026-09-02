@@ -6,6 +6,7 @@ import { isCardOverdue, resolveStatusCategory, StatusCategory } from '../data/mo
 import { formatDate, formatDateTime, sanitize, typeLabel } from '../utils/helpers.js';
 import { exportRowsWorkbook } from '../utils/excel-export.js';
 import { businessHelp } from '../utils/ui-feedback.js';
+import { calculateCardImpact, calculateProjectHealth } from '../data/project-health.js';
 
 const HEALTH_MIN_KEY = 'rja.projectHealth.minimumPercent';
 const REPORT_CONFIG_KEY = 'rja.clientReport.config';
@@ -278,10 +279,38 @@ function healthMinimum() {
   return Number(localStorage.getItem(HEALTH_MIN_KEY) || 90);
 }
 
+const HEALTH_HISTORY_KEY = 'rja.projectHealth.history';
+
+function readHealthHistory(projectKey) {
+  try {
+    const history = JSON.parse(localStorage.getItem(HEALTH_HISTORY_KEY) || '{}');
+    return Array.isArray(history[projectKey]) ? history[projectKey] : [];
+  } catch { return []; }
+}
+
+function saveHealthSnapshot(projectKey, score) {
+  if (score === null) return [];
+  const history = readHealthHistory(projectKey);
+  const today = new Date().toISOString().slice(0, 10);
+  const next = [...history.filter(item => item.date !== today), { date: today, score }].slice(-30);
+  try {
+    const all = JSON.parse(localStorage.getItem(HEALTH_HISTORY_KEY) || '{}');
+    all[projectKey] = next;
+    localStorage.setItem(HEALTH_HISTORY_KEY, JSON.stringify(all));
+  } catch { /* storage unavailable must not break the report */ }
+  return next;
+}
+
+function healthTrend(history) {
+  if (history.length < 2) return 'Sem historico suficiente';
+  const delta = history.at(-1).score - history.at(-2).score;
+  return `${delta > 0 ? '+' : ''}${delta} pontos desde a ultima analise`;
+}
+
 function renderHealthReport() {
   const content = document.getElementById('page-content');
   const project = getProjectFromState();
-  renderHeader('Saude Detalhamento Cards Projetos', 'Cobertura de comentarios humanos para apoiar relatorios gerenciais');
+  renderHeader('Saude Detalhamento Cards Projetos', 'Leitura executiva e explicavel da saude operacional do projeto');
   if (!project) {
     content.innerHTML = '<div class="empty-state"><h3>Sem projetos carregados</h3></div>';
     return;
@@ -295,6 +324,8 @@ function renderHealthReport() {
     const automation = enriched.filter(item => item.health.key === 'automation').length;
     const unavailable = enriched.filter(item => item.health.key === 'unavailable').length;
     const percent = unavailable ? null : pct(healthy, eligible.length);
+    const health = calculateProjectHealth(eligible);
+    const history = saveHealthSnapshot(p.key, health.score);
     return {
       project: p,
       eligible,
@@ -305,15 +336,17 @@ function renderHealthReport() {
       unavailable,
       percent,
       analysts: new Set(eligible.map(card => card.assigneeId)).size,
+      health,
+      history,
     };
   });
   const summary = allProjectSummaries.find(item => item.project.id === project.id) || allProjectSummaries[0];
-  const filteredCards = summary.enriched.filter(item => item.health.key !== 'healthy').slice(0, 200);
-  const status = summary.percent === null
-    ? 'Sem dados suficientes'
-    : summary.percent >= minimum
-      ? 'Apto para gerar relatorio'
-      : 'Abaixo do minimo';
+  const filteredCards = summary.enriched
+    .filter(item => item.health.key !== 'healthy')
+    .map(item => ({ ...item, impact: calculateCardImpact(item.card) }))
+    .sort((a, b) => b.impact.impact - a.impact.impact)
+    .slice(0, 200);
+  const status = summary.health.classification.label;
 
   content.innerHTML = `
     <div class="report-page">
@@ -331,30 +364,35 @@ function renderHealthReport() {
       ` : ''}
 
       <div class="kpi-grid">
-        <div class="kpi-card kpi-info">${businessHelp('Regra: percentual de saúde', `Percentual de cards elegíveis com comentário humano. Mínimo esperado: ${minimum}%.`)}<div class="kpi-value">${pctLabel(summary.percent)}</div><div class="kpi-label">Percentual de saude</div><div class="kpi-trend">Minimo esperado: ${minimum}%</div></div>
+        <div class="kpi-card kpi-info">${businessHelp('Regra: Project Health Score', 'Nota ponderada de prazo, fluxo, bloqueio, qualidade, escopo e governanca.')}<div class="kpi-value">${summary.health.score === null ? '—' : summary.health.score}</div><div class="kpi-label">Project Health Score</div><div class="kpi-trend">${sanitize(summary.health.classification.label)} · ${sanitize(healthTrend(summary.history))}</div></div>
         <div class="kpi-card">${businessHelp('Regra: cards elegíveis', 'Cards que podem ser avaliados pela regra de cobertura de comentários.') }<div class="kpi-value">${summary.eligible.length}</div><div class="kpi-label">Cards elegiveis</div></div>
         <div class="kpi-card kpi-success">${businessHelp('Regra: comentário humano', 'Cards elegíveis que possuem pelo menos um comentário feito por uma pessoa.') }<div class="kpi-value">${summary.healthy}</div><div class="kpi-label">Com comentario humano</div></div>
         <div class="kpi-card kpi-warning">${businessHelp('Regra: sem comentário humano', 'Cards elegíveis sem comentário humano identificado na carga sincronizada.') }<div class="kpi-value">${summary.missing}</div><div class="kpi-label">Sem comentario humano</div></div>
         <div class="kpi-card kpi-danger">${businessHelp('Regra: somente automação', 'Cards que possuem apenas comentários automáticos, sem comentário humano.') }<div class="kpi-value">${summary.automation}</div><div class="kpi-label">Somente automacao</div></div>
-        <div class="kpi-card">${businessHelp('Regra: projetos abaixo do mínimo', `Projetos com percentual de saúde abaixo de ${minimum}%, desconsiderando projetos sem dados suficientes.`) }<div class="kpi-value">${allProjectSummaries.filter(item => item.percent !== null && item.percent < minimum).length}</div><div class="kpi-label">Projetos abaixo do minimo</div></div>
+        <div class="kpi-card">${businessHelp('Regra: projetos abaixo do mínimo', `Projetos com score ou cobertura abaixo do mínimo configurado (${minimum}%).`) }<div class="kpi-value">${allProjectSummaries.filter(item => item.health.score !== null && item.health.score < minimum).length}</div><div class="kpi-label">Projetos abaixo do minimo</div></div>
       </div>
+
+      <section class="report-section health-score-panel">
+        <h3>Por que este projeto esta ${sanitize(summary.health.classification.label.toLowerCase())}?</h3>
+        <p class="muted">${summary.health.reasons.length ? `Principais sinais: ${sanitize(summary.health.reasons.join(' · '))}.` : 'Nao foram identificados sinais de deterioracao na carga atual.'}</p>
+        <div class="kpi-grid">
+          ${summary.health.dimensions.map(dimension => `<div class="kpi-card"><div class="kpi-value">${dimension.score}</div><div class="kpi-label">${sanitize(dimension.label)} · peso ${dimension.weight}%</div><div class="progress-bar"><div class="fill" style="width:${dimension.score}%"></div></div></div>`).join('')}
+        </div>
+      </section>
 
       <section class="report-section">
         <h3>Resumo por projeto</h3>
         <div class="table-container">
           <table class="data-table">
-            <thead><tr><th>Projeto</th><th>Elegiveis</th><th>Com humano</th><th>Sem humano</th><th>Somente automacao</th><th>Saude</th><th>Situacao</th><th>Analistas</th></tr></thead>
+            <thead><tr><th>Projeto</th><th>Score</th><th>Prazo</th><th>Fluxo</th><th>Bloqueio</th><th>Qualidade</th><th>Situacao</th><th>Atualizado</th></tr></thead>
             <tbody>
               ${allProjectSummaries.map(item => `
                 <tr>
                   <td><strong>${sanitize(item.project.key)}</strong><br><span class="muted">${sanitize(item.project.name)}</span></td>
-                  <td>${item.eligible.length}</td>
-                  <td>${item.healthy}</td>
-                  <td>${item.missing}</td>
-                  <td>${item.automation}</td>
-                  <td>${pctLabel(item.percent)}</td>
-                  <td><span class="badge ${item.percent === null ? 'badge-warning' : item.percent >= minimum ? 'badge-done' : 'badge-blocked'}">${item.percent === null ? 'Sem dados suficientes' : item.percent >= minimum ? 'Apto' : 'Abaixo do minimo'}</span></td>
-                  <td>${item.analysts}</td>
+                  <td><strong>${item.health.score === null ? '—' : item.health.score}</strong></td>
+                  ${['prazo', 'fluxo', 'bloqueio', 'qualidade'].map(key => `<td>${item.health.dimensions.find(d => d.key === key)?.score ?? '—'}</td>`).join('')}
+                  <td><span class="badge ${item.health.classification.key === 'healthy' ? 'badge-done' : item.health.classification.key === 'critical' ? 'badge-blocked' : 'badge-warning'}">${sanitize(item.health.classification.label)}</span></td>
+                  <td>${formatDateTime(item.history.at(-1)?.date || null)}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -363,13 +401,13 @@ function renderHealthReport() {
       </section>
 
       <section class="report-section">
-        <h3>Cards pendentes de cobertura - ${sanitize(project.key)}</h3>
-        <p class="muted">Situacao do projeto: ${sanitize(status)}</p>
+        <h3>Cards que mais impactam a leitura - ${sanitize(project.key)}</h3>
+        <p class="muted">Situacao do projeto: ${sanitize(status)}. Cards sem comentario humano continuam destacados como sinal de qualidade.</p>
         <div class="table-container">
           <table class="data-table">
-            <thead><tr><th>Card</th><th>Tipo</th><th>Status</th><th>Responsavel</th><th>Atualizado</th><th>Humanos</th><th>Automacao</th><th>Situacao</th></tr></thead>
+            <thead><tr><th>Card</th><th>Tipo</th><th>Status</th><th>Responsavel</th><th>Atualizado</th><th>Prazo</th><th>Bloqueio</th><th>Comentarios</th></tr></thead>
             <tbody>
-              ${filteredCards.map(({ card, health }) => {
+              ${filteredCards.map(({ card, health, impact }) => {
                 const user = dataService.getUserById(card.assigneeId);
                 return `
                   <tr>
@@ -378,9 +416,9 @@ function renderHealthReport() {
                     <td>${sanitize(card.status)}</td>
                     <td>${sanitize(user?.displayName || 'Sem responsavel definido')}</td>
                     <td>${formatDate(card.updatedAt)}</td>
-                    <td>${health.human}</td>
-                    <td>${health.automation}</td>
-                    <td><span class="badge badge-warning">${sanitize(health.label)}</span></td>
+                    <td>${isCardOverdue(card) ? 'Atrasado' : 'No prazo'}</td>
+                    <td>${resolveStatusCategory(card.status) === StatusCategory.BLOCKED ? 'Bloqueado' : '—'}</td>
+                    <td><span class="badge badge-warning">${sanitize(health.label)} · impacto ${impact.impact}</span><br><span class="muted">${sanitize(impact.reasons.join(', '))}</span></td>
                   </tr>
                 `;
               }).join('')}
@@ -554,7 +592,43 @@ async function exportHealthWorkbook(projectSummaries, selectedSummary) {
         sem_humano: item.missing,
         somente_automacao: item.automation,
         saude: pctLabel(item.percent),
+        project_health_score: item.health.score ?? '',
+        classificacao: item.health.classification.label,
+        tendencia: healthTrend(item.history),
+        principais_sinais: item.health.reasons.join(' | '),
       })),
+    },
+    {
+      name: 'Dimensoes',
+      rows: projectSummaries.flatMap(item => item.health.dimensions.map(dimension => ({
+        projeto: item.project.key,
+        dimensao: dimension.label,
+        peso: dimension.weight,
+        score: dimension.score,
+        impacto: dimension.impact,
+      }))),
+    },
+    {
+      name: 'Resumo por analista',
+      rows: projectSummaries.flatMap(item => {
+        const groups = new Map();
+        item.eligible.forEach(card => {
+          const key = card.assigneeId || 'unassigned';
+          const group = groups.get(key) || { cards: 0, human: 0, missing: 0 };
+          group.cards += 1;
+          group.human += card.humanCommentCount > 0 ? 1 : 0;
+          group.missing += card.humanCommentCount > 0 ? 0 : 1;
+          groups.set(key, group);
+        });
+        return [...groups].map(([assigneeId, group]) => ({
+          projeto: item.project.key,
+          analista: dataService.getUserById(assigneeId)?.displayName || 'Sem responsavel definido',
+          cards: group.cards,
+          com_humano: group.human,
+          sem_humano: group.missing,
+          preenchimento: pctLabel(pct(group.human, group.cards)),
+        }));
+      }),
     },
     {
       name: 'Cards pendentes',
@@ -567,6 +641,8 @@ async function exportHealthWorkbook(projectSummaries, selectedSummary) {
         humanos: health.human,
         automacao: health.automation,
         situacao: health.label,
+        impacto: calculateCardImpact(card).impact,
+        fatores_impacto: calculateCardImpact(card).reasons.join(' | '),
         jira: card.jiraUrl || '',
       })),
     },

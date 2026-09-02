@@ -622,11 +622,11 @@ input, select, textarea { font-family: inherit; }
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-bottom: 18px; }
 .kpi-card {
   background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px 16px; overflow: visible;
-  transition: all var(--transition); position: relative; overflow: hidden;
+  transition: all var(--transition); position: relative;
 }
 .business-help { position: relative; z-index: 3; display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 1px solid var(--border-light); border-radius: 50%; background: var(--bg-secondary); color: var(--text-secondary); font-size: 12px; font-weight: 800; cursor: help; }
-.business-help:hover, .business-help:focus-visible { color: var(--accent-hover); border-color: var(--accent); outline: none; }
-.business-help-popover { position: absolute; top: calc(100% + 8px); right: 0; z-index: 200; width: min(280px, calc(100vw - 32px)); padding: 10px 12px; border: 1px solid var(--border-light); border-radius: var(--radius-sm); background: var(--bg-secondary); color: var(--text-secondary); box-shadow: var(--shadow); font-size: 12px; font-weight: 400; line-height: 1.45; text-align: left; opacity: 0; pointer-events: none; transform: translateY(-4px); transition: opacity var(--transition), transform var(--transition); }
+.business-help:hover, .business-help:focus-visible { color: var(--accent-hover); border-color: var(--accent); outline: none; z-index: 1201; }
+.business-help-popover { position: absolute; top: calc(100% + 8px); right: 0; z-index: 1202; width: min(280px, calc(100vw - 32px)); padding: 10px 12px; border: 1px solid var(--border-light); border-radius: var(--radius-sm); background: var(--bg-secondary); color: var(--text-secondary); box-shadow: var(--shadow); font-size: 12px; font-weight: 400; line-height: 1.45; text-align: left; opacity: 0; pointer-events: none; transform: translateY(-4px); transition: opacity var(--transition), transform var(--transition); }
 .business-help-popover strong { display: block; margin-bottom: 3px; color: var(--text-primary); font-size: 11px; }
 .business-help:hover .business-help-popover, .business-help:focus-visible .business-help-popover { opacity: 1; transform: translateY(0); }
 .kpi-card > .business-help { position: absolute; top: 10px; right: 10px; }

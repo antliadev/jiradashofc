@@ -5,8 +5,8 @@ import { dataService } from '../data/data-service.js';
 import { isCardOverdue, resolveStatusCategory, StatusCategory } from '../data/models.js';
 import { formatDate, formatDateTime, sanitize, typeLabel } from '../utils/helpers.js';
 import { exportRowsWorkbook } from '../utils/excel-export.js';
-import { businessHelp } from '../utils/ui-feedback.js';
-import { calculateCardImpact, calculateProjectHealth } from '../data/project-health.js';
+import { businessHelp, showToast } from '../utils/ui-feedback.js';
+import { calculateCardImpact, calculateProjectHealth, DEFAULT_HEALTH_CONFIG } from '../data/project-health.js';
 
 const HEALTH_MIN_KEY = 'rja.projectHealth.minimumPercent';
 const REPORT_CONFIG_KEY = 'rja.clientReport.config';
@@ -52,8 +52,8 @@ function getProjectFromState() {
   return dataService.getProjectByKey(requestedKey) || projects[0] || null;
 }
 
-function projectOptions(selectedId) {
-  return dataService.getProjects().map(project => (
+function projectOptions(selectedId, { exclude = [] } = {}) {
+  return dataService.getProjects().filter(project => !exclude.includes(project.key.toUpperCase())).map(project => (
     `<option value="${sanitize(project.id)}" ${project.id === selectedId ? 'selected' : ''}>${sanitize(project.key)} - ${sanitize(project.name)}</option>`
   )).join('');
 }
@@ -279,6 +279,13 @@ function healthMinimum() {
   return Number(localStorage.getItem(HEALTH_MIN_KEY) || 90);
 }
 
+function healthConfig(projectKey) {
+  const saved = reportConfig(`health:${projectKey}`);
+  const weights = Object.fromEntries(Object.entries(DEFAULT_HEALTH_CONFIG.weights).map(([key, fallback]) => [key, Number(saved.weights?.[key] ?? fallback)]));
+  const total = Object.values(weights).reduce((sum, value) => sum + value, 0);
+  return { ...DEFAULT_HEALTH_CONFIG, weights: total === 100 ? weights : DEFAULT_HEALTH_CONFIG.weights };
+}
+
 const HEALTH_HISTORY_KEY = 'rja.projectHealth.history';
 
 function readHealthHistory(projectKey) {
@@ -309,7 +316,9 @@ function healthTrend(history) {
 
 function renderHealthReport() {
   const content = document.getElementById('page-content');
-  const project = getProjectFromState();
+  const requestedProject = getProjectFromState();
+  const healthProjects = dataService.getProjects().filter(item => !DEFAULT_HEALTH_CONFIG.excludedProjectKeys.includes(item.key.toUpperCase()));
+  const project = healthProjects.find(item => item.id === requestedProject?.id) || healthProjects[0] || null;
   renderHeader('Saude Detalhamento Cards Projetos', 'Leitura executiva e explicavel da saude operacional do projeto');
   if (!project) {
     content.innerHTML = '<div class="empty-state"><h3>Sem projetos carregados</h3></div>';
@@ -317,14 +326,18 @@ function renderHealthReport() {
   }
 
   const minimum = healthMinimum();
-  const allProjectSummaries = dataService.getProjects().map(p => {
+  const syncMetadata = dataService.getSyncMetadata();
+  const configured = healthConfig(project.key);
+  const allProjectSummaries = dataService.getProjects()
+    .filter(p => !configured.excludedProjectKeys.includes(p.key.toUpperCase()))
+    .map(p => {
     const eligible = cardsForProject(p.id, { includeEpics: false });
     const enriched = eligible.map(card => ({ card, health: classifyCommentHealth(card) }));
     const healthy = enriched.filter(item => item.health.key === 'healthy').length;
     const automation = enriched.filter(item => item.health.key === 'automation').length;
     const unavailable = enriched.filter(item => item.health.key === 'unavailable').length;
     const percent = unavailable ? null : pct(healthy, eligible.length);
-    const health = calculateProjectHealth(eligible);
+    const health = calculateProjectHealth(eligible, { ...configured, metadata: syncMetadata });
     const history = saveHealthSnapshot(p.key, health.score);
     return {
       project: p,
@@ -338,12 +351,13 @@ function renderHealthReport() {
       analysts: new Set(eligible.map(card => card.assigneeId)).size,
       health,
       history,
+      lastSyncedAt: syncMetadata.lastSyncedAt,
     };
   });
   const summary = allProjectSummaries.find(item => item.project.id === project.id) || allProjectSummaries[0];
   const filteredCards = summary.enriched
-    .filter(item => item.health.key !== 'healthy')
     .map(item => ({ ...item, impact: calculateCardImpact(item.card) }))
+    .filter(item => item.impact.risk > 0)
     .sort((a, b) => b.impact.impact - a.impact.impact)
     .slice(0, 200);
   const status = summary.health.classification.label;
@@ -351,9 +365,10 @@ function renderHealthReport() {
   content.innerHTML = `
     <div class="report-page">
       <div class="report-toolbar">
-        <label>Projeto<select id="health-project">${projectOptions(project.id)}</select></label>
+        <label>Projeto<select id="health-project">${projectOptions(project.id, { exclude: configured.excludedProjectKeys })}</select></label>
         <label>Minimo esperado<input id="health-minimum" type="number" min="0" max="100" value="${minimum}"></label>
         <button class="btn btn-primary" id="save-health-minimum">Salvar minimo</button>
+        <details class="health-weight-config"><summary>Configurar pesos</summary><div class="health-weight-fields">${Object.entries(configured.weights).map(([key, value]) => `<label>${sanitize(key)}<input data-health-weight="${sanitize(key)}" type="number" min="0" max="100" value="${value}"></label>`).join('')}<button class="btn btn-secondary" id="save-health-weights">Aplicar pesos</button></div></details>
         <button class="btn btn-secondary" id="export-health-xlsx">Exportar Excel</button>
       </div>
 
@@ -364,7 +379,8 @@ function renderHealthReport() {
       ` : ''}
 
       <div class="kpi-grid">
-        <div class="kpi-card kpi-info">${businessHelp('Regra: Project Health Score', 'Nota ponderada de prazo, fluxo, bloqueio, qualidade, escopo e governanca.')}<div class="kpi-value">${summary.health.score === null ? '—' : summary.health.score}</div><div class="kpi-label">Project Health Score</div><div class="kpi-trend">${sanitize(summary.health.classification.label)} · ${sanitize(healthTrend(summary.history))}</div></div>
+        <div class="kpi-card kpi-info">${businessHelp('Regra: Project Health Score', 'Nota ponderada de prazo, execucao, bloqueios, qualidade, escopo e governanca. O score e deterministico e nao e alterado por IA.')}<div class="kpi-value">${summary.health.score === null ? '—' : summary.health.score}</div><div class="kpi-label">Project Health Score</div><div class="kpi-trend">${sanitize(summary.health.classification.label)} · ${sanitize(healthTrend(summary.history))}</div></div>
+        <div class="kpi-card ${summary.health.confidence.level === 'high' ? 'kpi-success' : 'kpi-warning'}">${businessHelp('Regra: Confidence Score', 'Confianca separada do score, composta por cobertura de status, campos obrigatorios, datas, historico, hierarquia e frescor da sincronizacao.')}<div class="kpi-value">${summary.health.confidence.score}</div><div class="kpi-label">Confianca (${summary.health.confidence.level === 'high' ? 'alta' : summary.health.confidence.level === 'medium' ? 'media' : 'baixa'})</div><div class="kpi-trend">${summary.health.confidence.stale ? 'Dados desatualizados' : 'Dados dentro da janela de frescor'}</div></div>
         <div class="kpi-card">${businessHelp('Regra: cards elegíveis', 'Cards que podem ser avaliados pela regra de cobertura de comentários.') }<div class="kpi-value">${summary.eligible.length}</div><div class="kpi-label">Cards elegiveis</div></div>
         <div class="kpi-card kpi-success">${businessHelp('Regra: comentário humano', 'Cards elegíveis que possuem pelo menos um comentário feito por uma pessoa.') }<div class="kpi-value">${summary.healthy}</div><div class="kpi-label">Com comentario humano</div></div>
         <div class="kpi-card kpi-warning">${businessHelp('Regra: sem comentário humano', 'Cards elegíveis sem comentário humano identificado na carga sincronizada.') }<div class="kpi-value">${summary.missing}</div><div class="kpi-label">Sem comentario humano</div></div>
@@ -374,7 +390,7 @@ function renderHealthReport() {
 
       <section class="report-section health-score-panel">
         <h3>Por que este projeto esta ${sanitize(summary.health.classification.label.toLowerCase())}?</h3>
-        <p class="muted">${summary.health.reasons.length ? `Principais sinais: ${sanitize(summary.health.reasons.join(' · '))}.` : 'Nao foram identificados sinais de deterioracao na carga atual.'}</p>
+        <p class="muted">${summary.health.reasons.length ? `Principais sinais: ${sanitize(summary.health.reasons.join(' · '))}.` : 'Nao foram identificados sinais de deterioracao na carga atual.'} ${summary.health.hardCap !== null ? `O score foi limitado a ${summary.health.hardCap} por uma regra critica.` : ''}</p>
         <div class="kpi-grid">
           ${summary.health.dimensions.map(dimension => `<div class="kpi-card"><div class="kpi-value">${dimension.score}</div><div class="kpi-label">${sanitize(dimension.label)} · peso ${dimension.weight}%</div><div class="progress-bar"><div class="fill" style="width:${dimension.score}%"></div></div></div>`).join('')}
         </div>
@@ -384,13 +400,13 @@ function renderHealthReport() {
         <h3>Resumo por projeto</h3>
         <div class="table-container">
           <table class="data-table">
-            <thead><tr><th>Projeto</th><th>Score</th><th>Prazo</th><th>Fluxo</th><th>Bloqueio</th><th>Qualidade</th><th>Situacao</th><th>Atualizado</th></tr></thead>
+            <thead><tr><th>Projeto</th><th>Score</th><th>Prazo</th><th>Execucao</th><th>Bloqueios</th><th>Qualidade</th><th>Situacao</th><th>Atualizado</th></tr></thead>
             <tbody>
               ${allProjectSummaries.map(item => `
                 <tr>
                   <td><strong>${sanitize(item.project.key)}</strong><br><span class="muted">${sanitize(item.project.name)}</span></td>
                   <td><strong>${item.health.score === null ? '—' : item.health.score}</strong></td>
-                  ${['prazo', 'fluxo', 'bloqueio', 'qualidade'].map(key => `<td>${item.health.dimensions.find(d => d.key === key)?.score ?? '—'}</td>`).join('')}
+              ${['prazo', 'execucao', 'bloqueios', 'qualidade'].map(key => `<td>${item.health.dimensions.find(d => d.key === key)?.score ?? '—'}</td>`).join('')}
                   <td><span class="badge ${item.health.classification.key === 'healthy' ? 'badge-done' : item.health.classification.key === 'critical' ? 'badge-blocked' : 'badge-warning'}">${sanitize(item.health.classification.label)}</span></td>
                   <td>${formatDateTime(item.history.at(-1)?.date || null)}</td>
                 </tr>
@@ -435,6 +451,15 @@ function renderHealthReport() {
   });
   document.getElementById('save-health-minimum')?.addEventListener('click', () => {
     localStorage.setItem(HEALTH_MIN_KEY, document.getElementById('health-minimum')?.value || '90');
+    renderHealthReport();
+  });
+  document.getElementById('save-health-weights')?.addEventListener('click', () => {
+    const weights = Object.fromEntries([...document.querySelectorAll('[data-health-weight]')].map(input => [input.dataset.healthWeight, Number(input.value)]));
+    if (Object.values(weights).reduce((sum, value) => sum + value, 0) !== 100) {
+      showToast('A soma dos pesos deve ser exatamente 100%.', 'error');
+      return;
+    }
+    saveReportConfig(`health:${project.key}`, { weights });
     renderHealthReport();
   });
   document.getElementById('export-health-xlsx')?.addEventListener('click', () => exportHealthWorkbook(allProjectSummaries, summary));
@@ -632,7 +657,7 @@ async function exportHealthWorkbook(projectSummaries, selectedSummary) {
     },
     {
       name: 'Cards pendentes',
-      rows: selectedSummary.enriched.filter(item => item.health.key !== 'healthy').map(({ card, health }) => ({
+      rows: selectedSummary.enriched.map(({ card, health }) => ({ card, health, impact: calculateCardImpact(card) })).filter(item => item.impact.risk > 0).map(({ card, health, impact }) => ({
         card: card.key,
         titulo: card.title,
         tipo: rawTypeLabel(card),
@@ -641,8 +666,8 @@ async function exportHealthWorkbook(projectSummaries, selectedSummary) {
         humanos: health.human,
         automacao: health.automation,
         situacao: health.label,
-        impacto: calculateCardImpact(card).impact,
-        fatores_impacto: calculateCardImpact(card).reasons.join(' | '),
+        impacto: impact.risk,
+        fatores_impacto: impact.reasons.join(' | '),
         jira: card.jiraUrl || '',
       })),
     },

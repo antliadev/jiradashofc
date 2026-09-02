@@ -23,6 +23,7 @@ const ICONS = {
 };
 
 const SIDEBAR_COLLAPSED_KEY = 'rja.sidebar.collapsed';
+let attentionCountsLoadRequested = false;
 
 function getCurrentPath() {
   return (window.location.hash.replace(/^#\/?/, '/') || '/').split('?')[0];
@@ -50,13 +51,27 @@ function isSidebarCollapsed() {
   return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === 'true';
 }
 
-function getAttentionCounts() {
-  if (!dataService?.isLoaded) {
-    return { overdue: 0, blocked: 0, total: 0 };
+function ensureAttentionCountsLoaded() {
+  if (attentionCountsLoadRequested || dataService?.isLoaded || dataService?.loadError) return;
+  attentionCountsLoadRequested = true;
+  dataService.ensureLoaded()
+    .catch(() => null)
+    .finally(() => {
+      attentionCountsLoadRequested = false;
+      if (!document.getElementById('sidebar')?.classList.contains('hidden')) {
+        renderSidebar();
+      }
+    });
+}
+
+export function getAttentionCounts(service = dataService) {
+  if (!service?.isLoaded) {
+    if (service === dataService) ensureAttentionCountsLoaded();
+    return { overdue: null, blocked: null, total: null };
   }
 
-  const overdue = dataService.getCards({ overdue: true }).length;
-  const blocked = dataService.getCards({ statusCategory: StatusCategory.BLOCKED }).length;
+  const overdue = service.getCards({ overdue: true }).length;
+  const blocked = service.getCards({ statusCategory: StatusCategory.BLOCKED }).length;
   return { overdue, blocked, total: overdue + blocked };
 }
 

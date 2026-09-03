@@ -23,6 +23,11 @@ find-skills (descoberta local), architecture e webapp-testing.
   citacao literal e IDs de evidencia obrigatorios. Sugestoes sao interpretacoes
   revisaveis; numeros e conclusoes incompatíveis sao rejeitados. Falhas mantem
   o texto deterministico. A cobertura parcial e explicitada.
+- `lib/ai/`: politica executada pelo servidor, candidatos literais com contexto,
+  schemas e verificador de suporte. Parafrases somente substituem a extracao
+  quando recebem parecer de suporte; continuam exigindo revisao humana.
+  Falha, duvida ou contradicao preservam a citacao atribuida, nao a parafrase.
+  Parecer de outro modelo nao equivale a prova. Raciocinio interno nao e salvo.
 - `lib/sprintReviewValidation.js`: reexecuta os calculos no servidor antes de
   aprovar. Nao aceita metricas enviadas pelo navegador. Confirma avisos,
   agrupamento, evidencias do goal e limites dos textos.
@@ -34,8 +39,12 @@ find-skills (descoberta local), architecture e webapp-testing.
 - `src/pages/sprint-review.js`: selecao, configuracao, revisao, busca,
   paginacao 10/25/50/100, evidencias, links Jira, confirmacao e versoes.
 - `src/utils/sprint-review-render.js`: template deterministico 1600x900,
-  PNG 2400x1350, varias imagens para muitas entregas e verificacao de overflow.
-  Artes exportadas sao guardadas no banco e podem ser reabertas sem recriacao.
+  PNG 2400x1350, resumo executivo, datas e blocos revisaveis. Conteudo extenso
+  usa continuacoes; todas as paginas sao geradas e persistidas antes do download.
+- `lib/sprintReviewArt.js`: decodificacao real de PNG, CRC, limites de expansao,
+  hashes e manifesto. Mesmo conteudo e idempotente; pagina divergente exige
+  nova versao. O manifesto declara `semanticIntegrity: false`: validacao dos
+  bytes nao comprova correspondencia visual com os dados aprovados.
 
 ## Decisoes
 
@@ -62,6 +71,12 @@ find-skills (descoberta local), architecture e webapp-testing.
    utilizavel. Nao existe sucesso simulado nem afirmacao de causa por status.
 9. PNG e enviado ao servidor antes do download de cada pagina. Se falhar no
    meio, a exportacao reporta erro; arte incompleta nao e tratada como completa.
+10. Bloqueio ocorrido e bloqueio vigente sao distintos. Destino de continuidade
+    nao confirmado fica desconhecido, nao se converte em ausencia comprovada.
+    Dados `current_only` sao visiveis como complemento, nao prova do fechamento.
+11. Edicoes efetivas de textos exigem nova confirmacao e ficam identificadas
+    como humanas, sem herdar verificacao automatica. O servidor recalcula fatos
+    e a quantidade de paginas; nao confia no manifesto enviado pelo navegador.
 
 ## Configuracao e operacao
 
@@ -70,6 +85,15 @@ tem RLS, sem grants diretos para anon/authenticated, somente leitura/insercao
 para service_role e trigger que impede UPDATE/DELETE. Nao usar localStorage
 para evidencias ou snapshots. A migration foi aplicada ao banco oficial e a
 imutabilidade foi validada em transacao com rollback, sem deixar fixtures.
+
+A revisao de integridade requer tambem
+`sql/migration-sprint-review-art-integrity.sql`. Esta migration aditiva ainda
+nao foi aplicada nesta implementacao local. Ela garante unicidade de pagina
+v2 entre processos. Testes de concorrencia usam armazenamento simulado;
+validar tambem em PostgreSQL antes da implantacao.
+Versoes antigas sem manifesto nao sao regeneradas silenciosamente. O usuario
+deve criar uma nova versao para usar o template atual; registros antigos nao
+sao apagados. Somente o autor da aprovacao pode anexar a arte dessa versao.
 
 Um usuario Full seleciona o projeto/board, configura os IDs de status,
 tipos elegiveis, campo Sprint, checklist quando existir e agrupamento.
@@ -109,6 +133,11 @@ Referencias oficiais verificadas:
 - `node tests/sprint-review.browser.js` com Vite local: selecao, links Jira,
   busca, tamanho de pagina, modal, Preflight, snapshot, PNG e viewport mobile.
   As respostas dessa suite sao sinteticas, sem sessao real.
+- `node tests/sprint-review-front.browser.js`: composicao executiva equivalente
+  a referencia, seis entregas em uma lamina, edicao, evidencias e responsividade.
+- Testes adicionais: afirmacao sem relacao com citacao, verificacao de suporte
+  indisponivel/contraditoria, metadados PNG comprimidos, streams concatenados,
+  arquivos truncados, pagina divergente e edicao sem nova confirmacao.
 - Validacao real, somente leitura, no DEVOPS board 643 / sprint 3278:
   coleta de 149 issues do projeto em aproximadamente 20 segundos; IDs e
   completeDate confirmados na API. Nao foi presumido o resultado ilustrativo
@@ -138,11 +167,16 @@ Referencias oficiais verificadas:
   Card/Manual. Prioridades criticas limitam a classificacao, nao o percentual.
 - Visao reprocessada com dados atuais possui corte, rotulo e fonte separados.
   Ela exige confirmacao e nunca substitui o snapshot historico existente.
-- Goal pode ser sugerido pela NVIDIA com citacao; a sugestao nunca chega
-  aprovada. Usuario confirma resultado/evidencias antes de incluir na arte.
+- Goal admite avaliacao humana com evidencias e confirmacao separada antes
+  de entrar na arte. A politica de IA atual se abstem de classificar o objetivo
+  como atingido: pode sinalizar evidencia insuficiente, nunca aprova por lote.
   Faixas de confianca sao configuraveis no perfil.
 - Textos excepcionalmente longos podem exigir ajuste manual de agrupamento;
   overflow bloqueia o download em vez de cortar o conteudo.
+- A politica/verificador novos foram testados com transporte simulado. A
+  qualidade com modelo real, latencia para 100 cards e homologacao autenticada
+  precisam ser medidas no ambiente, com chave e perfil aprovados. Captura de
+  baseline ainda depende do ciclo de sync; nao ha garantia de webhook imediato.
 - Testes locais, integracoes pontuais e push nao equivalem a homologacao
   completa da interface autenticada em producao. Nao considerar o card
   integralmente concluido sem conferir estes limites com o responsavel.

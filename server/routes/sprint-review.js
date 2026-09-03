@@ -3,15 +3,20 @@ import { requireAppAuth } from '../auth.js';
 import { canAccessPermission, isFull } from '../../lib/appPermissions.js';
 import { fetchDashboardDataFromDatabase } from '../../lib/jiraService.js';
 import { createReviewJiraClient, positiveId, projectKey } from '../../lib/sprintReviewJira.js';
-import { getReviewRecord, insertReviewRecord, listReviewRecords } from '../../lib/sprintReviewStore.js';
-import { prepareReviewSnapshot, validateReviewProfile } from '../../lib/sprintReviewValidation.js';
+import { getReviewRecord, insertReviewRecord, listReviewRecords, insertReviewArt } from '../../lib/sprintReviewStore.js';
+import { buildReviewArtManifest, collectReviewArt, reviewArtPageCount } from '../../lib/sprintReviewArt.js';
+import { prepareReviewSnapshot, validateReviewProfile, validateReviewChoices } from '../../lib/sprintReviewValidation.js';
 import { buildSprintReview } from '../../src/data/sprint-review.js';
 import { sprintSlidePages } from '../../src/utils/sprint-review-render.js';
 import { synthesizeSprintReview } from '../../lib/sprintReviewAI.js';
 
 const router = express.Router();
 const pending = new Set();
-router.use(requireAppAuth, (req, res, next) => {
+router.use((req, res, next) => {
+  Promise.resolve(requireAppAuth(req, res, next)).catch(error => {
+    if (!res.headersSent) res.status(error instanceof URIError ? 401 : 503).json({ error: 'Nao foi possivel validar a sessao Supabase.' });
+  });
+}, (req, res, next) => {
   res.set('Cache-Control', 'no-store');
   if (!canAccessPermission(req.session?.user, 'projects.sprint-review')) return res.status(403).json({ error: 'Sem permissao para Sprint Review.' });
   next();
@@ -59,7 +64,7 @@ router.post('/analyze', handle(async (req, res) => {
     const profiles = await listReviewRecords({ ...ctx, kind: 'profile', includePayload: true, sprintId: undefined });
     if (!profiles.length) return res.status(400).json({ error: 'Configure e salve o perfil do projeto/board antes de analisar.' });
     const client = await createReviewJiraClient();
-    const source = await client.collect(ctx.projectKey, ctx.boardId, ctx.sprintId, profiles[0].payload);
+    const source = await client.collect(ctx.projectKey, ctx.boardId, ctx.sprintId, profiles[0].payload, { includePostClosure: req.body.mode === 'current' });
     source.mode = req.body.mode === 'current' ? 'current' : 'historical';
     if (source.mode === 'current') {
       source.historicalCompleteDate = source.sprint.completeDate;
@@ -69,21 +74,27 @@ router.post('/analyze', handle(async (req, res) => {
     source.baselineSnapshot = baselines.find(row => row.payload.startDate === source.sprint.startDate)?.payload || null;
     source.ai = { status: 'unconfigured', suggestions: [] };
     const record = await insertReviewRecord({ ...ctx, kind: 'source', actor, payload: source });
-    res.json({ sourceId: record.id, review: buildSprintReview(source), aiAvailable: Boolean(process.env.NVIDIA_API_KEY), jiraBaseUrl: source.jiraBaseUrl, fetchedAt: source.fetchedAt });
+    res.json({ sourceId: record.id, review: buildSprintReview(source), aiAvailable: Boolean(process.env.NVIDIA_API_KEY), jiraBaseUrl: source.jiraBaseUrl, fetchedAt: source.fetchedAt, collection: source.collection });
   } finally { pending.delete(lock); }
 }));
 router.post('/recalculate', handle(async (req, res) => {
   const ctx = await context(req), record = await getReviewRecord(req.body.sourceId);
   if (record.kind !== 'source' || record.project_key !== ctx.projectKey || record.board_id !== ctx.boardId || record.sprint_id !== ctx.sprintId) return res.status(403).json({ error: 'Origem nao pertence a este contexto.' });
-  res.json({ review: buildSprintReview({ ...record.payload, choices: req.body.choices || {} }) });
+  const choices = validateReviewChoices(record.payload, req.body.choices || {});
+  res.json({ review: buildSprintReview({ ...record.payload, choices }) });
 }));
 router.post('/synthesize', handle(async (req, res) => {
   const ctx = await context(req), record = await getReviewRecord(req.body.sourceId);
   if (record.kind !== 'source' || record.project_key !== ctx.projectKey || record.board_id !== ctx.boardId || record.sprint_id !== ctx.sprintId) return res.status(403).json({ error: 'Origem nao pertence a este contexto.' });
   const source = record.payload;
-  source.ai = await synthesizeSprintReview(buildSprintReview(source));
+  const choices = validateReviewChoices(source, req.body.choices || {});
+  const lock = `ai:${ctx.projectKey}:${ctx.boardId}:${ctx.sprintId}`;
+  if (pending.has(lock)) return res.status(409).json({ error: 'Ja existe uma sintese em andamento para esta sprint.' });
+  pending.add(lock);
+  try { source.ai = await synthesizeSprintReview(buildSprintReview({ ...source, choices })); }
+  finally { pending.delete(lock); }
   const saved = await insertReviewRecord({ ...ctx, kind: 'source', actor: req.session.user.id, payload: source });
-  res.json({ sourceId: saved.id, review: buildSprintReview({ ...source, choices: req.body.choices || {} }) });
+  res.json({ sourceId: saved.id, review: buildSprintReview({ ...source, choices }) });
 }));
 router.post('/snapshots', handle(async (req, res) => {
   const ctx = await context(req), record = await getReviewRecord(req.body.sourceId);
@@ -91,6 +102,7 @@ router.post('/snapshots', handle(async (req, res) => {
   if (!/^[0-9a-f-]{36}$/i.test(req.body.requestId || '')) return res.status(400).json({ error: 'Identificador da operacao invalido.' });
   const payload = prepareReviewSnapshot(record.payload, req.body);
   payload.sourceId = record.id;
+  payload.renderManifest = { pageCount: sprintSlidePages(payload.review).length, templateVersion: payload.templateVersion };
   const saved = await insertReviewRecord({ ...ctx, kind: 'snapshot', actor: req.session.user.id, payload, requestId: req.body.requestId });
   res.status(201).json({ snapshot: saved });
 }));
@@ -103,15 +115,18 @@ router.get('/snapshots/:id', handle(async (req, res) => {
 router.post('/snapshots/:id/art/:page', express.raw({ type: 'image/png', limit: '4mb' }), handle(async (req, res) => {
   const ctx = await context(req), snapshot = await getReviewRecord(req.params.id);
   if (snapshot.kind !== 'snapshot' || snapshot.project_key !== ctx.projectKey || snapshot.board_id !== ctx.boardId || snapshot.sprint_id !== ctx.sprintId) return res.status(403).json({ error: 'Review nao pertence a este contexto.' });
-  const page = Number(req.params.page), data = req.body;
-  if (!Number.isInteger(page) || page < 1 || page > sprintSlidePages(snapshot.payload.review).length || !Buffer.isBuffer(data) || data.length < 24 || data.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a' || data.readUInt32BE(16) !== 2400 || data.readUInt32BE(20) !== 1350) return res.status(400).json({ error: 'Imagem PNG 16:9 invalida.' });
-  const render = await insertReviewRecord({ ...ctx, kind: 'render', actor: req.session.user.id, payload: { snapshotId: snapshot.id, snapshotHash: snapshot.content_hash, page, templateVersion: snapshot.payload.templateVersion, png: data.toString('base64') } });
+  if (snapshot.created_by !== req.session.user.id) return res.status(403).json({ error: 'Somente quem aprovou esta versao pode anexar sua arte. Crie uma nova versao.' });
+  const render = await insertReviewArt({ snapshot, page: Number(req.params.page), data: req.body, actor: req.session.user.id });
   res.status(201).json({ id: render.id, hash: render.content_hash });
 }));
 router.get('/snapshots/:id/art', handle(async (req, res) => {
   const ctx = await context(req), snapshot = await getReviewRecord(req.params.id);
   if (snapshot.kind !== 'snapshot' || snapshot.project_key !== ctx.projectKey || snapshot.board_id !== ctx.boardId || snapshot.sprint_id !== ctx.sprintId) return res.status(403).json({ error: 'Review nao pertence a este contexto.' });
   const records = await listReviewRecords({ ...ctx, kind: 'render', snapshotId: snapshot.id, includePayload: true });
-  res.json({ renders: records.filter(r => r.payload.snapshotId === snapshot.id).map(r => ({ id: r.id, page: r.payload.page, png: r.payload.png, hash: r.content_hash, createdAt: r.created_at })) });
+  if (!snapshot.payload.renderManifest) return res.status(409).json({ error: 'Versao antiga sem manifesto de arte. Crie uma nova versao; a original sera preservada.' });
+  const pageCount = reviewArtPageCount(snapshot), collected = collectReviewArt(snapshot, records);
+  const manifest = collected.size === pageCount ? buildReviewArtManifest(snapshot, records) : { complete: false, pageCount, uploadedPages: [...collected.keys()].sort((a, b) => a - b) };
+  const renders = [...collected.entries()].sort(([a], [b]) => a - b).map(([page, { record, hash }]) => ({ id: record.id, page, png: record.payload.png, hash, createdAt: record.created_at }));
+  res.json({ renders, manifest });
 }));
 export default router;

@@ -51,7 +51,15 @@ try {
   await page.waitForFunction(() => !document.querySelector('.sprint-review').getAttribute('aria-busy').includes('true'));
   for (const checkbox of await page.locator('[data-warning]').all()) await checkbox.check();
   await page.click('#sr-preview');
-  assert.equal(await page.locator('.sr-slide').count(), 16);
+  assert.ok(await page.locator('.sr-slide').count() < 16);
+  assert.equal(await page.locator('.sr-slide-row').count(), 26);
+  assert.equal(await page.locator('.sr-executive-block').count(), 5);
+  await page.fill('#sr-exec-highlight', 'Marco confirmado pelas evidências.');
+  await page.check('#sr-confirm-text');
+  await page.fill('#sr-exec-highlight', 'Marco confirmado pelas evidências do fechamento.');
+  assert.equal(await page.isChecked('#sr-confirm-text'), false);
+  await page.check('#sr-confirm-text');
+  await page.click('#sr-preview');
   const overflow = await page.locator('.sr-slide').evaluateAll(slides => slides.flatMap(node => [node, ...node.querySelectorAll('header,main,footer,p,h1,h2,.sr-slide-row,.sr-slide-statement')].filter(el => el.scrollHeight > el.clientHeight + 2 || el.scrollWidth > el.clientWidth + 2).map(el => el.tagName)));
   assert.deepEqual(overflow, []);
   await page.screenshot({ path: '/tmp/sprint-review-desktop.png' });
@@ -61,7 +69,9 @@ try {
   await page.click('#sr-save');
   await page.waitForFunction(() => document.querySelector('#sr-save').disabled && !document.querySelector('.sprint-review').getAttribute('aria-busy').includes('true'));
   assert.equal(snapshots.length, 1);
+  assert.equal(snapshots[0].payload.review.executive.highlight.text, 'Marco confirmado pelas evidências do fechamento.');
   const download = page.waitForEvent('download');
+  download.catch(() => {});
   await page.evaluate(async () => {
     const { exportSprintSlides } = await import('/src/utils/sprint-review-render.js');
     const { buildSprintReview } = await import('/src/data/sprint-review.js');

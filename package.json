@@ -30,6 +30,7 @@
     "dotenv": "^16.4.5",
     "exceljs": "^4.4.0",
     "express": "^4.21.2",
+    "fast-png": "6.4.0",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "node-cache": "^5.1.2"

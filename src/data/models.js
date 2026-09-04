@@ -30,7 +30,6 @@ export const DataSourceType = Object.freeze({
   MOCK: 'mock',
   IMPORTED: 'imported',
   API: 'api',
-  VALIDATION: 'validation',
   EMPTY: 'empty',  // Sem dados - usuário precisa sincronizar
 });
 

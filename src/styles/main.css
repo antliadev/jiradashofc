@@ -332,7 +332,6 @@ input, select, textarea { font-family: inherit; }
 .data-source-badge .dot.mock { background: var(--warning); }
 .data-source-badge .dot.imported { background: var(--info); }
 .data-source-badge .dot.api { background: var(--success); }
-.data-source-badge .dot.validation { background: var(--warning); }
 
 /* Main Content */
 .main-content { margin-left: var(--sidebar-w); flex: 1; min-width: 0; width: 100%; min-height: 100vh; overflow-x: hidden; }

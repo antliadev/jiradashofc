@@ -124,8 +124,7 @@ export function renderSidebar() {
   const attentionCounts = getAttentionCounts();
   const sourceLabel = source === 'empty' ? 'Sem dados' : 
                       source === 'mock' ? 'Mock Data' : 
-                      source === 'imported' ? 'Importado' :
-                      source === 'validation' ? 'Validacao' : 'API Jira';
+                      source === 'imported' ? 'Importado' : 'API Jira';
   const isLight = getTheme() === 'light';
   const isCollapsed = isSidebarCollapsed();
   document.body.classList.toggle('sidebar-collapsed', isCollapsed);

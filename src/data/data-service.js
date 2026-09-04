@@ -515,7 +515,7 @@ class DataService {
   _applyJiraData(data) {
     this._rawJiraData = data;
     this.transformJiraData(data);
-    this._source = data.validationMode ? DataSourceType.VALIDATION : DataSourceType.API;
+    this._source = DataSourceType.API;
     this._lastSync = data.lastSyncedAt;
     this._apiStatus = 'connected';
     this._loadError = null;

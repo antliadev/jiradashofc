@@ -28,6 +28,7 @@ import {
 } from '../../lib/projectMetadataService.js';
 import { createSyncJob, createSyncJobFromEnv, createScopedSyncJobFromEnv, getSyncJobStatus, runSyncJob, executeAutoSync } from '../../lib/syncJobService.js';
 import { fetchHoursDashboard } from '../../lib/hoursDashboardService.js';
+import { validationDashboardData, validationIssuesPage, validationSyncJob } from '../../lib/validationDataService.js';
 
 const router = express.Router();
 router.use('/sprint-review', sprintReviewRoutes);
@@ -36,6 +37,7 @@ router.use('/sprint-plan', sprintPlanRoutes);
 router.get('/system/status', async (req, res) => {
   const supabaseConfig = checkSupabaseConfig();
   const latestJob = await getSyncJobStatus().catch(() => null);
+  const validationJob = validationSyncJob();
 
   res.json({
     supabase: {
@@ -46,11 +48,12 @@ router.get('/system/status', async (req, res) => {
         : 'Backend sem chave privilegiada Supabase.'
     },
     sync: {
-      latestJobId: latestJob?.id || null,
-      latestStatus: latestJob?.status || null,
-      latestTotalIssues: latestJob?.totalIssues || 0,
-      latestFinishedAt: latestJob?.finishedAt || null
-    }
+      latestJobId: latestJob?.id || validationJob?.id || null,
+      latestStatus: latestJob?.status || validationJob?.status || null,
+      latestTotalIssues: latestJob?.totalIssues || validationJob?.totalIssues || 0,
+      latestFinishedAt: latestJob?.finishedAt || validationJob?.finishedAt || null
+    },
+    validationMode: Boolean(validationJob)
   });
 });
 
@@ -196,8 +199,18 @@ router.post('/sync/preflight', async (req, res) => {
 router.get('/sync/status', async (req, res) => {
   try {
     const job = await getSyncJobStatus(req.query?.jobId || null);
+    const validationJob = validationSyncJob();
 
     if (!job) {
+      if (validationJob) {
+        return res.json({
+          ...validationJob,
+          lastSyncStatus: validationJob.status,
+          lastSync: validationJob.finishedAt,
+          lastSyncError: null,
+          validationMode: true
+        });
+      }
       return res.json({
         status: 'idle',
         lastSyncStatus: null,
@@ -223,6 +236,19 @@ router.get('/sync/status', async (req, res) => {
 // ─────────────────────────────────────────────
 router.post('/sync', async (req, res) => {
   try {
+    const validationJob = validationSyncJob();
+    if (validationJob) {
+      return res.status(202).json({
+        success: true,
+        message: 'Dados de validacao ativos no develop.',
+        jobId: validationJob.id,
+        job: validationJob,
+        durable: false,
+        credentialsPersisted: false,
+        validationMode: true
+      });
+    }
+
     const sessionId = req.headers['x-session-id'] || null;
     const { job, credentials, durable, credentialsPersisted } = await createSyncJob(req.body || {}, sessionId);
 
@@ -273,6 +299,19 @@ router.post('/sync', async (req, res) => {
 // ─────────────────────────────────────────────
 router.post('/sync/start', async (req, res) => {
   try {
+    const validationJob = validationSyncJob();
+    if (validationJob) {
+      return res.status(202).json({
+        success: true,
+        message: 'Dados de validacao ativos no develop.',
+        jobId: validationJob.id,
+        job: validationJob,
+        durable: false,
+        credentialsPersisted: false,
+        validationMode: true
+      });
+    }
+
     const sessionId = req.headers['x-session-id'] || null;
     const { job, credentials, durable, credentialsPersisted } = await createSyncJobFromEnv(sessionId);
 
@@ -388,7 +427,12 @@ router.all('/sync/worker', async (req, res) => {
 router.get('/dashboard', async (req, res) => {
   try {
     const latestJob = await getSyncJobStatus().catch(() => null);
-    const data = await fetchDashboardDataFromDatabase({ force: req.query.force === 'true' || req.query.force === '1' });
+    const data = await fetchDashboardDataFromDatabase({ force: req.query.force === 'true' || req.query.force === '1' })
+      .catch(error => {
+        const validationData = validationDashboardData();
+        if (validationData) return validationData;
+        throw error;
+      });
     const total = data.totalIssues || 0;
 
     if (total === 0) {
@@ -474,6 +518,21 @@ router.get('/issues', async (req, res) => {
   try {
     const { project, status, assignee, priority, type } = req.query;
     const filters = { project, status, assignee, priority, type };
+    const validationPage = validationIssuesPage(filters, {
+      limit: req.query.all === 'true' ? 500 : req.query.limit,
+      offset: req.query.all === 'true' ? 0 : req.query.offset
+    });
+
+    if (validationPage) {
+      if (req.query.all === 'true') {
+        return res.json({
+          ...validationPage,
+          limit: validationPage.total,
+          issues: validationPage.issues
+        });
+      }
+      return res.json(validationPage);
+    }
 
     if (req.query.all === 'true') {
       const issues = await fetchIssuesFromDatabase(filters);
@@ -506,7 +565,7 @@ router.get('/issues', async (req, res) => {
 // ─────────────────────────────────────────────
 router.get('/projects', async (req, res) => {
   try {
-    const data = await fetchDashboardDataFromDatabase();
+    const data = validationDashboardData() || await fetchDashboardDataFromDatabase();
     return res.json(data.projects);
   } catch (error) {
     console.error('[projects] Erro:', error.message);
@@ -519,7 +578,7 @@ router.get('/projects', async (req, res) => {
 // ─────────────────────────────────────────────
 router.get('/analysts', async (req, res) => {
   try {
-    const data = await fetchDashboardDataFromDatabase();
+    const data = validationDashboardData() || await fetchDashboardDataFromDatabase();
     return res.json(data.analysts);
   } catch (error) {
     console.error('[analysts] Erro:', error.message);
@@ -532,7 +591,7 @@ router.get('/analysts', async (req, res) => {
 // ─────────────────────────────────────────────
 router.get('/statuses', async (req, res) => {
   try {
-    const data = await fetchDashboardDataFromDatabase();
+    const data = validationDashboardData() || await fetchDashboardDataFromDatabase();
     return res.json(data.statuses);
   } catch (error) {
     console.error('[statuses] Erro:', error.message);
@@ -545,7 +604,7 @@ router.get('/statuses', async (req, res) => {
 // ─────────────────────────────────────────────
 router.get('/metrics', async (req, res) => {
   try {
-    const data = await fetchDashboardDataFromDatabase();
+    const data = validationDashboardData() || await fetchDashboardDataFromDatabase();
     return res.json(data.metrics);
   } catch (error) {
     console.error('[metrics] Erro:', error.message);
@@ -558,7 +617,7 @@ router.get('/metrics', async (req, res) => {
 // ─────────────────────────────────────────────
 router.get('/board', async (req, res) => {
   try {
-    const data = await fetchDashboardDataFromDatabase();
+    const data = validationDashboardData() || await fetchDashboardDataFromDatabase();
     return res.json(data.board);
   } catch (error) {
     console.error('[board] Erro:', error.message);

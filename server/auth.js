@@ -7,6 +7,7 @@ import { authenticateUser } from './access-store.js';
 import { createSignedSession, verifySignedSession } from '../lib/authSession.js';
 import { authConfig } from '../lib/authConfig.js';
 import { resolveSupabaseSession, signInWithSupabase, signInWithSupabaseOAuthTokens, signOutSupabase } from '../lib/appAuthService.js';
+import { passwordLoginAllowed } from '../lib/loginMode.js';
 
 // Fallback legado temporario. A versao oficial deve substituir este fluxo por
 // Supabase Auth; enquanto isso, credenciais precisam ser configuradas fora do repo.
@@ -143,6 +144,9 @@ async function requireAppAuth(req, res, next) {
  * Endpoint de login
  */
 async function handleLogin(req, res) {
+  if (!passwordLoginAllowed()) {
+    return res.status(403).json({ error: 'Login por email e senha disponivel somente no ambiente develop.', code: 'AUTH_PASSWORD_DISABLED' });
+  }
   const { email, password } = req.body;
   
   if (!email || !password) {

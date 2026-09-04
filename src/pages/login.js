@@ -2,6 +2,8 @@
  * login.js — Página de Login
  */
 import { sanitize } from '../utils/helpers.js';
+import { firstAllowedRoute } from '../utils/access-control.js';
+import { currentLoginMethods } from '../utils/login-mode.js';
 export function renderLogin() {
   const content = document.getElementById('page-content');
   document.getElementById('page-header')?.replaceChildren();
@@ -12,6 +14,7 @@ export function renderLogin() {
   const authError = params.get('authError') || readAuthError();
   const recoveryMode = recoveryRequested || Boolean(recoveryState.accessToken || recoveryState.error);
   const recoveryError = recoveryState.error ? formatRecoveryError(recoveryState) : '';
+  const loginMethods = currentLoginMethods();
   
   content.innerHTML = `
     <div class="login-container">
@@ -38,12 +41,20 @@ export function renderLogin() {
             </button>
           </div>
         ` : `
-          <div class="login-form">
-            <button type="button" class="btn btn-primary btn-login btn-google" id="google-login-btn">
-              Entrar com Google
-            </button>
-            <div id="login-error" class="login-error" style="${authError ? '' : 'display: none;'}">${sanitize(authError)}</div>
-          </div>
+          ${loginMethods.password ? `
+            <form id="login-form" class="login-form">
+              <div class="report-alert info login-environment-note"><strong>Ambiente de homologacao</strong><p>Use seu e-mail e senha cadastrados no Supabase.</p></div>
+              <div class="form-group"><label for="login-email">E-mail</label><input type="email" id="login-email" name="email" autocomplete="email" required></div>
+              <div class="form-group"><label for="login-password">Senha</label><input type="password" id="login-password" name="password" autocomplete="current-password" required></div>
+              <div id="login-error" class="login-error" style="${authError ? '' : 'display: none;'}">${sanitize(authError)}</div>
+              <button type="submit" class="btn btn-primary btn-login" id="login-btn">Entrar</button>
+            </form>
+          ` : `
+            <div class="login-form">
+              <button type="button" class="btn btn-primary btn-login btn-google" id="google-login-btn">Entrar com Google</button>
+              <div id="login-error" class="login-error" style="${authError ? '' : 'display: none;'}">${sanitize(authError)}</div>
+            </div>
+          `}
         `}
         
         <div class="login-footer">
@@ -69,8 +80,38 @@ export function renderLogin() {
     return;
   }
 
-  const googleBtn = document.getElementById('google-login-btn');
-  googleBtn?.addEventListener('click', startGoogleLogin);
+  if (loginMethods.password) {
+    document.getElementById('login-form')?.addEventListener('submit', submitPasswordLogin);
+  } else {
+    document.getElementById('google-login-btn')?.addEventListener('click', startGoogleLogin);
+  }
+}
+
+async function submitPasswordLogin(event) {
+  event.preventDefault();
+  const button = document.getElementById('login-btn');
+  const errorDiv = document.getElementById('login-error');
+  errorDiv.style.display = 'none';
+  button.disabled = true;
+  button.textContent = 'Entrando...';
+  try {
+    const response = await fetch('/api/auth', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: document.getElementById('login-email').value.trim(), password: document.getElementById('login-password').value }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Nao foi possivel entrar.');
+    if (data.sessionId && data.sessionId !== 'supabase-cookie') localStorage.setItem('sessionId', data.sessionId);
+    window.markAuthenticated?.(data.user || null);
+    window.location.hash = `#${firstAllowedRoute(data.user || null)}`;
+  } catch (error) {
+    errorDiv.textContent = error.message || 'Nao foi possivel entrar.';
+    errorDiv.style.display = 'block';
+    button.disabled = false;
+    button.textContent = 'Entrar';
+  }
 }
 
 async function startGoogleLogin() {

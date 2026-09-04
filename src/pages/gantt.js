@@ -24,6 +24,11 @@ import {
   resolveStatusCategory, StatusCategory, isCardOverdue
 } from '../data/models.js';
 import { sanitize, formatDate, priorityLabel } from '../utils/helpers.js';
+import {
+  filterGanttItems,
+  getEligibleGanttAssignees,
+  normalizeGanttAssignee,
+} from './gantt-filters.js';
 
 // ═══════════════════════════════════════════════════════════════
 // CONSTANTES
@@ -430,11 +435,10 @@ function getTotalPixels(range, viewMode) {
 // ═══════════════════════════════════════════════════════════════
 
 function applyFilters(items) {
-  let result = items;
-
-  if (state.projectId) {
-    result = result.filter(item => item.card.projectId === state.projectId);
-  }
+  let result = filterGanttItems(items, {
+    projectId: state.projectId,
+    assigneeId: state.analystId,
+  });
 
   const periodStart = toDate(state.periodStart);
   const periodEnd = toDate(state.periodEnd);
@@ -453,6 +457,7 @@ function applyFilters(items) {
 function getActiveFilterCount() {
   let count = 0;
   if (state.projectId) count++;
+  if (state.analystId) count++;
   if (state.periodStart) count++;
   if (state.periodEnd) count++;
   return count;
@@ -1770,31 +1775,40 @@ function renderToolbar(projects, users, allItems, filteredCount) {
 
   const activeFilterCount = getActiveFilterCount();
   const hiddenCount = allItems.length - filteredCount;
+  const eligibleAssignees = getEligibleGanttAssignees(allItems, users, state.projectId);
 
   return `
     <div class="gantt-toolbar">
       <div class="gantt-toolbar-group">
-        <span class="gantt-toolbar-label">Projeto</span>
-        <select id="gantt-project">
+        <label class="gantt-toolbar-label" for="gantt-project">Projeto</label>
+        <select id="gantt-project" aria-label="Filtrar por projeto">
           <option value="">Todos</option>
           ${projects.map(p => `<option value="${sanitize(p.id)}" ${state.projectId === p.id ? 'selected' : ''}>${sanitize(p.key)} - ${sanitize(p.name)}</option>`).join('')}
         </select>
       </div>
       <div class="gantt-toolbar-divider"></div>
       <div class="gantt-toolbar-group">
-        <span class="gantt-toolbar-label">Período inicial</span>
+        <label class="gantt-toolbar-label" for="gantt-assignee">Responsável</label>
+        <select id="gantt-assignee" aria-label="Filtrar por responsável">
+          <option value="">Todos</option>
+          ${eligibleAssignees.map(user => `<option value="${sanitize(user.id)}" ${state.analystId === user.id ? 'selected' : ''}>${sanitize(user.displayName)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="gantt-toolbar-divider"></div>
+      <div class="gantt-toolbar-group">
+        <label class="gantt-toolbar-label" for="gantt-period-start">Período inicial</label>
         <input type="date" id="gantt-period-start" value="${sanitize(state.periodStart)}" aria-label="Data inicial do período">
       </div>
       <div class="gantt-toolbar-group">
-        <span class="gantt-toolbar-label">Período final</span>
+        <label class="gantt-toolbar-label" for="gantt-period-end">Período final</label>
         <input type="date" id="gantt-period-end" value="${sanitize(state.periodEnd)}" aria-label="Data final do período">
       </div>
       <div class="gantt-toolbar-divider"></div>
       <div class="gantt-toolbar-group">
-        <span class="gantt-toolbar-label">Zoom</span>
+        <span class="gantt-toolbar-label" id="gantt-zoom-label">Zoom</span>
         <div class="gantt-zoom-group">
           ${zoomOptions.map(z => `
-            <button class="gantt-zoom-btn ${state.prefs.viewMode === z.value ? 'active' : ''}" data-view="${z.value}">${z.label}</button>
+            <button type="button" class="gantt-zoom-btn ${state.prefs.viewMode === z.value ? 'active' : ''}" data-view="${z.value}" aria-pressed="${state.prefs.viewMode === z.value}" aria-describedby="gantt-zoom-label">${z.label}</button>
           `).join('')}
         </div>
       </div>
@@ -1818,6 +1832,14 @@ function bindEvents() {
   // Filtros
   document.getElementById('gantt-project')?.addEventListener('change', e => {
     state.projectId = e.target.value;
+    const eligibleAssignees = getEligibleGanttAssignees(state.allItems, dataService.getUsers(), state.projectId);
+    state.analystId = normalizeGanttAssignee(state.analystId, eligibleAssignees);
+    state.visibleLimit = GANTT_INITIAL_LIMIT;
+    renderGantt();
+  });
+
+  document.getElementById('gantt-assignee')?.addEventListener('change', e => {
+    state.analystId = e.target.value;
     state.visibleLimit = GANTT_INITIAL_LIMIT;
     renderGantt();
   });
@@ -1837,6 +1859,7 @@ function bindEvents() {
   // Clear filters
   document.getElementById('gantt-clear-filters')?.addEventListener('click', () => {
     state.projectId = '';
+    state.analystId = '';
     state.periodStart = '';
     state.periodEnd = '';
     state.visibleLimit = GANTT_INITIAL_LIMIT;

@@ -11,6 +11,7 @@
  */
 import express from 'express';
 import sprintReviewRoutes from './sprint-review.js';
+import sprintPlanRoutes from './sprint-plan.js';
 import { configService } from '../../lib/configService.js';
 import { checkSupabaseConfig, supabase, supabaseKeyIsPrivileged } from '../../lib/supabaseServer.js';
 import {
@@ -30,6 +31,7 @@ import { fetchHoursDashboard } from '../../lib/hoursDashboardService.js';
 
 const router = express.Router();
 router.use('/sprint-review', sprintReviewRoutes);
+router.use('/sprint-plan', sprintPlanRoutes);
 
 router.get('/system/status', async (req, res) => {
   const supabaseConfig = checkSupabaseConfig();

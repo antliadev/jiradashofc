@@ -105,7 +105,8 @@ export function calculateConfidence(cards = [], metadata = {}, config = DEFAULT_
   const history = cards.filter(card => Number(card.changelogCount || 0) > 0 || (card.statusHistory || []).length > 0).length / cards.length;
   const hierarchy = cards.filter(card => card.parentKey || card.epicKey || card.type !== 'subtask').length / cards.length;
   const syncedAt = toDate(metadata.lastSyncedAt);
-  const ageHours = validDate(syncedAt) ? (Date.now() - syncedAt.getTime()) / 3600000 : Infinity;
+  const referenceNow = config.now ? toDate(config.now) : new Date();
+  const ageHours = validDate(syncedAt) && validDate(referenceNow) ? (referenceNow.getTime() - syncedAt.getTime()) / 3600000 : Infinity;
   const freshness = ageHours <= 24 ? 1 : ageHours <= config.staleAfterHours ? 0.5 : 0;
   const components = { statusMapping: status * 25, requiredFields: required * 25, dates: dates * 20, history: history * 10, hierarchy: hierarchy * 10, freshness: freshness * 10 };
   const score = clamp(Object.values(components).reduce((sum, value) => sum + value, 0));

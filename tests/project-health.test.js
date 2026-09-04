@@ -54,7 +54,11 @@ test('nao soma sinais sobrepostos e preserva card concluido sem risco corrente',
 });
 
 test('confidence score fica separado do score e sinaliza frescor', () => {
-  const result = calculateConfidence([baseCard({ changelogCount: 1 })], { lastSyncedAt: '2026-09-02T11:00:00.000Z' });
+  const result = calculateConfidence(
+    [baseCard({ changelogCount: 1 })],
+    { lastSyncedAt: '2026-01-01T11:00:00.000Z' },
+    { now: '2026-01-02T11:00:00.000Z' },
+  );
   assert.ok(result.score >= 80);
   assert.equal(result.stale, false);
   assert.equal(classifyProjectHealth(95, true, 75).key, 'attention');

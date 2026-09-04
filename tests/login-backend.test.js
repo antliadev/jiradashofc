@@ -21,10 +21,24 @@ test('develop autentica admin local sem Supabase', async () => {
     NODE_ENV: process.env.NODE_ENV,
     VERCEL: process.env.VERCEL,
     VERCEL_GIT_COMMIT_REF: process.env.VERCEL_GIT_COMMIT_REF,
+    AUTH_SESSION_SECRET: process.env.AUTH_SESSION_SECRET,
+    JIRA_ENCRYPTION_KEY: process.env.JIRA_ENCRYPTION_KEY,
     SUPABASE_URL: process.env.SUPABASE_URL,
     SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
+    SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
   };
-  Object.assign(process.env, { NODE_ENV: 'production', VERCEL: '1', VERCEL_GIT_COMMIT_REF: 'develop', SUPABASE_URL: '', SUPABASE_ANON_KEY: '' });
+  Object.assign(process.env, {
+    NODE_ENV: 'production',
+    VERCEL: '1',
+    VERCEL_GIT_COMMIT_REF: 'develop',
+    AUTH_SESSION_SECRET: '',
+    JIRA_ENCRYPTION_KEY: '',
+    SUPABASE_URL: '',
+    SUPABASE_ANON_KEY: '',
+    SUPABASE_SECRET_KEY: '',
+    SUPABASE_SERVICE_ROLE_KEY: '',
+  });
   const result = {};
   const res = { status(code) { result.status = code; return this; }, json(body) { result.body = body; return this; } };
   try {
@@ -45,10 +59,24 @@ test('develop valida sessao local admin sem cookie Supabase', async () => {
     NODE_ENV: process.env.NODE_ENV,
     VERCEL: process.env.VERCEL,
     VERCEL_GIT_COMMIT_REF: process.env.VERCEL_GIT_COMMIT_REF,
+    AUTH_SESSION_SECRET: process.env.AUTH_SESSION_SECRET,
+    JIRA_ENCRYPTION_KEY: process.env.JIRA_ENCRYPTION_KEY,
     SUPABASE_URL: process.env.SUPABASE_URL,
     SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY,
+    SUPABASE_SECRET_KEY: process.env.SUPABASE_SECRET_KEY,
+    SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
   };
-  Object.assign(process.env, { NODE_ENV: 'production', VERCEL: '1', VERCEL_GIT_COMMIT_REF: 'develop', SUPABASE_URL: '', SUPABASE_ANON_KEY: '' });
+  Object.assign(process.env, {
+    NODE_ENV: 'production',
+    VERCEL: '1',
+    VERCEL_GIT_COMMIT_REF: 'develop',
+    AUTH_SESSION_SECRET: '',
+    JIRA_ENCRYPTION_KEY: '',
+    SUPABASE_URL: '',
+    SUPABASE_ANON_KEY: '',
+    SUPABASE_SECRET_KEY: '',
+    SUPABASE_SERVICE_ROLE_KEY: '',
+  });
   const loginResult = {};
   const checkResult = {};
   const loginRes = { status(code) { loginResult.status = code; return this; }, json(body) { loginResult.body = body; return this; } };

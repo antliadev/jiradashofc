@@ -43,8 +43,8 @@ export function renderLogin() {
         ` : `
           ${loginMethods.password ? `
             <form id="login-form" class="login-form">
-              <div class="report-alert info login-environment-note"><strong>Ambiente de homologacao</strong><p>Use seu e-mail e senha cadastrados no Supabase.</p></div>
-              <div class="form-group"><label for="login-email">E-mail</label><input type="email" id="login-email" name="email" autocomplete="email" required></div>
+              <div class="report-alert info login-environment-note"><strong>Ambiente de homologacao</strong><p>Use usuario <code>admin</code> e senha <code>admin</code> para validacoes, sem depender do Supabase.</p></div>
+              <div class="form-group"><label for="login-email">Usuario</label><input type="text" id="login-email" name="email" autocomplete="username" required></div>
               <div class="form-group"><label for="login-password">Senha</label><input type="password" id="login-password" name="password" autocomplete="current-password" required></div>
               <div id="login-error" class="login-error" style="${authError ? '' : 'display: none;'}">${sanitize(authError)}</div>
               <button type="submit" class="btn btn-primary btn-login" id="login-btn">Entrar</button>

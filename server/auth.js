@@ -31,22 +31,6 @@ function validateCredentials(email, password) {
   return !!VALID_EMAIL && !!VALID_PASSWORD && email === VALID_EMAIL && password === VALID_PASSWORD;
 }
 
-function validateDevelopAdminCredentials(login, password) {
-  return passwordLoginAllowed() && String(login || '').trim().toLowerCase() === 'admin' && password === 'admin';
-}
-
-function developAdminUser() {
-  return {
-    id: 'develop-admin',
-    name: 'Admin Homologacao',
-    login: 'admin',
-    role: 'full',
-    status: 'active',
-    permissions: [],
-    testOnly: true,
-  };
-}
-
 /**
  * Cria uma nova sessão
  */
@@ -116,13 +100,6 @@ function validateSession(sessionId) {
   return session;
 }
 
-function validateDevelopTestSession(req) {
-  if (!passwordLoginAllowed()) return null;
-  const sessionId = req.headers['x-session-id'] || req.cookies?.sessionId;
-  const session = sessionId ? validateSession(sessionId) : null;
-  return session?.user?.testOnly === true ? session : null;
-}
-
 /**
  * Destroi uma sessão
  */
@@ -152,12 +129,6 @@ function requireAuth(req, res, next) {
 }
 
 async function requireAppAuth(req, res, next) {
-  const testSession = validateDevelopTestSession(req);
-  if (testSession) {
-    req.session = testSession;
-    return next();
-  }
-
   if (authConfig.provider === 'supabase') {
     const session = await resolveSupabaseSession(req, res);
     if (!session) {
@@ -183,22 +154,6 @@ async function handleLogin(req, res) {
   }
   
   if (authConfig.provider === 'supabase') {
-    if (validateDevelopAdminCredentials(email, password)) {
-      const user = developAdminUser();
-      try {
-        const session = createSession(user);
-        return res.json({
-          success: true,
-          sessionId: session.id,
-          email: session.email,
-          user: session.user,
-        });
-      } catch (error) {
-        console.error('[Auth] Falha ao criar sessao de homologacao:', error.message);
-        return res.status(500).json({ error: 'Autenticacao indisponivel. Verifique a configuracao segura da sessao.' });
-      }
-    }
-
     try {
       const session = await signInWithSupabase(email, password, res);
       return res.json({
@@ -306,15 +261,6 @@ function handleLogout(req, res) {
  * Endpoint para verificar sessão atual
  */
 async function handleCheckSession(req, res) {
-  const testSession = validateDevelopTestSession(req);
-  if (testSession) {
-    return res.json({
-      authenticated: true,
-      email: testSession.email,
-      user: testSession.user,
-    });
-  }
-
   if (authConfig.provider === 'supabase') {
     const session = await resolveSupabaseSession(req, res);
     if (!session) {

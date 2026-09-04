@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildSprintPlan, resolvePreviousSprint, validatePlanProfile } from '../src/data/sprint-plan.js';
+import { buildSuggestedPlanProfile } from '../lib/sprintProfileDefaults.js';
 
 const previous = { id: 4, state: 'closed', startDate: '2026-08-01T10:00:00Z', endDate: '2026-08-14T10:00:00Z', completeDate: '2026-08-15T10:00:00Z' };
 const target = { id: 5, state: 'active', startDate: '2026-08-16T10:00:00Z', endDate: '2026-08-30T10:00:00Z' };
@@ -13,6 +14,20 @@ const issue = (key, sprintIds, overrides = {}) => ({
 test('resolve sprint anterior pelo mesmo board e timestamps, nunca pelo nome', () => {
   assert.equal(resolvePreviousSprint([target, { ...previous, name: 'Sprint igual' }], 5).id, 4);
   assert.equal(resolvePreviousSprint([target], 5), null);
+});
+
+test('Sprint Plan aceita perfil sugerido para validacao inicial com aviso auditavel', () => {
+  const suggested = buildSuggestedPlanProfile({
+    types: [{ id: '100', statuses: [
+      { id: '1', name: 'Não Iniciado', statusCategory: { key: 'new' } },
+      { id: '2', name: 'Concluído', statusCategory: { key: 'done' } },
+    ] }],
+    fields: [{ id: 'duedate', name: 'Data limite' }, { id: 'customfield_1', name: 'Sprint', schema: { custom: 'com.pyxis.greenhopper.jira:gh-sprint' } }],
+  });
+  const plan = buildSprintPlan({ projectKey: 'DEV', boardId: '1', targetSprint: target, previousSprint: previous, profile: suggested, issues: [issue('DEV-1', [5])], scopeComplete: true, fetchedAt: target.startDate });
+  assert.equal(plan.metrics.planned, 1);
+  assert.equal(plan.preflight.warnings.some(item => item.code === 'profile_suggested'), true);
+  assert.equal(plan.preflight.errors.length, 0);
 });
 
 test('classifica origens exclusivas, pendencia nao absorvida e evidencia por janela', () => {

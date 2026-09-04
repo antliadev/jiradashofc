@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { buildSprintReview, confidenceScore, filterReviewComments, fieldAt, sprintIds } from '../src/data/sprint-review.js';
 import { reconstructReviewBaseline } from '../lib/sprintReviewBaseline.js';
 import { prepareReviewSnapshot } from '../lib/sprintReviewValidation.js';
+import { buildSuggestedPlanProfile, buildSuggestedReviewProfile } from '../lib/sprintProfileDefaults.js';
 
 const sprint = { id: 4, state: 'closed', name: 'Sprint 4', startDate: '2026-08-10T09:00:00-03:00', completeDate: '2026-08-22T12:00:00-03:00' };
 const profile = { version: 1, timezone: 'America/Sao_Paulo', sprintField: 'customfield_10020', statusMap: { '1': 'pending', '2': 'progress', '3': 'done', '4': 'blocked' }, grouping: 'parent', eligibleTypes: ['100'], automation: {} };
@@ -18,6 +19,26 @@ test('closure is inclusive and later Done cannot rewrite historical status', () 
   assert.equal(build([card]).metrics.completed, 0);
   card.changelog.histories[0].created = sprint.completeDate;
   assert.equal(build([card]).metrics.completed, 1);
+});
+
+test('perfil sugerido destrava analise inicial sem substituir governanca do preflight', () => {
+  const types = [{ id: '100', name: 'Tarefa', statuses: [
+    { id: '1', name: 'Não Iniciado', statusCategory: { key: 'new' } },
+    { id: '2', name: 'Em Progresso', statusCategory: { key: 'indeterminate' } },
+    { id: '3', name: 'Concluído', statusCategory: { key: 'done' } },
+  ] }];
+  const fields = [{ id: 'customfield_10020', name: 'Sprint', schema: { custom: 'com.pyxis.greenhopper.jira:gh-sprint' } }];
+  const suggestedReview = buildSuggestedReviewProfile({ types, fields });
+  const suggestedPlan = buildSuggestedPlanProfile({ types, fields: [{ id: 'duedate', name: 'Data limite' }, ...fields] });
+  assert.equal(suggestedReview.sprintField, 'customfield_10020');
+  assert.equal(suggestedReview.statusMap['3'], 'done');
+  assert.equal(suggestedReview.source, 'system_suggested');
+  assert.equal(suggestedPlan.executiveDateField, 'duedate');
+  assert.equal(suggestedPlan.requireDate, false);
+  assert.equal(suggestedPlan.statusMap['2'], 'progress');
+  const review = buildSprintReview({ projectKey: 'TEST', boardId: 1, sprint, profile: suggestedReview, issues: [issue('TEST-1')], scopeComplete: true, choices: { confirmGrouping: true } });
+  assert.equal(review.preflight.some(entry => entry.code === 'profile_suggested' && entry.severity === 'warning'), true);
+  assert.equal(review.preflight.some(entry => entry.severity === 'error'), false);
 });
 test('planned denominator preserves removed items and separates additional scope', () => {
   const removed = issue('TEST-1', [change('2026-08-15T12:00:00Z', 'customfield_10020', '4', '')], { customfield_10020: [] });

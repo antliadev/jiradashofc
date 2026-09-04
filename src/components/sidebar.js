@@ -32,6 +32,7 @@ function getCurrentPath() {
 function activeMenuForPath(currentPath) {
   if (currentPath.startsWith('/contracts')) return 'contracts';
   if (currentPath.startsWith('/monitoring')) return 'monitoring';
+  if (currentPath.startsWith('/projects/sprint-')) return 'sprint';
   if (currentPath.startsWith('/projects') || currentPath.startsWith('/executive')) return 'projects';
   if (currentPath.startsWith('/analysts')) return 'analysts';
   return '';
@@ -42,6 +43,7 @@ function getExpandedMenus(currentPath) {
   return {
     contracts: activeMenu === 'contracts',
     monitoring: activeMenu === 'monitoring',
+    sprint: activeMenu === 'sprint',
     projects: activeMenu === 'projects',
     analysts: activeMenu === 'analysts',
   };
@@ -172,6 +174,17 @@ export function renderSidebar() {
       })}
       ${navButton({ route: '/gantt', label: 'Gantt', icon: ICONS.gantt, permission: 'gantt' })}
       ${navGroup({
+        id: 'sprint',
+        label: 'Sprint',
+        icon: ICONS.gantt,
+        expanded: expandedMenus.sprint,
+        active: activeMenu === 'sprint',
+        children: [
+          navLink({ route: '/projects/sprint-plan', label: 'Sprint Plan', icon: ICONS.gantt, permission: 'projects.sprint-plan' }),
+          navLink({ route: '/projects/sprint-review', label: 'Sprint Review', icon: ICONS.executive, permission: 'projects.sprint-review' }),
+        ],
+      })}
+      ${navGroup({
         id: 'projects',
         label: 'Projetos',
         icon: ICONS.projects,
@@ -180,10 +193,6 @@ export function renderSidebar() {
         children: [
           navLink({ route: '/projects', label: 'Issues - Kanban', icon: ICONS.board, permission: 'projects.kanban' }),
           navLink({ route: '/projects/health', label: 'Saude Detalhamento Cards Projetos', icon: ICONS.dashboard, permission: 'projects.health' }),
-          navLink({ route: '/projects/sprint-plan', label: 'Sprint Plan', icon: ICONS.gantt, permission: 'projects.sprint-plan' }),
-          navLink({ route: '/projects/sprint-review', label: 'Sprint Review', icon: ICONS.executive, permission: 'projects.sprint-review' }),
-          navLink({ route: '/projects/executive', label: 'Relatorio Gerencial - Clientes', icon: ICONS.executive, permission: 'projects.executive' }),
-          navLink({ route: '/projects/detailed-report', label: 'Relatorio Gerencial Detalhado - Clientes', icon: ICONS.executive, permission: 'projects.detailed' }),
         ],
       })}
       ${navGroup({

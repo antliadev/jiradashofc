@@ -170,6 +170,7 @@ export function buildSprintReview({ projectKey, boardId, sprint, profile = {}, i
   if (sprint?.state !== 'closed' || !Number.isFinite(start) || !Number.isFinite(cutoff) || start >= cutoff) check('error', 'dates', 'Sprint encerrada com datas e fuso explicitos e obrigatoria.');
   try { new Intl.DateTimeFormat('pt-BR', { timeZone: profile.timezone || '' }).format(0); } catch { check('error', 'timezone', 'Configure um timezone IANA valido.'); }
   if (!profile.version || !profile.sprintField || !profile.eligibleTypes?.length) check('error', 'profile', 'Confirme o perfil, campo Sprint e tipos elegiveis.');
+  if (profile.source === 'system_suggested') check('warning', 'profile_suggested', 'Perfil inferido automaticamente a partir do Jira. Revise e salve as regras para padronizar o projeto/board.');
   if (!scopeComplete) check('error', 'scope', 'Coleta incompleta: nao e possivel garantir o baseline e os itens removidos.');
   if (mode === 'current') check('warning', 'current_view', 'Visao reprocessada com informacoes atuais. Nao representa o estado no fechamento original e nao substitui a review historica.');
   const ids = new Set(), field = profile.sprintField;

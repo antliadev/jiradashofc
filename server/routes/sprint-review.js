@@ -9,6 +9,7 @@ import { prepareReviewSnapshot, validateReviewProfile, validateReviewChoices } f
 import { buildSprintReview } from '../../src/data/sprint-review.js';
 import { sprintSlidePages } from '../../src/utils/sprint-review-render.js';
 import { synthesizeSprintReview } from '../../lib/sprintReviewAI.js';
+import { buildSuggestedReviewProfile } from '../../lib/sprintProfileDefaults.js';
 
 const router = express.Router();
 const pending = new Set();
@@ -43,7 +44,8 @@ router.get('/context', handle(async (req, res) => {
   const types = await client.request(`/rest/api/3/project/${ctx.projectKey}/statuses`);
   const fields = await client.request('/rest/api/3/field');
   const priorities = await client.request('/rest/api/3/priority');
-  res.json({ sprints, profile: profiles[0]?.payload || null, types, priorities: priorities.map(p => ({ id: p.id, name: p.name })), fields: fields.filter(f => f.custom).map(f => ({ id: f.id, name: f.name, schema: f.schema })), canConfigure: isFull(req.session.user) });
+  const profileFields = fields.filter(f => f.custom).map(f => ({ id: f.id, name: f.name, schema: f.schema }));
+  res.json({ sprints, profile: profiles[0]?.payload || buildSuggestedReviewProfile({ types, fields: profileFields }), types, priorities: priorities.map(p => ({ id: p.id, name: p.name })), fields: profileFields, canConfigure: isFull(req.session.user) });
 }));
 router.post('/profile', handle(async (req, res) => {
   if (!isFull(req.session.user)) return res.status(403).json({ error: 'Somente o perfil Full pode alterar regras.' });
@@ -61,10 +63,14 @@ router.post('/analyze', handle(async (req, res) => {
   if (pending.has(lock)) return res.status(409).json({ error: 'Esta sprint ja esta sendo consultada. Aguarde e tente novamente.' });
   pending.add(lock);
   try {
-    const profiles = await listReviewRecords({ ...ctx, kind: 'profile', includePayload: true, sprintId: undefined });
-    if (!profiles.length) return res.status(400).json({ error: 'Configure e salve o perfil do projeto/board antes de analisar.' });
     const client = await createReviewJiraClient();
-    const source = await client.collect(ctx.projectKey, ctx.boardId, ctx.sprintId, profiles[0].payload, { includePostClosure: req.body.mode === 'current' });
+    const profiles = await listReviewRecords({ ...ctx, kind: 'profile', includePayload: true, sprintId: undefined });
+    let profile = profiles[0]?.payload;
+    if (!profile) {
+      const [types, fields] = await Promise.all([client.request(`/rest/api/3/project/${ctx.projectKey}/statuses`), client.request('/rest/api/3/field')]);
+      profile = buildSuggestedReviewProfile({ types, fields: fields.filter(f => f.custom).map(f => ({ id: f.id, name: f.name, schema: f.schema })) });
+    }
+    const source = await client.collect(ctx.projectKey, ctx.boardId, ctx.sprintId, profile, { includePostClosure: req.body.mode === 'current' });
     source.mode = req.body.mode === 'current' ? 'current' : 'historical';
     if (source.mode === 'current') {
       source.historicalCompleteDate = source.sprint.completeDate;

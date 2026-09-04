@@ -155,6 +155,7 @@ export function buildSprintPlan(input = {}) {
   const unmapped = items.filter(item => !item.baselineStatus).map(item => item.issueKey);
   if (unmapped.length) errors.push({ code: 'unmapped_status', issueKeys: unmapped, message: 'Existem status sem mapeamento canonico.' });
   if (!previous) info.push({ code: 'no_previous_sprint', message: 'Sem sprint anterior identificada.' });
+  if (profile.source === 'system_suggested') warnings.push({ code: 'profile_suggested', message: 'Perfil inferido automaticamente a partir do Jira. Revise e salve as regras para padronizar o projeto/board.' });
   if (profile.requireAssignee) for (const item of items.filter(value => !value.assigneeId)) warnings.push({ code: 'missing_assignee', issueKey: item.issueKey, message: 'Item obrigatorio sem responsavel.' });
   if (profile.requireDate) for (const item of items.filter(value => !value.displayDate)) warnings.push({ code: 'missing_date', issueKey: item.issueKey, message: 'Item obrigatorio sem data executiva.' });
   const windowStart = String(target.startDate || '').slice(0, 10), windowEnd = String(target.endDate || '').slice(0, 10);

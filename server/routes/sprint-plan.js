@@ -7,6 +7,7 @@ import { createPlanJiraClient } from '../../lib/sprintPlanJira.js';
 import { getPlanRecord, insertPlanRecord, listPlanRecords } from '../../lib/sprintPlanStore.js';
 import { listReviewRecords } from '../../lib/sprintReviewStore.js';
 import { buildSprintPlan, validatePlanProfile } from '../../src/data/sprint-plan.js';
+import { buildSuggestedPlanProfile } from '../../lib/sprintProfileDefaults.js';
 
 const router = express.Router(), pending = new Set();
 router.use((req, res, next) => Promise.resolve(requireAppAuth(req, res, next)).catch(error => {
@@ -39,7 +40,8 @@ router.get('/context', handle(async (req, res) => {
   const ctx = await requestContext(req), client = await createPlanJiraClient(), jiraContext = await client.context(ctx.projectKey, ctx.boardId, ctx.sprintId);
   const profiles = await listPlanRecords({ ...ctx, kind: 'profile', includePayload: true, sprintId: undefined });
   const [types, fields] = await Promise.all([client.request(`/rest/api/3/project/${ctx.projectKey}/statuses`), client.request('/rest/api/3/field')]);
-  res.json({ sprints: jiraContext.sprints, targetSprint: jiraContext.targetSprint, previousSprint: jiraContext.previousSprint, profile: profiles[0]?.payload || null, types, fields: [{ id: 'duedate', name: 'Data limite', schema: { type: 'date' } }, ...fields.filter(field => field.custom).map(field => ({ id: field.id, name: field.name, schema: field.schema }))], canConfigure: isFull(req.session.user) });
+  const profileFields = [{ id: 'duedate', name: 'Data limite', schema: { type: 'date' } }, ...fields.filter(field => field.custom).map(field => ({ id: field.id, name: field.name, schema: field.schema }))];
+  res.json({ sprints: jiraContext.sprints, targetSprint: jiraContext.targetSprint, previousSprint: jiraContext.previousSprint, profile: profiles[0]?.payload || buildSuggestedPlanProfile({ types, fields: profileFields }), types, fields: profileFields, canConfigure: isFull(req.session.user) });
 }));
 router.post('/profile', handle(async (req, res) => {
   if (!isFull(req.session.user)) return res.status(403).json({ error: 'Somente o perfil Full pode alterar regras.' });
@@ -54,9 +56,14 @@ router.post('/analyze', handle(async (req, res) => {
   if (pending.has(lock)) return res.status(409).json({ error: 'Esta sprint ja esta sendo consultada.' });
   pending.add(lock);
   try {
+    const client = await createPlanJiraClient();
     const profiles = await listPlanRecords({ ...ctx, kind: 'profile', includePayload: true, sprintId: undefined });
-    if (!profiles.length) return res.status(400).json({ error: 'Configure e salve o perfil antes de analisar.' });
-    const client = await createPlanJiraClient(), source = await client.collect(ctx.projectKey, ctx.boardId, ctx.sprintId, profiles[0].payload, { previousSprintId: req.body.previousSprintId });
+    let profile = profiles[0]?.payload;
+    if (!profile) {
+      const [types, fields] = await Promise.all([client.request(`/rest/api/3/project/${ctx.projectKey}/statuses`), client.request('/rest/api/3/field')]);
+      profile = buildSuggestedPlanProfile({ types, fields: [{ id: 'duedate', name: 'Data limite', schema: { type: 'date' } }, ...fields.filter(field => field.custom).map(field => ({ id: field.id, name: field.name, schema: field.schema }))] });
+    }
+    const source = await client.collect(ctx.projectKey, ctx.boardId, ctx.sprintId, profile, { previousSprintId: req.body.previousSprintId });
     if (source.previousSprint) {
       const reviews = await listReviewRecords({ projectKey: ctx.projectKey, boardId: ctx.boardId, sprintId: String(source.previousSprint.id), kind: 'snapshot', includePayload: true });
       source.reviewSnapshot = reviews[0] ? { id: reviews[0].id, contentHash: reviews[0].content_hash, review: reviews[0].payload.review } : null;

@@ -8,20 +8,25 @@ const esc = value => sanitize(String(value ?? ''));
 const resultNames = { done: 'Concluido', partial: 'Parcial', removed: 'Removido / postergado', blocked: 'Bloqueado', continuity: 'Nao concluido' };
 const options = (rows, selected, value = 'id', label = 'name') => rows.map(row => `<option value="${esc(row[value])}" ${String(row[value]) === String(selected) ? 'selected' : ''}>${esc(row[label])}</option>`).join('');
 const date = (value, timezone = 'America/Sao_Paulo') => value ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: timezone }).format(new Date(value)) : 'Nao informado';
+const JOB_STORAGE_KEY = 'rja.sprintReview.analysisJob';
+const CONTEXT_STORAGE_KEY = 'rja.sprintReview.context';
 
 export async function renderSprintReview() {
   const root = document.getElementById('page-content'), header = document.getElementById('page-header');
   header.innerHTML = '<h1>Sprint Review</h1><p class="subtitle">Planejamento, resultado e evidencias do fechamento da sprint</p>';
   const controller = new AbortController();
-  const state = { projects: [], boards: [], sprints: [], types: [], fields: [], projectKey: '', boardId: '', sprintId: '', profile: null, review: null, sourceId: '', busy: false, error: '', tab: 'plan', search: '', filter: '', pageSize: 25, page: 1, choices: { groups: {}, optionalKeys: [], confirmGrouping: false }, edits: {}, goal: null, acceptedWarnings: [], snapshots: [], snapshot: null, jiraBaseUrl: '', fetchedAt: '' };
+  const state = { projects: [], boards: [], sprints: [], types: [], fields: [], projectKey: '', boardId: '', sprintId: '', profile: null, review: null, sourceId: '', busy: false, error: '', tab: 'plan', search: '', filter: '', pageSize: 25, page: 1, choices: { groups: {}, optionalKeys: [], confirmGrouping: false }, edits: {}, goal: null, acceptedWarnings: [], snapshots: [], snapshot: null, jiraBaseUrl: '', fetchedAt: '', analysisJob: null };
   let alive = true;
   state.executiveEdits = {}; state.confirmTextEdits = false; state.artManifest = null;
   window.addEventListener('hashchange', () => { alive = false; controller.abort(); }, { once: true });
-  async function api(path, data, method = 'GET') {
+  async function api(path, data, method = 'GET', options = {}) {
     const query = new URLSearchParams({ projectKey: state.projectKey, boardId: state.boardId, sprintId: state.sprintId });
-    const response = await fetch(`/api/jira/sprint-review${path}${method === 'GET' ? `?${query}` : ''}`, { method, credentials: 'include', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, ...(method === 'GET' ? {} : { body: JSON.stringify({ projectKey: state.projectKey, boardId: state.boardId, sprintId: state.sprintId, ...data }) }) });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || 'Nao foi possivel concluir esta operacao.');
+    const response = await fetch(`/api/jira/sprint-review${path}${method === 'GET' ? `?${query}` : ''}`, { method, credentials: 'include', signal: options.signal === false ? undefined : controller.signal, headers: { 'Content-Type': 'application/json' }, ...(method === 'GET' ? {} : { body: JSON.stringify({ projectKey: state.projectKey, boardId: state.boardId, sprintId: state.sprintId, ...data }) }) });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = [payload.error, ...(payload.preflight?.errors || []).map(e => e.message), ...(payload.warnings || []).map(w => w.message)].filter(Boolean).join(' ');
+      throw new Error(detail || `Falha HTTP ${response.status}.`);
+    }
     return payload;
   }
   async function run(work) {
@@ -104,7 +109,8 @@ export async function renderSprintReview() {
   function draw() {
     if (!alive) return;
     const focusId = document.activeElement?.id;
-    root.innerHTML = `<div class="sprint-review" aria-busy="${state.busy}"><section class="sr-panel"><fieldset ${state.busy ? 'disabled' : ''}><div class="sr-toolbar"><label>Projeto<select id="sr-project"><option value="">Selecione</option>${options(state.projects, state.projectKey, 'key')}</select></label><label>Board<select id="sr-board" ${!state.projectKey ? 'disabled' : ''}><option value="">Selecione</option>${options(state.boards, state.boardId)}</select></label><label>Sprint<select id="sr-sprint" ${!state.boardId ? 'disabled' : ''}><option value="">Selecione uma sprint encerrada</option>${state.sprints.map(s => `<option value="${s.id}" ${s.state !== 'closed' ? 'disabled' : ''} ${String(s.id) === state.sprintId ? 'selected' : ''}>${esc(s.name)} (${s.state === 'closed' ? 'encerrada' : 'ativa'})</option>`).join('')}</select></label><button class="btn btn-primary" id="sr-analyze" ${!state.sprintId || !state.profile?.version ? 'disabled' : ''}>${state.review ? 'Atualizar esta sprint' : 'Analisar Sprint'}</button></div></fieldset>${state.profile?.source === 'system_suggested' ? '<p class="sr-warning">Sem perfil salvo: a primeira analise usara regras sugeridas pelo sistema e sinalizara isso no Preflight.</p>' : ''}${state.busy ? '<p role="status">Consultando e validando os dados. Isso pode levar alguns minutos em projetos com historico extenso.</p>' : ''}${state.error ? `<p role="alert" class="sr-error">${esc(state.error)}</p>` : ''}</section>
+    const jobStatus = state.analysisJob ? `<div class="sr-warning" role="status"><strong>${state.analysisJob.status === 'completed' ? 'Análise concluída' : state.analysisJob.status === 'failed' ? 'Falha na análise' : 'Análise em andamento'}</strong><p>${esc(state.analysisJob.message || 'Coletando dados e validando regras.')}</p></div>` : '';
+    root.innerHTML = `<div class="sprint-review" aria-busy="${state.busy || state.analysisJob?.status === 'running'}"><section class="sr-panel"><fieldset ${state.busy ? 'disabled' : ''}><div class="sr-toolbar"><label>Projeto<select id="sr-project"><option value="">Selecione</option>${options(state.projects, state.projectKey, 'key')}</select></label><label>Board<select id="sr-board" ${!state.projectKey ? 'disabled' : ''}><option value="">Selecione</option>${options(state.boards, state.boardId)}</select></label><label>Sprint<select id="sr-sprint" ${!state.boardId ? 'disabled' : ''}><option value="">Selecione uma sprint encerrada</option>${state.sprints.map(s => `<option value="${s.id}" ${s.state !== 'closed' ? 'disabled' : ''} ${String(s.id) === state.sprintId ? 'selected' : ''}>${esc(s.name)} (${s.state === 'closed' ? 'encerrada' : 'ativa'})</option>`).join('')}</select></label><button class="btn btn-primary" id="sr-analyze" ${!state.sprintId || !state.profile?.version || state.analysisJob?.status === 'running' ? 'disabled' : ''}>${state.analysisJob?.status === 'running' ? 'Analisando...' : state.review ? 'Atualizar esta sprint' : 'Analisar Sprint'}</button></div></fieldset>${jobStatus}${state.profile?.source === 'system_suggested' ? '<p class="sr-warning">Sem perfil salvo: a primeira analise usara regras sugeridas pelo sistema e sinalizara isso no Preflight.</p>' : ''}${state.busy ? '<p role="status">Carregando contexto...</p>' : ''}${state.error ? `<p role="alert" class="sr-error"><strong>Não foi possível concluir:</strong> ${esc(state.error)}</p>` : ''}</section>
       ${profileForm()}${state.snapshots.length ? `<section class="sr-panel"><label>Versoes salvas<select id="sr-saved"><option value="">Abrir uma versao</option>${state.snapshots.map(s => `<option value="${s.id}">#${s.revision} · ${esc(date(s.created_at))}</option>`).join('')}</select></label></section>` : ''}<fieldset ${state.busy ? 'disabled' : ''}>${reviewContent()}</fieldset><dialog id="sr-dialog"><button class="btn btn-secondary" id="sr-close-dialog">Fechar</button><div id="sr-dialog-body"></div></dialog></div>`;
     bind();
     root.querySelector('#sr-dialog').setAttribute('aria-label', 'Evidências rastreáveis');
@@ -191,12 +197,14 @@ export async function renderSprintReview() {
     on('sr-project', 'change', event => run(async () => {
       state.projectKey = event.target.value; state.boardId = ''; state.sprintId = ''; state.boards = []; state.sprints = []; state.profile = null; state.types = []; clearReview();
       if (state.projectKey) state.boards = (await api('/boards')).boards;
+      saveContext();
     }));
     on('sr-board', 'change', event => run(async () => {
       state.boardId = event.target.value; state.sprintId = ''; state.profile = null; state.types = []; state.sprints = []; clearReview();
       if (state.boardId) Object.assign(state, await api('/context'));
+      saveContext();
     }));
-    on('sr-sprint', 'change', event => run(async () => { state.sprintId = event.target.value; clearReview(); if (state.sprintId) state.snapshots = (await api('/snapshots')).snapshots; }));
+    on('sr-sprint', 'change', event => run(async () => { state.sprintId = event.target.value; clearReview(); saveContext(); if (state.sprintId) state.snapshots = (await api('/snapshots')).snapshots; }));
     on('sr-profile', 'submit', event => {
       event.preventDefault();
       const data = new FormData(event.target), profile = { timezone: data.get('timezone'), sprintField: data.get('sprintField'), checklistField: data.get('checklistField'), startField: data.get('startField'), groupField: data.get('groupField'), grouping: data.get('grouping'), checklistRequired: data.has('checklistRequired'), eligibleTypes: data.getAll('type'), thresholds: String(data.get('thresholds')).split(',').map(Number), statusMap: {}, automation: {} };
@@ -213,11 +221,11 @@ export async function renderSprintReview() {
     });
     on('sr-analyze', 'click', () => run(async () => {
       if (state.review && !window.confirm('Consultar novamente o Jira e substituir o rascunho? Versoes salvas serao preservadas.')) return;
-      await loadAnalysis(state.review?.mode || 'historical');
+      await startAnalysisJob(state.review?.mode || 'historical');
     }));
     on('sr-mode', 'click', () => run(async () => {
       if (!window.confirm('Consultar esta visao e substituir o rascunho? Todas as versoes salvas serao preservadas.')) return;
-      await loadAnalysis(state.review.mode === 'current' ? 'historical' : 'current');
+      await startAnalysisJob(state.review.mode === 'current' ? 'historical' : 'current');
     }));
     root.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click', () => { state.tab = button.dataset.tab; state.search = ''; state.filter = ''; state.page = 1; draw(); }));
     on('sr-search', 'input', event => { state.search = event.target.value; state.page = 1; updateTable(); });
@@ -300,9 +308,42 @@ export async function renderSprintReview() {
     review.executive = Object.fromEntries(Object.entries(executiveBlocks(review)).map(([key, block]) => [key, { ...block, text: state.executiveEdits[key] ?? block.text, ...(state.executiveEdits[key] !== undefined && state.executiveEdits[key] !== block.text ? { editedByHuman: true } : {}) }]));
     return review;
   }
-  async function loadAnalysis(mode) {
-    const result = await api('/analyze', { mode }, 'POST'); clearReview(); Object.assign(state, result); state.snapshots = (await api('/snapshots')).snapshots;
+  function jobKey() { return `${state.projectKey}:${state.boardId}:${state.sprintId}`; }
+  function saveContext() { localStorage.setItem(CONTEXT_STORAGE_KEY, JSON.stringify({ projectKey: state.projectKey, boardId: state.boardId, sprintId: state.sprintId })); }
+  function rememberJob(job) { localStorage.setItem(JOB_STORAGE_KEY, JSON.stringify({ key: jobKey(), id: job.id })); }
+  function clearJobStorage() { localStorage.removeItem(JOB_STORAGE_KEY); }
+  async function startAnalysisJob(mode) {
+    const payload = await api('/analysis-jobs', { mode }, 'POST', { signal: false });
+    if (!payload.job) {
+      await loadAnalysisLegacy(mode);
+      return;
+    }
+    state.analysisJob = payload.job; rememberJob(payload.job); pollAnalysisJob();
+  }
+  async function loadAnalysisLegacy(mode) {
+    const result = await api('/analyze', { mode }, 'POST', { signal: false });
+    clearReview(); Object.assign(state, result); state.snapshots = (await api('/snapshots')).snapshots;
     if (result.aiAvailable) Object.assign(state, await api('/synthesize', { sourceId: state.sourceId, choices: state.choices }, 'POST'));
+  }
+  async function pollAnalysisJob() {
+    if (!state.analysisJob?.id || state.analysisJob.status !== 'running') return;
+    try {
+      const payload = await api(`/analysis-jobs/${state.analysisJob.id}`, null, 'GET');
+      state.analysisJob = payload.job;
+      if (payload.job.status === 'completed') {
+        clearReview(); Object.assign(state, payload.job.result); state.analysisJob = payload.job; clearJobStorage(); state.snapshots = (await api('/snapshots')).snapshots;
+        if (payload.job.result.aiAvailable) Object.assign(state, await api('/synthesize', { sourceId: state.sourceId, choices: state.choices }, 'POST'));
+        showToast('Análise da Sprint Review concluída.', 'success'); draw(); return;
+      }
+      if (payload.job.status === 'failed') { state.error = payload.job.error?.message || payload.job.message; clearJobStorage(); draw(); return; }
+      draw(); setTimeout(() => { if (alive) pollAnalysisJob(); }, 3000);
+    } catch (error) { state.error = error.message; draw(); }
+  }
+  function restoreJob() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(JOB_STORAGE_KEY) || 'null');
+      if (saved?.key === jobKey() && saved.id) { state.analysisJob = { id: saved.id, status: 'running', message: 'Retomando acompanhamento da análise...' }; pollAnalysisJob(); }
+    } catch { clearJobStorage(); }
   }
   async function save() {
     const input = { sourceId: state.sourceId, choices: state.choices, acceptedWarnings: state.acceptedWarnings, edits: state.edits, executiveEdits: state.executiveEdits, confirmTextEdits: state.confirmTextEdits, goal: state.goal, renderManifest: { pageCount: sprintSlidePages(currentReview()).length, templateVersion: SPRINT_TEMPLATE_VERSION } };
@@ -324,5 +365,20 @@ export async function renderSprintReview() {
       root.querySelector('#sr-dialog').showModal();
     });
   }
-  await run(async () => { state.projects = (await api('/projects')).projects; });
+  async function restoreContext() {
+    const saved = JSON.parse(localStorage.getItem(CONTEXT_STORAGE_KEY) || 'null');
+    if (!saved?.projectKey) return;
+    if (!state.projects.some(project => project.key === saved.projectKey)) return;
+    state.projectKey = saved.projectKey;
+    state.boards = (await api('/boards')).boards || [];
+    if (!saved.boardId || !state.boards.some(board => String(board.id) === String(saved.boardId))) return;
+    state.boardId = String(saved.boardId);
+    Object.assign(state, await api('/context'));
+    if (saved.sprintId && state.sprints.some(sprint => String(sprint.id) === String(saved.sprintId))) {
+      state.sprintId = String(saved.sprintId);
+      state.snapshots = (await api('/snapshots')).snapshots || [];
+    }
+  }
+  await run(async () => { state.projects = (await api('/projects')).projects; await restoreContext(); });
+  restoreJob();
 }

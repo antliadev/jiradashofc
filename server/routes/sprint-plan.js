@@ -8,6 +8,7 @@ import { getPlanRecord, insertPlanRecord, listPlanRecords } from '../../lib/spri
 import { listReviewRecords } from '../../lib/sprintReviewStore.js';
 import { buildSprintPlan, validatePlanProfile } from '../../src/data/sprint-plan.js';
 import { buildSuggestedPlanProfile } from '../../lib/sprintProfileDefaults.js';
+import { getSprintAnalysisJob, publicSprintAnalysisJob, startSprintAnalysisJob } from '../../lib/sprintAnalysisJobs.js';
 
 const router = express.Router(), pending = new Set();
 router.use((req, res, next) => Promise.resolve(requireAppAuth(req, res, next)).catch(error => {
@@ -29,6 +30,27 @@ async function requestContext(req, requireSprint = false) {
 }
 function belongs(record, ctx, kind) {
   return record?.kind === kind && record.project_key === ctx.projectKey && record.board_id === String(ctx.boardId) && (!ctx.sprintId || record.sprint_id === String(ctx.sprintId));
+}
+async function analyzeSprintPlan(ctx, actor, body = {}) {
+  const client = await createPlanJiraClient();
+  const profiles = await listPlanRecords({ ...ctx, kind: 'profile', includePayload: true, sprintId: undefined });
+  let profile = profiles[0]?.payload;
+  if (!profile) {
+    const [types, fields] = await Promise.all([client.request(`/rest/api/3/project/${ctx.projectKey}/statuses`), client.request('/rest/api/3/field')]);
+    profile = buildSuggestedPlanProfile({ types, fields: [{ id: 'duedate', name: 'Data limite', schema: { type: 'date' } }, ...fields.filter(field => field.custom).map(field => ({ id: field.id, name: field.name, schema: field.schema }))] });
+  }
+  const source = await client.collect(ctx.projectKey, ctx.boardId, ctx.sprintId, profile, { previousSprintId: body.previousSprintId });
+  if (source.previousSprint) {
+    const reviews = await listReviewRecords({ projectKey: ctx.projectKey, boardId: ctx.boardId, sprintId: String(source.previousSprint.id), kind: 'snapshot', includePayload: true });
+    source.reviewSnapshot = reviews[0] ? { id: reviews[0].id, contentHash: reviews[0].content_hash, review: reviews[0].payload.review } : null;
+  }
+  const drafts = await listPlanRecords({ ...ctx, kind: 'draft', includePayload: true });
+  source.draftSnapshot = drafts[0]?.payload?.plan || null;
+  const baselines = await listPlanRecords({ ...ctx, kind: 'baseline', includePayload: true });
+  source.baselineSnapshot = baselines[0]?.payload?.plan || null;
+  source.mode = body.mode === 'current' ? 'current' : undefined;
+  const saved = await insertPlanRecord({ ...ctx, kind: 'source', actor, payload: source });
+  return { sourceId: saved.id, plan: buildSprintPlan(source), jiraBaseUrl: source.jiraBaseUrl, fetchedAt: source.fetchedAt, collection: source.collection };
 }
 router.get('/projects', handle(async (_req, res) => res.json({ projects: await enabledProjects() })));
 router.get('/boards', handle(async (req, res) => {
@@ -56,26 +78,29 @@ router.post('/analyze', handle(async (req, res) => {
   if (pending.has(lock)) return res.status(409).json({ error: 'Esta sprint ja esta sendo consultada.' });
   pending.add(lock);
   try {
-    const client = await createPlanJiraClient();
-    const profiles = await listPlanRecords({ ...ctx, kind: 'profile', includePayload: true, sprintId: undefined });
-    let profile = profiles[0]?.payload;
-    if (!profile) {
-      const [types, fields] = await Promise.all([client.request(`/rest/api/3/project/${ctx.projectKey}/statuses`), client.request('/rest/api/3/field')]);
-      profile = buildSuggestedPlanProfile({ types, fields: [{ id: 'duedate', name: 'Data limite', schema: { type: 'date' } }, ...fields.filter(field => field.custom).map(field => ({ id: field.id, name: field.name, schema: field.schema }))] });
-    }
-    const source = await client.collect(ctx.projectKey, ctx.boardId, ctx.sprintId, profile, { previousSprintId: req.body.previousSprintId });
-    if (source.previousSprint) {
-      const reviews = await listReviewRecords({ projectKey: ctx.projectKey, boardId: ctx.boardId, sprintId: String(source.previousSprint.id), kind: 'snapshot', includePayload: true });
-      source.reviewSnapshot = reviews[0] ? { id: reviews[0].id, contentHash: reviews[0].content_hash, review: reviews[0].payload.review } : null;
-    }
-    const drafts = await listPlanRecords({ ...ctx, kind: 'draft', includePayload: true });
-    source.draftSnapshot = drafts[0]?.payload?.plan || null;
-    const baselines = await listPlanRecords({ ...ctx, kind: 'baseline', includePayload: true });
-    source.baselineSnapshot = baselines[0]?.payload?.plan || null;
-    source.mode = req.body.mode === 'current' ? 'current' : undefined;
-    const saved = await insertPlanRecord({ ...ctx, kind: 'source', actor, payload: source });
-    res.json({ sourceId: saved.id, plan: buildSprintPlan(source), jiraBaseUrl: source.jiraBaseUrl, fetchedAt: source.fetchedAt, collection: source.collection });
+    res.json(await analyzeSprintPlan(ctx, actor, req.body));
   } finally { pending.delete(lock); }
+}));
+router.post('/analysis-jobs', handle(async (req, res) => {
+  const ctx = await requestContext(req, true), actor = req.session.user.id, lock = `${ctx.projectKey}:${ctx.boardId}:${ctx.sprintId}`;
+  if (pending.has(lock)) return res.status(409).json({ error: 'Esta sprint ja esta sendo consultada. Aguarde a análise em andamento.' });
+  pending.add(lock);
+  const job = startSprintAnalysisJob({
+    scope: 'sprint-plan',
+    context: ctx,
+    actor,
+    work: async () => {
+      try { return await analyzeSprintPlan(ctx, actor, req.body); }
+      finally { pending.delete(lock); }
+    },
+  });
+  res.status(202).json({ job: publicSprintAnalysisJob(job) });
+}));
+router.get('/analysis-jobs/:id', handle(async (req, res) => {
+  const ctx = await requestContext(req, true);
+  const job = getSprintAnalysisJob(req.params.id, { scope: 'sprint-plan', actor: req.session.user.id, context: ctx });
+  if (!job) return res.status(404).json({ error: 'Análise não encontrada para este usuário e contexto.' });
+  res.json({ job: publicSprintAnalysisJob(job) });
 }));
 router.post('/recalculate', handle(async (req, res) => {
   const ctx = await requestContext(req, true), source = await getPlanRecord(req.body.sourceId);

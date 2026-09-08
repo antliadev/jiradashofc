@@ -10,6 +10,7 @@ import { buildSprintReview } from '../../src/data/sprint-review.js';
 import { sprintSlidePages } from '../../src/utils/sprint-review-render.js';
 import { synthesizeSprintReview } from '../../lib/sprintReviewAI.js';
 import { buildSuggestedReviewProfile } from '../../lib/sprintProfileDefaults.js';
+import { getSprintAnalysisJob, publicSprintAnalysisJob, startSprintAnalysisJob } from '../../lib/sprintAnalysisJobs.js';
 
 const router = express.Router();
 const pending = new Set();
@@ -29,6 +30,26 @@ async function context(req) {
   const key = projectKey(data.projectKey), boardId = positiveId(data.boardId);
   if (!(await projects()).some(p => p.key === key)) throw Object.assign(new Error('Projeto nao habilitado no RJA.'), { status: 403 });
   return { projectKey: key, boardId, ...(data.sprintId ? { sprintId: positiveId(data.sprintId) } : {}) };
+}
+async function analyzeSprintReview(ctx, actor, mode) {
+  const client = await createReviewJiraClient();
+  const profiles = await listReviewRecords({ ...ctx, kind: 'profile', includePayload: true, sprintId: undefined });
+  let profile = profiles[0]?.payload;
+  if (!profile) {
+    const [types, fields] = await Promise.all([client.request(`/rest/api/3/project/${ctx.projectKey}/statuses`), client.request('/rest/api/3/field')]);
+    profile = buildSuggestedReviewProfile({ types, fields: fields.filter(f => f.custom).map(f => ({ id: f.id, name: f.name, schema: f.schema })) });
+  }
+  const source = await client.collect(ctx.projectKey, ctx.boardId, ctx.sprintId, profile, { includePostClosure: mode === 'current' });
+  source.mode = mode === 'current' ? 'current' : 'historical';
+  if (source.mode === 'current') {
+    source.historicalCompleteDate = source.sprint.completeDate;
+    source.sprint = { ...source.sprint, completeDate: source.fetchedAt };
+  }
+  const baselines = await listReviewRecords({ ...ctx, kind: 'baseline', includePayload: true });
+  source.baselineSnapshot = baselines.find(row => row.payload.startDate === source.sprint.startDate)?.payload || null;
+  source.ai = { status: 'unconfigured', suggestions: [] };
+  const record = await insertReviewRecord({ ...ctx, kind: 'source', actor, payload: source });
+  return { sourceId: record.id, review: buildSprintReview(source), aiAvailable: Boolean(process.env.NVIDIA_API_KEY), jiraBaseUrl: source.jiraBaseUrl, fetchedAt: source.fetchedAt, collection: source.collection };
 }
 router.get('/projects', handle(async (_req, res) => res.json({ projects: await projects() })));
 router.get('/boards', handle(async (req, res) => {
@@ -63,25 +84,31 @@ router.post('/analyze', handle(async (req, res) => {
   if (pending.has(lock)) return res.status(409).json({ error: 'Esta sprint ja esta sendo consultada. Aguarde e tente novamente.' });
   pending.add(lock);
   try {
-    const client = await createReviewJiraClient();
-    const profiles = await listReviewRecords({ ...ctx, kind: 'profile', includePayload: true, sprintId: undefined });
-    let profile = profiles[0]?.payload;
-    if (!profile) {
-      const [types, fields] = await Promise.all([client.request(`/rest/api/3/project/${ctx.projectKey}/statuses`), client.request('/rest/api/3/field')]);
-      profile = buildSuggestedReviewProfile({ types, fields: fields.filter(f => f.custom).map(f => ({ id: f.id, name: f.name, schema: f.schema })) });
-    }
-    const source = await client.collect(ctx.projectKey, ctx.boardId, ctx.sprintId, profile, { includePostClosure: req.body.mode === 'current' });
-    source.mode = req.body.mode === 'current' ? 'current' : 'historical';
-    if (source.mode === 'current') {
-      source.historicalCompleteDate = source.sprint.completeDate;
-      source.sprint = { ...source.sprint, completeDate: source.fetchedAt };
-    }
-    const baselines = await listReviewRecords({ ...ctx, kind: 'baseline', includePayload: true });
-    source.baselineSnapshot = baselines.find(row => row.payload.startDate === source.sprint.startDate)?.payload || null;
-    source.ai = { status: 'unconfigured', suggestions: [] };
-    const record = await insertReviewRecord({ ...ctx, kind: 'source', actor, payload: source });
-    res.json({ sourceId: record.id, review: buildSprintReview(source), aiAvailable: Boolean(process.env.NVIDIA_API_KEY), jiraBaseUrl: source.jiraBaseUrl, fetchedAt: source.fetchedAt, collection: source.collection });
+    res.json(await analyzeSprintReview(ctx, actor, req.body.mode));
   } finally { pending.delete(lock); }
+}));
+router.post('/analysis-jobs', handle(async (req, res) => {
+  const ctx = await context(req), actor = req.session.user.id;
+  if (!ctx.sprintId) return res.status(400).json({ error: 'Selecione uma sprint encerrada antes de iniciar a análise.' });
+  const lock = `${ctx.projectKey}:${ctx.boardId}:${ctx.sprintId}`;
+  if (pending.has(lock)) return res.status(409).json({ error: 'Esta sprint ja esta sendo consultada. Aguarde a análise em andamento.' });
+  pending.add(lock);
+  const job = startSprintAnalysisJob({
+    scope: 'sprint-review',
+    context: ctx,
+    actor,
+    work: async () => {
+      try { return await analyzeSprintReview(ctx, actor, req.body.mode); }
+      finally { pending.delete(lock); }
+    },
+  });
+  res.status(202).json({ job: publicSprintAnalysisJob(job) });
+}));
+router.get('/analysis-jobs/:id', handle(async (req, res) => {
+  const ctx = await context(req);
+  const job = getSprintAnalysisJob(req.params.id, { scope: 'sprint-review', actor: req.session.user.id, context: ctx });
+  if (!job) return res.status(404).json({ error: 'Análise não encontrada para este usuário e contexto.' });
+  res.json({ job: publicSprintAnalysisJob(job) });
 }));
 router.post('/recalculate', handle(async (req, res) => {
   const ctx = await context(req), record = await getReviewRecord(req.body.sourceId);

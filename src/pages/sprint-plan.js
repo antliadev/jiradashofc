@@ -8,6 +8,8 @@ const originLabels = { carry_over: 'Continuidade', replanned_before_close: 'Repl
 const itemOrigin = item => item.origin || item.primaryOrigin || item.originPrimary || 'new';
 const itemTitle = item => item.title || item.summary || item.key || 'Item sem titulo';
 const planItems = plan => plan?.items || [];
+const JOB_STORAGE_KEY = 'rja.sprintPlan.analysisJob';
+const CONTEXT_STORAGE_KEY = 'rja.sprintPlan.context';
 
 export async function renderSprintPlan() {
   const root = document.getElementById('page-content');
@@ -15,15 +17,18 @@ export async function renderSprintPlan() {
   if (!root || !header) return;
   header.innerHTML = '<h1>Sprint Plan</h1><p class="subtitle">Baseline, continuidades e escopo previsto da sprint</p>';
   const controller = new AbortController();
-  const state = { projects: [], boards: [], sprints: [], types: [], fields: [], profile: null, canConfigure: false, projectKey: '', boardId: '', sprintId: '', plan: null, sourceId: '', snapshots: [], acceptedWarnings: [], busy: false, error: '', tab: 'continuities' };
+  const state = { projects: [], boards: [], sprints: [], types: [], fields: [], profile: null, canConfigure: false, projectKey: '', boardId: '', sprintId: '', plan: null, sourceId: '', snapshots: [], acceptedWarnings: [], busy: false, error: '', tab: 'continuities', analysisJob: null };
   let alive = true;
   window.addEventListener('hashchange', () => { alive = false; controller.abort(); }, { once: true });
 
-  async function api(path, data, method = 'GET') {
+  async function api(path, data, method = 'GET', options = {}) {
     const query = new URLSearchParams({ projectKey: state.projectKey, boardId: state.boardId, sprintId: state.sprintId });
-    const response = await fetch(`/api/jira/sprint-plan${path}${method === 'GET' ? `?${query}` : ''}`, { method, credentials: 'include', signal: controller.signal, headers: { 'Content-Type': 'application/json' }, ...(method === 'GET' ? {} : { body: JSON.stringify({ projectKey: state.projectKey, boardId: state.boardId, sprintId: state.sprintId, ...data }) }) });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error || 'Nao foi possivel concluir esta operacao.');
+    const response = await fetch(`/api/jira/sprint-plan${path}${method === 'GET' ? `?${query}` : ''}`, { method, credentials: 'include', signal: options.signal === false ? undefined : controller.signal, headers: { 'Content-Type': 'application/json' }, ...(method === 'GET' ? {} : { body: JSON.stringify({ projectKey: state.projectKey, boardId: state.boardId, sprintId: state.sprintId, ...data }) }) });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const detail = [payload.error, ...(payload.preflight?.errors || []).map(e => e.message), ...(payload.warnings || []).map(w => w.message)].filter(Boolean).join(' ');
+      throw new Error(detail || `Falha HTTP ${response.status}.`);
+    }
     return payload;
   }
   async function run(work) {
@@ -67,14 +72,15 @@ export async function renderSprintPlan() {
     return `<div class="sp-slide" id="sp-slide"><header><span>RADAR JIRA ANTLIA</span><strong>STATUS EXECUTIVO - ${esc(state.projectKey)}</strong></header><main><section class="sp-slide-lead"><small>PLANEJAMENTO DA SPRINT</small><h2>${esc(state.plan?.targetSprint?.name || 'Sprint')}</h2><p>${items.length} unidades executivas unicas previstas</p></section><div class="sp-slide-grid"><section><h3>CONTINUIDADES</h3>${continuities.slice(0, 6).map(i => `<article><b>${esc(i.issueKey)}</b><span>${esc(itemTitle(i))}</span></article>`).join('') || '<p>Sem continuidades identificadas.</p>'}</section><section><h3>ITENS PREVISTOS</h3>${items.slice(0, 10).map(i => `<article><b>${esc(i.issueKey)}</b><span>${esc(itemTitle(i))}</span></article>`).join('')}</section></div></main><footer><strong>${items.length} ITENS PREVISTOS</strong><span>Continuidades sao destaque do plano e nao geram dupla contagem.</span></footer></div>${items.length > 10 ? '<p class="sp-warning">O plano completo excede uma lamina. Exporte laminas adicionais em vez de ocultar itens.</p>' : ''}`;
   }
   function draw() {
-    root.innerHTML = `<div class="sprint-plan" aria-busy="${state.busy}"><section class="sp-panel"><fieldset ${state.busy ? 'disabled' : ''}><div class="sp-toolbar"><label>Projeto<select id="sp-project"><option value="">Selecione</option>${opt(state.projects, state.projectKey, 'key')}</select></label><label>Board<select id="sp-board" ${!state.projectKey ? 'disabled' : ''}><option value="">Selecione</option>${opt(state.boards, state.boardId)}</select></label><label>Sprint alvo<select id="sp-sprint" ${!state.boardId ? 'disabled' : ''}><option value="">Selecione futura ou ativa</option>${opt(state.sprints, state.sprintId)}</select></label><button class="btn btn-primary" id="sp-analyze" ${!state.sprintId || !state.profile?.version ? 'disabled' : ''}>${state.plan ? 'Atualizar visao' : 'Gerar Sprint Plan'}</button></div></fieldset>${state.profile?.source === 'system_suggested' ? '<p class="sp-warning">Sem perfil salvo: a primeira analise usara regras sugeridas pelo sistema e sinalizara isso no Preflight.</p>' : ''}${state.busy ? '<p role="status">Reconstruindo historico e classificando o planejamento...</p>' : ''}${state.error ? `<p role="alert" class="sp-error">${esc(state.error)}</p>` : ''}</section>${profileForm()}${state.plan ? `<section class="sp-kpis">${kpis().map(([label, value]) => `<article><strong>${esc(value)}</strong><span>${esc(label)}</span></article>`).join('')}</section><section class="sp-panel"><div class="sp-tabs" role="tablist">${[['continuities','Continuidades'],['deltas','Draft x Ativacao'],['items','Itens da Sprint'],['pending','Pendencias Anteriores'],['evidence','Evidencias e Contexto'],['preview','Previa da Arte']].map(([id,label]) => `<button class="btn ${state.tab === id ? 'btn-primary' : 'btn-secondary'}" data-tab="${id}" role="tab" aria-selected="${state.tab === id}">${label}</button>`).join('')}</div>${state.plan.preflight?.errors?.length ? `<div class="sp-error" role="alert"><strong>Preflight bloqueado</strong><ul>${state.plan.preflight.errors.map(e => `<li>${esc(e.message || e)}</li>`).join('')}</ul></div>` : ''}${state.plan.preflight?.warnings?.length ? `<div class="sp-warning"><strong>Avisos que exigem confirmacao</strong>${state.plan.preflight.warnings.map(w => { const key = `${w.code}:${w.issueKey || ''}`; return `<label class="sp-check"><input type="checkbox" data-warning="${esc(key)}" ${state.acceptedWarnings.includes(key) ? 'checked' : ''}>${esc(w.message)} ${esc(w.issueKey || '')}</label>`; }).join('')}</div>` : ''}<div class="sp-content">${tabContent()}</div><div class="sp-actions"><button class="btn btn-secondary" id="sp-preview">Revisar arte</button><button class="btn btn-secondary" id="sp-export" ${state.plan.preflight?.errors?.length ? 'disabled' : ''}>Exportar PNG</button><button class="btn btn-primary" id="sp-save" ${state.plan.preflight?.errors?.length ? 'disabled' : ''}>Aprovar e salvar snapshot</button></div></section>` : ''}</div>`;
+    const jobStatus = state.analysisJob ? `<div class="sp-warning" role="status"><strong>${state.analysisJob.status === 'completed' ? 'Análise concluída' : state.analysisJob.status === 'failed' ? 'Falha na análise' : 'Análise em andamento'}</strong><p>${esc(state.analysisJob.message || 'Coletando dados e validando regras.')}</p></div>` : '';
+    root.innerHTML = `<div class="sprint-plan" aria-busy="${state.busy || state.analysisJob?.status === 'running'}"><section class="sp-panel"><fieldset ${state.busy ? 'disabled' : ''}><div class="sp-toolbar"><label>Projeto<select id="sp-project"><option value="">Selecione</option>${opt(state.projects, state.projectKey, 'key')}</select></label><label>Board<select id="sp-board" ${!state.projectKey ? 'disabled' : ''}><option value="">Selecione</option>${opt(state.boards, state.boardId)}</select></label><label>Sprint alvo<select id="sp-sprint" ${!state.boardId ? 'disabled' : ''}><option value="">Selecione futura ou ativa</option>${opt(state.sprints, state.sprintId)}</select></label><button class="btn btn-primary" id="sp-analyze" ${!state.sprintId || !state.profile?.version || state.analysisJob?.status === 'running' ? 'disabled' : ''}>${state.analysisJob?.status === 'running' ? 'Analisando...' : state.plan ? 'Atualizar visao' : 'Gerar Sprint Plan'}</button></div></fieldset>${jobStatus}${state.profile?.source === 'system_suggested' ? '<p class="sp-warning">Sem perfil salvo: a primeira analise usara regras sugeridas pelo sistema e sinalizara isso no Preflight.</p>' : ''}${state.busy ? '<p role="status">Carregando contexto...</p>' : ''}${state.error ? `<p role="alert" class="sp-error"><strong>Não foi possível concluir:</strong> ${esc(state.error)}</p>` : ''}</section>${profileForm()}${state.plan ? `<section class="sp-kpis">${kpis().map(([label, value]) => `<article><strong>${esc(value)}</strong><span>${esc(label)}</span></article>`).join('')}</section><section class="sp-panel"><div class="sp-tabs" role="tablist">${[['continuities','Continuidades'],['deltas','Draft x Ativacao'],['items','Itens da Sprint'],['pending','Pendencias Anteriores'],['evidence','Evidencias e Contexto'],['preview','Previa da Arte']].map(([id,label]) => `<button class="btn ${state.tab === id ? 'btn-primary' : 'btn-secondary'}" data-tab="${id}" role="tab" aria-selected="${state.tab === id}">${label}</button>`).join('')}</div>${state.plan.preflight?.errors?.length ? `<div class="sp-error" role="alert"><strong>Preflight bloqueado</strong><ul>${state.plan.preflight.errors.map(e => `<li>${esc(e.message || e)}</li>`).join('')}</ul></div>` : ''}${state.plan.preflight?.warnings?.length ? `<div class="sp-warning"><strong>Avisos que exigem confirmacao</strong>${state.plan.preflight.warnings.map(w => { const key = `${w.code}:${w.issueKey || ''}`; return `<label class="sp-check"><input type="checkbox" data-warning="${esc(key)}" ${state.acceptedWarnings.includes(key) ? 'checked' : ''}>${esc(w.message)} ${esc(w.issueKey || '')}</label>`; }).join('')}</div>` : ''}<div class="sp-content">${tabContent()}</div><div class="sp-actions"><button class="btn btn-secondary" id="sp-preview">Revisar arte</button><button class="btn btn-secondary" id="sp-export" ${state.plan.preflight?.errors?.length ? 'disabled' : ''}>Exportar PNG</button><button class="btn btn-primary" id="sp-save" ${state.plan.preflight?.errors?.length ? 'disabled' : ''}>Aprovar e salvar snapshot</button></div></section>` : ''}</div>`;
     bind();
   }
   function bind() {
-    root.querySelector('#sp-project')?.addEventListener('change', event => run(async () => { state.projectKey = event.target.value; state.boardId = ''; state.sprintId = ''; state.plan = null; state.profile = null; state.types = []; state.fields = []; state.boards = state.projectKey ? (await api('/boards')).boards : []; state.sprints = []; }));
-    root.querySelector('#sp-board')?.addEventListener('change', event => run(async () => { state.boardId = event.target.value; state.sprintId = ''; state.plan = null; const context = state.boardId ? await api('/context') : { sprints: [] }; Object.assign(state, context); state.sprints = context.sprints || []; }));
-    root.querySelector('#sp-sprint')?.addEventListener('change', event => { state.sprintId = event.target.value; state.plan = null; draw(); });
-    root.querySelector('#sp-analyze')?.addEventListener('click', () => run(async () => { const payload = await api('/analyze', {}, 'POST'); state.plan = payload.plan; state.sourceId = payload.sourceId || ''; state.tab = 'continuities'; }));
+    root.querySelector('#sp-project')?.addEventListener('change', event => run(async () => { state.projectKey = event.target.value; state.boardId = ''; state.sprintId = ''; state.plan = null; state.profile = null; state.types = []; state.fields = []; state.boards = state.projectKey ? (await api('/boards')).boards : []; state.sprints = []; saveContext(); }));
+    root.querySelector('#sp-board')?.addEventListener('change', event => run(async () => { state.boardId = event.target.value; state.sprintId = ''; state.plan = null; const context = state.boardId ? await api('/context') : { sprints: [] }; Object.assign(state, context); state.sprints = context.sprints || []; saveContext(); }));
+    root.querySelector('#sp-sprint')?.addEventListener('change', event => { state.sprintId = event.target.value; state.plan = null; saveContext(); draw(); });
+    root.querySelector('#sp-analyze')?.addEventListener('click', () => run(startAnalysisJob));
     root.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click', () => { state.tab = button.dataset.tab; draw(); }));
     root.querySelector('#sp-preview')?.addEventListener('click', () => { state.tab = 'preview'; draw(); });
     root.querySelector('#sp-profile')?.addEventListener('submit', event => { event.preventDefault(); const data = new FormData(event.target), profile = { timezone: data.get('timezone'), sprintField: data.get('sprintField'), executiveDateField: data.get('executiveDateField'), grouping: data.get('grouping'), eligibleTypes: data.getAll('type'), requireAssignee: data.has('requireAssignee'), requireDate: data.has('requireDate'), statusMap: {}, automation: {} }; for (const [key,value] of data) if (key.startsWith('status:') && value) profile.statusMap[key.slice(7)] = value; run(async () => { state.profile = (await api('/profile', { profile }, 'POST')).profile; showToast('Regras do Sprint Plan salvas.', 'success'); }); });
@@ -89,5 +95,51 @@ export async function renderSprintPlan() {
     const canvas = await html2canvas(node, { backgroundColor: '#ffffff', scale: 2, logging: false });
     const link = document.createElement('a'); link.download = `Sprint_Plan_${state.projectKey}_${state.sprintId}.png`; link.href = canvas.toDataURL('image/png'); link.click();
   }
-  await run(async () => { state.projects = (await api('/projects')).projects || []; });
+  function jobKey() { return `${state.projectKey}:${state.boardId}:${state.sprintId}`; }
+  function saveContext() { localStorage.setItem(CONTEXT_STORAGE_KEY, JSON.stringify({ projectKey: state.projectKey, boardId: state.boardId, sprintId: state.sprintId })); }
+  function rememberJob(job) { localStorage.setItem(JOB_STORAGE_KEY, JSON.stringify({ key: jobKey(), id: job.id })); }
+  function clearJobStorage() { localStorage.removeItem(JOB_STORAGE_KEY); }
+  async function startAnalysisJob() {
+    const payload = await api('/analysis-jobs', {}, 'POST', { signal: false });
+    if (!payload.job) {
+      const legacy = await api('/analyze', {}, 'POST', { signal: false });
+      state.plan = legacy.plan; state.sourceId = legacy.sourceId || ''; state.tab = 'continuities';
+      return;
+    }
+    state.analysisJob = payload.job; rememberJob(payload.job); pollAnalysisJob();
+  }
+  async function pollAnalysisJob() {
+    if (!state.analysisJob?.id || state.analysisJob.status !== 'running') return;
+    try {
+      const payload = await api(`/analysis-jobs/${state.analysisJob.id}`, null, 'GET');
+      state.analysisJob = payload.job;
+      if (payload.job.status === 'completed') {
+        Object.assign(state, payload.job.result); state.analysisJob = payload.job; state.tab = 'continuities'; clearJobStorage(); showToast('Análise do Sprint Plan concluída.', 'success'); draw(); return;
+      }
+      if (payload.job.status === 'failed') { state.error = payload.job.error?.message || payload.job.message; clearJobStorage(); draw(); return; }
+      draw(); setTimeout(() => { if (alive) pollAnalysisJob(); }, 3000);
+    } catch (error) { state.error = error.message; draw(); }
+  }
+  function restoreJob() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(JOB_STORAGE_KEY) || 'null');
+      if (saved?.key === jobKey() && saved.id) { state.analysisJob = { id: saved.id, status: 'running', message: 'Retomando acompanhamento da análise...' }; pollAnalysisJob(); }
+    } catch { clearJobStorage(); }
+  }
+  async function restoreContext() {
+    const saved = JSON.parse(localStorage.getItem(CONTEXT_STORAGE_KEY) || 'null');
+    if (!saved?.projectKey) return;
+    if (!state.projects.some(project => project.key === saved.projectKey)) return;
+    state.projectKey = saved.projectKey;
+    state.boards = (await api('/boards')).boards || [];
+    if (!saved.boardId || !state.boards.some(board => String(board.id) === String(saved.boardId))) return;
+    state.boardId = String(saved.boardId);
+    const context = await api('/context'); Object.assign(state, context); state.sprints = context.sprints || [];
+    if (saved.sprintId && state.sprints.some(sprint => String(sprint.id) === String(saved.sprintId))) {
+      state.sprintId = String(saved.sprintId);
+      state.snapshots = (await api('/snapshots')).snapshots || [];
+    }
+  }
+  await run(async () => { state.projects = (await api('/projects')).projects || []; await restoreContext(); });
+  restoreJob();
 }

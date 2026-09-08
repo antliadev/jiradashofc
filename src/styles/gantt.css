@@ -20,6 +20,8 @@
   --gantt-bar-progress-bg: rgba(245, 158, 11, 0.15);
   --gantt-bar-overdue: #ef4444;
   --gantt-bar-overdue-bg: rgba(239, 68, 68, 0.15);
+  --gantt-bar-review-overdue: #f59e0b;
+  --gantt-bar-review-overdue-bg: rgba(245, 158, 11, 0.15);
   --gantt-bar-future: #8b5cf6;
   --gantt-bar-future-bg: rgba(139, 92, 246, 0.15);
   --gantt-bar-todo: #64748b;
@@ -42,6 +44,7 @@
   --gantt-bar-done: #047857;
   --gantt-bar-progress: #1d4ed8;
   --gantt-bar-overdue: #b91c1c;
+  --gantt-bar-review-overdue: #b45309;
   --gantt-bar-future: #6d28d9;
   --gantt-bar-todo: #475569;
   --gantt-bar-fallback: #b45309;
@@ -55,6 +58,7 @@
 [data-theme="light"] .gantt-no-date-stat-value,
 [data-theme="light"] .gantt-group-warning { color:var(--warning) !important; }
 [data-theme="light"] .gantt-summary-card:has(.gantt-summary-icon.overdue) .gantt-summary-value { color:#b91c1c !important; }
+[data-theme="light"] .gantt-summary-card:has(.gantt-summary-icon.review-overdue) .gantt-summary-value { color:#b45309 !important; }
 [data-theme="light"] .gantt-summary-card:has(.gantt-summary-icon.no-date) .gantt-summary-value { color:#92400e !important; }
 [data-theme="light"] .gantt-summary-card:has(.gantt-summary-icon.due-only) .gantt-summary-value { color:#6d28d9 !important; }
 [data-theme="light"] .gantt-hierarchy-pill.green { color:#047857; }
@@ -230,6 +234,7 @@
 .gantt-summary-icon.filtered { background: rgba(99, 102, 241, 0.15); color: var(--accent); }
 .gantt-summary-icon.total { background: rgba(99, 102, 241, 0.15); color: var(--accent); }
 .gantt-summary-icon.overdue { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.gantt-summary-icon.review-overdue { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
 .gantt-summary-icon.done { background: rgba(16, 185, 129, 0.15); color: #10b981; }
 .gantt-summary-icon.in-progress { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
 .gantt-summary-icon.missing { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
@@ -1005,6 +1010,7 @@
 .gantt-row-badge.in_progress,
 .gantt-row-badge.progress { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
 .gantt-row-badge.overdue { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.gantt-row-badge.review-overdue { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
 .gantt-row-badge.todo { background: rgba(100, 116, 139, 0.15); color: #94a3b8; }
 .gantt-row-badge.blocked { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
 
@@ -1281,6 +1287,11 @@
   animation: gantt-pulse-bar 2s ease-in-out infinite;
 }
 
+.gantt-bar.review-overdue {
+  background: linear-gradient(135deg, var(--gantt-bar-review-overdue), #d97706);
+  color: white;
+}
+
 @keyframes gantt-pulse-bar {
   0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
   50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.1); }
@@ -1360,6 +1371,10 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
+.gantt-bar-overdue-indicator.review {
+  background: #f59e0b;
+}
+
 .gantt-timeline-row.hierarchy-project {
   background: rgba(139, 92, 246, 0.035);
 }
@@ -1403,6 +1418,11 @@
   background: rgba(239, 68, 68, .14);
 }
 
+.gantt-aggregate-bar.review-overdue {
+  border-color: rgba(245, 158, 11, .52);
+  background: rgba(245, 158, 11, .14);
+}
+
 .gantt-aggregate-bar.todo {
   border-color: rgba(100, 116, 139, .44);
   background: rgba(100, 116, 139, .18);
@@ -1437,6 +1457,10 @@
 
 .gantt-aggregate-bar.overdue .gantt-aggregate-progress {
   background: linear-gradient(90deg, rgba(239, 68, 68, .78), rgba(220, 38, 38, .6));
+}
+
+.gantt-aggregate-bar.review-overdue .gantt-aggregate-progress {
+  background: linear-gradient(90deg, rgba(245, 158, 11, .78), rgba(217, 119, 6, .6));
 }
 
 .gantt-aggregate-bar.todo .gantt-aggregate-progress {
@@ -2196,6 +2220,7 @@
 .gantt-legend-color.done { background: var(--gantt-bar-done); }
 .gantt-legend-color.progress { background: var(--gantt-bar-progress); }
 .gantt-legend-color.overdue { background: var(--gantt-bar-overdue); }
+.gantt-legend-color.review-overdue { background: var(--gantt-bar-review-overdue); }
 .gantt-legend-color.future { background: var(--gantt-bar-future); }
 .gantt-legend-color.todo { background: var(--gantt-bar-todo); }
 .gantt-legend-color.due-only { background: var(--gantt-bar-fallback); border: 1px dashed rgba(255,255,255,0.5); }

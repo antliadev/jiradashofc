@@ -21,7 +21,7 @@
 import '../styles/gantt.css';
 import { dataService } from '../data/data-service.js';
 import {
-  resolveStatusCategory, StatusCategory, isCardOverdue
+  resolveStatusCategory, StatusCategory, isCardOverdue, isCardOverdueInReview
 } from '../data/models.js';
 import { sanitize, formatDate, priorityLabel } from '../utils/helpers.js';
 import {
@@ -258,6 +258,7 @@ function getCardTimeline(card) {
   }
 
   const isOverdue = isCardOverdue(card);
+  const isReviewOverdue = isCardOverdueInReview(card);
   return {
     card,
     start: start > end ? end : start,
@@ -266,6 +267,7 @@ function getCardTimeline(card) {
     startSource: officialStart ? 'jira' : 'due_date_only',
     issue: officialStart ? null : 'missing_start',
     isOverdue,
+    isReviewOverdue,
   };
 }
 
@@ -285,7 +287,10 @@ function classifyScheduleItem(item) {
   if (category === StatusCategory.DONE) {
     return { key: 'done', className: 'done', label: 'Concluído' };
   }
-  if (end && end < today) {
+  if (isCardOverdueInReview(card, today)) {
+    return { key: 'reviewOverdue', className: 'review-overdue', label: 'Atrasado em teste/aprovação' };
+  }
+  if (end && end < today && isCardOverdue(card, today)) {
     return { key: 'overdue', className: 'overdue', label: 'Atrasado' };
   }
   if (category === StatusCategory.IN_PROGRESS || category === StatusCategory.BLOCKED) {
@@ -299,7 +304,7 @@ function getScheduleMetrics(items) {
     const classification = classifyScheduleItem(item);
     acc[classification.key]++;
     return acc;
-  }, { done: 0, inProgress: 0, overdue: 0, todo: 0 });
+  }, { done: 0, inProgress: 0, overdue: 0, reviewOverdue: 0, todo: 0 });
 }
 
 function isCanceledCard(card) {
@@ -693,7 +698,9 @@ function openModal(cardId) {
     ? daysBetween(timeline.start, timeline.end) + ' dias'
     : '—';
 
-  const overdueLabel = timeline.isOverdue
+  const overdueLabel = timeline.isReviewOverdue
+    ? '<span class="gantt-modal-grid-value warning">Atrasado em teste/aprovação</span>'
+    : timeline.isOverdue
     ? '<span class="gantt-modal-grid-value danger">Atrasado</span>'
     : '<span class="gantt-modal-grid-value success">No prazo</span>';
 
@@ -717,7 +724,7 @@ function openModal(cardId) {
           <div class="gantt-modal-key">
             <span>${sanitize(card.key)}</span>
             <span class="gantt-row-badge priority-${sanitize(card.priority || 'medium')}">${sanitize(priorityLabel(card.priority))}</span>
-            ${timeline.isOverdue ? '<span class="gantt-row-badge overdue">Atrasado</span>' : ''}
+            ${timeline.isReviewOverdue ? '<span class="gantt-row-badge review-overdue">Teste/Aprovação</span>' : timeline.isOverdue ? '<span class="gantt-row-badge overdue">Atrasado</span>' : ''}
           </div>
           <div class="gantt-modal-title">${sanitize(card.title)}</div>
         </div>
@@ -748,7 +755,7 @@ function openModal(cardId) {
           </div>
           <div class="gantt-modal-grid-item">
             <span class="gantt-modal-grid-label">Data prevista (fim)</span>
-            <span class="gantt-modal-grid-value ${timeline.isOverdue ? 'danger' : ''}">${sanitize(timeline.end ? formatDate(timeline.end) : 'Sem previsão')}</span>
+            <span class="gantt-modal-grid-value ${timeline.isOverdue ? 'danger' : timeline.isReviewOverdue ? 'warning' : ''}">${sanitize(timeline.end ? formatDate(timeline.end) : 'Sem previsão')}</span>
           </div>
           <div class="gantt-modal-grid-item">
             <span class="gantt-modal-grid-label">Criação Jira</span>
@@ -977,6 +984,15 @@ function renderSummary(filtered, _allItems) {
         </div>
       </div>
       <div class="gantt-summary-card">
+        <div class="gantt-summary-icon review-overdue">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <div class="gantt-summary-info">
+          <span class="gantt-summary-value" style="color:${metrics.reviewOverdue ? '#f59e0b' : 'inherit'}">${metrics.reviewOverdue}</span>
+          <span class="gantt-summary-label">ATRASADOS (Testes / Aguardando Aprovação-PR)</span>
+        </div>
+      </div>
+      <div class="gantt-summary-card">
         <div class="gantt-summary-icon no-date">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         </div>
@@ -1001,6 +1017,7 @@ function renderLegend() {
         <span class="gantt-legend-item"><span class="gantt-legend-color done"></span>Concluído</span>
         <span class="gantt-legend-item"><span class="gantt-legend-color progress"></span>Em andamento</span>
         <span class="gantt-legend-item"><span class="gantt-legend-color overdue"></span>Atrasado</span>
+        <span class="gantt-legend-item"><span class="gantt-legend-color review-overdue"></span>Atrasado em Testes/Aprovação-PR</span>
         <span class="gantt-legend-item"><span class="gantt-legend-color todo"></span>Pendente de iniciar</span>
       </div>
     </div>
@@ -1187,7 +1204,7 @@ function renderBar(item, range) {
   return `
     <div class="${barClass}" style="left:${left}px;width:${Math.max(30, width)}px;" data-card-id="${sanitize(item.card.id)}" title="${sanitize(tooltip)}">
       <span class="gantt-bar-text">${sanitize(item.card.key)}</span>
-      ${item.isOverdue ? '<span class="gantt-bar-overdue-indicator">!</span>' : ''}
+      ${item.isOverdue ? '<span class="gantt-bar-overdue-indicator">!</span>' : item.isReviewOverdue ? '<span class="gantt-bar-overdue-indicator review">!</span>' : ''}
     </div>
   `;
 }
@@ -1201,6 +1218,7 @@ function renderLeftRow(item) {
   const project = dataService.getProjectById(card.projectId);
   const user = dataService.getUserById(card.assigneeId);
   const isOverdue = item.isOverdue;
+  const isReviewOverdue = item.isReviewOverdue;
   const statusCat = resolveStatusCategory(card.status || '');
   const timeline = item;
 
@@ -1237,6 +1255,7 @@ function renderLeftRow(item) {
       case 'endDate':
         content = timeline.end ? formatDate(timeline.end) : '—';
         if (isOverdue) cls = 'danger';
+        if (isReviewOverdue) cls = 'warning';
         break;
       case 'duration':
         content = timeline.start && timeline.end ? daysBetween(timeline.start, timeline.end) + 'd' : '—';
@@ -1482,6 +1501,7 @@ function renderGroupHeader(key, groupItems, grouping, isCollapsed) {
   const color = getGroupColor(key, grouping);
   const count = groupItems.length;
   const overdue = groupItems.filter(i => i.isOverdue).length;
+  const reviewOverdue = groupItems.filter(i => i.isReviewOverdue).length;
   const noDates = groupItems.filter(i => !i.canRender).length;
 
   return `
@@ -1498,6 +1518,10 @@ function renderGroupHeader(key, groupItems, grouping, isCollapsed) {
         ${overdue ? `<span class="gantt-group-warning">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           ${overdue} atras.
+        </span>` : ''}
+        ${reviewOverdue ? `<span class="gantt-group-warning" style="color:#f59e0b;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          ${reviewOverdue} teste/PR
         </span>` : ''}
         ${noDates ? `<span class="gantt-group-warning" style="color:#f59e0b;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>

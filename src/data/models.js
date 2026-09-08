@@ -85,6 +85,23 @@ export const DEFAULT_STATUS_MAP = {
   'aguardando': StatusCategory.BLOCKED,
 };
 
+export const OVERDUE_REVIEW_STATUS_MAP = new Set([
+  'testing',
+  'testes',
+  'em teste',
+  'qa',
+  'aguardando pr / aprovação',
+  'aguardando pr / aprovacao',
+  'aguardando aprovação',
+  'aguardando aprovacao',
+  'aguardando aprovação pr',
+  'aguardando aprovacao pr',
+  'aguardando pr',
+  'aguardando pr/aprovação',
+  'aguardando pr/aprovacao',
+  'atrasado',
+]);
+
 // ─── Fábricas de Entidades ────────────────────────────
 
 /**
@@ -199,6 +216,14 @@ export function resolveStatusCategory(status, customMap = {}) {
   return customMap[normalized] || DEFAULT_STATUS_MAP[normalized] || StatusCategory.TODO;
 }
 
+export function isOverdueReviewStatus(status) {
+  const normalized = String(status || '').toLowerCase().trim();
+  if (!normalized) return false;
+  return OVERDUE_REVIEW_STATUS_MAP.has(normalized)
+    || (normalized.includes('aguardando') && (normalized.includes('pr') || normalized.includes('aprova')))
+    || normalized.includes('teste');
+}
+
 export function toLocalDateOnly(value) {
   if (!value) return null;
   if (value instanceof Date) {
@@ -225,6 +250,17 @@ export function isCardOverdue(card, todayReference = new Date()) {
   if (!card.dueDate) return false;
   const category = resolveStatusCategory(card.status);
   if (category === StatusCategory.DONE) return false;
+  if (isOverdueReviewStatus(card.status)) return false;
+
+  const dueDay = toLocalDateOnly(card.dueDate);
+  const todayDay = toLocalDateOnly(todayReference);
+  if (!dueDay || !todayDay) return false;
+
+  return dueDay < todayDay;
+}
+
+export function isCardOverdueInReview(card, todayReference = new Date()) {
+  if (!card?.dueDate || !isOverdueReviewStatus(card.status)) return false;
 
   const dueDay = toLocalDateOnly(card.dueDate);
   const todayDay = toLocalDateOnly(todayReference);

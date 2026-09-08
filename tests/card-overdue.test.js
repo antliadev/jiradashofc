@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { isCardOverdue, toLocalDateOnly } from '../src/data/models.js';
+import { isCardOverdue, isCardOverdueInReview, toLocalDateOnly } from '../src/data/models.js';
 
 const referenceToday = new Date(2026, 8, 2, 10, 0, 0);
 
@@ -18,6 +18,14 @@ test('card com data limite anterior ao dia atual entra como atrasado', () => {
 
 test('card concluido com data limite anterior nao entra como atrasado', () => {
   assert.equal(isCardOverdue(cardWithDueDate('2026-09-01', 'Concluido'), referenceToday), false);
+});
+
+test('card atrasado em testes ou aguardando aprovacao PR fica fora do atraso vermelho', () => {
+  for (const status of ['Testes', 'Aguardando PR / Aprovação', 'Aguardando PR / Aprovacao', 'Atrasado']) {
+    const card = cardWithDueDate('2026-09-01', status);
+    assert.equal(isCardOverdue(card, referenceToday), false, status);
+    assert.equal(isCardOverdueInReview(card, referenceToday), true, status);
+  }
 });
 
 test('data do Jira no formato YYYY-MM-DD preserva o dia local de negocio', () => {

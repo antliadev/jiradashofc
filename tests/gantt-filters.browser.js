@@ -14,6 +14,8 @@ try {
     const cards = [
       { id: '1', key: 'A-1', projectId: 'p1', title: 'Entrega A', assigneeId: 'u1', status: 'Em andamento', priority: 'medium', startDate: '2026-09-01', dueDate: '2026-09-10' },
       { id: '2', key: 'B-1', projectId: 'p2', title: 'Entrega B', assigneeId: 'u2', status: 'Em andamento', priority: 'medium', startDate: '2026-09-01', dueDate: '2026-09-10' },
+      { id: '3', key: 'A-2', projectId: 'p1', title: 'Atraso real', assigneeId: 'u1', status: 'Em andamento', priority: 'high', startDate: '2026-08-20', dueDate: '2026-09-01' },
+      { id: '4', key: 'A-3', projectId: 'p1', title: 'Atraso em PR', assigneeId: 'u1', status: 'Aguardando PR / Aprovação', priority: 'high', startDate: '2026-08-20', dueDate: '2026-09-01' },
     ];
     dataService.getProjects = () => [{ id: 'p1', key: 'A', name: 'Projeto A' }, { id: 'p2', key: 'B', name: 'Projeto B' }];
     dataService.getUsers = () => [{ id: 'u1', displayName: 'Ana' }, { id: 'u2', displayName: 'Bruno' }];
@@ -28,6 +30,11 @@ try {
   assert.deepEqual(await page.locator('#gantt-assignee option').allTextContents(), ['Todos', 'Ana']);
   await page.selectOption('#gantt-assignee', 'u1');
   assert.match(await page.locator('.gantt-active-filters').innerText(), /2 filtro/);
+  const summaryText = await page.locator('.gantt-summary-bar').innerText();
+  assert.match(summaryText, /ATRASADOS/);
+  assert.match(summaryText, /ATRASADOS \(TESTES \/ AGUARDANDO APROVAÇÃO-PR\)/);
+  assert.equal(await page.locator('[data-card-id="3"].gantt-bar.overdue').count(), 1);
+  assert.equal(await page.locator('[data-card-id="4"].gantt-bar.review-overdue').count(), 1);
   assert.equal(await page.locator('.gantt-toolbar').evaluate(el => Number(getComputedStyle(el).zIndex) > Number(getComputedStyle(document.querySelector('.gantt-summary-bar')).zIndex || 0)), true);
   await page.screenshot({ path: '/tmp/gantt-filters.png', fullPage: true });
   assert.deepEqual(errors, []);

@@ -110,6 +110,14 @@ NVIDIA_API_KEY=<chave do ambiente>
 NVIDIA_MODEL=nvidia/nemotron-3-super-120b-a12b
 ```
 
+Em producao/Vercel, preencher `NVIDIA_API_KEY` nas variaveis de ambiente do
+projeto e redeployar a aplicacao. `NVIDIA_MODEL` e opcional; quando ausente, o
+servidor usa `nvidia/nemotron-3-super-120b-a12b`.
+
+Validacao segura na tela: a Sprint Review consulta `/api/jira/sprint-review/ai-status`
+e mostra apenas se a IA esta configurada e qual modelo esta ativo. O endpoint
+nao retorna a chave, hash da chave, token parcial nem qualquer segredo.
+
 Nunca usar prefixo VITE_ nem armazenar chave em perfis/snapshots. A chave de
 teste foi usada apenas em processos de validacao, nao persistida. Cotas e
 disponibilidade do catalogo NVIDIA devem ser verificadas na conta; a API de

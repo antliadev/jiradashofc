@@ -9,6 +9,7 @@ import { prepareReviewSnapshot, validateReviewProfile, validateReviewChoices } f
 import { buildSprintReview } from '../../src/data/sprint-review.js';
 import { sprintSlidePages } from '../../src/utils/sprint-review-render.js';
 import { synthesizeSprintReview } from '../../lib/sprintReviewAI.js';
+import { getNvidiaRuntimeConfig } from '../../lib/ai/nvidiaRuntimeConfig.js';
 import { buildSuggestedReviewProfile } from '../../lib/sprintProfileDefaults.js';
 import { getSprintAnalysisJob, publicSprintAnalysisJob, startSprintAnalysisJob } from '../../lib/sprintAnalysisJobs.js';
 
@@ -25,6 +26,17 @@ router.use((req, res, next) => {
 });
 const handle = action => async (req, res) => { try { await action(req, res); } catch (error) { res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao processar Sprint Review. Nenhuma versao foi aprovada.' }); } };
 async function projects() { return (await fetchDashboardDataFromDatabase()).projects.map(p => ({ key: p.key, name: p.name })); }
+function aiStatus() {
+  const config = getNvidiaRuntimeConfig();
+  return {
+    provider: config.provider,
+    configured: config.configured,
+    model: config.model,
+    requiredEnv: config.requiredEnv,
+    optionalEnv: config.optionalEnv,
+    missing: config.missing,
+  };
+}
 async function context(req) {
   const data = req.method === 'GET' || Buffer.isBuffer(req.body) ? req.query : req.body;
   const key = projectKey(data.projectKey), boardId = positiveId(data.boardId);
@@ -49,9 +61,11 @@ async function analyzeSprintReview(ctx, actor, mode) {
   source.baselineSnapshot = baselines.find(row => row.payload.startDate === source.sprint.startDate)?.payload || null;
   source.ai = { status: 'unconfigured', suggestions: [] };
   const record = await insertReviewRecord({ ...ctx, kind: 'source', actor, payload: source });
-  return { sourceId: record.id, review: buildSprintReview(source), aiAvailable: Boolean(process.env.NVIDIA_API_KEY), jiraBaseUrl: source.jiraBaseUrl, fetchedAt: source.fetchedAt, collection: source.collection };
+  const ai = aiStatus();
+  return { sourceId: record.id, review: buildSprintReview(source), aiAvailable: ai.configured, aiStatus: ai, jiraBaseUrl: source.jiraBaseUrl, fetchedAt: source.fetchedAt, collection: source.collection };
 }
 router.get('/projects', handle(async (_req, res) => res.json({ projects: await projects() })));
+router.get('/ai-status', handle(async (_req, res) => res.json({ aiStatus: aiStatus() })));
 router.get('/boards', handle(async (req, res) => {
   const key = projectKey(req.query.projectKey);
   if (!(await projects()).some(p => p.key === key)) return res.status(403).json({ error: 'Projeto nao habilitado.' });
@@ -121,6 +135,8 @@ router.post('/synthesize', handle(async (req, res) => {
   if (record.kind !== 'source' || record.project_key !== ctx.projectKey || record.board_id !== ctx.boardId || record.sprint_id !== ctx.sprintId) return res.status(403).json({ error: 'Origem nao pertence a este contexto.' });
   const source = record.payload;
   const choices = validateReviewChoices(source, req.body.choices || {});
+  const ai = aiStatus();
+  if (!ai.configured) return res.status(503).json({ error: 'IA NVIDIA nao configurada. Preencha NVIDIA_API_KEY nas variaveis de ambiente da producao.', aiStatus: ai });
   const lock = `ai:${ctx.projectKey}:${ctx.boardId}:${ctx.sprintId}`;
   if (pending.has(lock)) return res.status(409).json({ error: 'Ja existe uma sintese em andamento para esta sprint.' });
   pending.add(lock);

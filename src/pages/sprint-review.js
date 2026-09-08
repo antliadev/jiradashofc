@@ -15,7 +15,7 @@ export async function renderSprintReview() {
   const root = document.getElementById('page-content'), header = document.getElementById('page-header');
   header.innerHTML = '<h1>Sprint Review</h1><p class="subtitle">Planejamento, resultado e evidencias do fechamento da sprint</p>';
   const controller = new AbortController();
-  const state = { projects: [], boards: [], sprints: [], types: [], fields: [], projectKey: '', boardId: '', sprintId: '', profile: null, review: null, sourceId: '', busy: false, error: '', tab: 'plan', search: '', filter: '', pageSize: 25, page: 1, choices: { groups: {}, optionalKeys: [], confirmGrouping: false }, edits: {}, goal: null, acceptedWarnings: [], snapshots: [], snapshot: null, jiraBaseUrl: '', fetchedAt: '', analysisJob: null };
+  const state = { projects: [], boards: [], sprints: [], types: [], fields: [], projectKey: '', boardId: '', sprintId: '', profile: null, review: null, sourceId: '', busy: false, error: '', tab: 'plan', search: '', filter: '', pageSize: 25, page: 1, choices: { groups: {}, optionalKeys: [], confirmGrouping: false }, edits: {}, goal: null, acceptedWarnings: [], snapshots: [], snapshot: null, jiraBaseUrl: '', fetchedAt: '', analysisJob: null, aiStatus: null };
   let alive = true;
   state.executiveEdits = {}; state.confirmTextEdits = false; state.artManifest = null;
   window.addEventListener('hashchange', () => { alive = false; controller.abort(); }, { once: true });
@@ -28,6 +28,11 @@ export async function renderSprintReview() {
       throw new Error(detail || `Falha HTTP ${response.status}.`);
     }
     return payload;
+  }
+  async function loadAiStatus() {
+    const response = await fetch('/api/jira/sprint-review/ai-status', { credentials: 'include', signal: controller.signal });
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok) state.aiStatus = payload.aiStatus || null;
   }
   async function run(work) {
     if (state.busy) return;
@@ -99,7 +104,12 @@ export async function renderSprintReview() {
       <details><summary>Composicao da confianca</summary>${r.components.map(c => `<p>${esc(c.name)}: ${c.score == null ? 'Nao aplicavel' : Math.round(c.score) + '%'} (peso ${c.weight})</p>`).join('')}</details></section>
       <section class="sr-panel"><div class="sr-tabs" role="tablist" aria-label="Detalhes da Sprint Review">${[['plan', 'Planejado x Resultado'], ['cards', 'Analise dos Cards'], ['evidence', 'Evidencias e Comentarios'], ['art', 'Configuracao da Arte']].map(([tab, name]) => `<button class="btn ${state.tab === tab ? 'btn-primary' : 'btn-secondary'}" role="tab" aria-selected="${state.tab === tab}" data-tab="${tab}">${name}</button>`).join('')}</div>
       ${['plan', 'cards'].includes(state.tab) ? `<div class="sr-toolbar"><label>Buscar<input id="sr-search" value="${esc(state.search)}" placeholder="Codigo ou titulo"></label><label>Resultado<select id="sr-filter"><option value="">Todos</option>${options(Object.entries(state.tab === 'plan' ? resultNames : REVIEW_STATES).map(([id, name]) => ({ id, name })), state.filter)}</select></label><label>Exibir<select id="sr-size">${options([10, 25, 50, 100].map(n => ({ id: n, name: n })), state.pageSize)}</select></label><button id="sr-clear" class="btn btn-secondary">Limpar filtros</button></div><div id="sr-table">${tableContent()}</div>${!state.snapshot ? '<button class="btn btn-primary" id="sr-group">Aplicar e confirmar agrupamento</button>' : ''}` : state.tab === 'evidence' ? `${evidence(r.evidence.map(e => e.id))}<details><summary>Registros excluidos (${r.excludedComments.length})</summary>${r.excludedComments.map(e => `<p>${link(e.issueKey)} · Comentario ${esc(e.commentId)} · ${esc(e.reason)}</p>`).join('')}</details>` : `<p>Os textos podem ser revisados; metricas e status nao sao editaveis. Cada alteracao sera identificada na versao salva.</p>${r.statements.map(s => `<label class="sr-statement">${link(s.issueKey)}<textarea data-statement="${esc(s.id)}" maxlength="350" rows="3" ${state.snapshot ? 'disabled' : ''}>${esc(state.edits[s.id] ?? s.text)}</textarea><button class="btn btn-secondary" data-evidence="${esc(s.issueKey)}">Ver evidencias</button></label>`).join('')}<button class="btn btn-secondary" id="sr-reset-text" ${state.snapshot ? 'disabled' : ''}>Restaurar textos sugeridos</button>`}
-      </section><div class="sr-toolbar"><button class="btn btn-secondary" id="sr-preview">Gerar previa</button><button class="btn btn-secondary" id="sr-copy">Copiar resumo</button><button class="btn btn-secondary" id="sr-ai" ${state.snapshot ? 'disabled' : ''}>Gerar textos NVIDIA</button><button class="btn btn-secondary" id="sr-new-version" ${!state.snapshot ? 'disabled' : ''}>Criar nova versao</button><button class="btn btn-primary" id="sr-save" ${state.snapshot ? 'disabled' : ''}>Salvar Review</button><button class="btn btn-primary" id="sr-export">Exportar PNG</button></div><p class="muted">A exportacao final exige agrupamento confirmado, validacao sem erros e avisos aceitos. Muitas entregas geram varias imagens 16:9, sem cortar textos.</p><div id="sr-preview-area"></div>`;
+      </section><div class="sr-toolbar"><button class="btn btn-secondary" id="sr-preview">Gerar previa</button><button class="btn btn-secondary" id="sr-copy">Copiar resumo</button><button class="btn btn-secondary" id="sr-ai" ${state.snapshot ? 'disabled' : ''}>Gerar textos NVIDIA</button><button class="btn btn-secondary" id="sr-new-version" ${!state.snapshot ? 'disabled' : ''}>Criar nova versao</button><button class="btn btn-primary" id="sr-save" ${state.snapshot ? 'disabled' : ''}>Salvar Review</button><button class="btn btn-primary" id="sr-export">Exportar PNG</button></div>${aiConfigNotice()}<p class="muted">A exportacao final exige agrupamento confirmado, validacao sem erros e avisos aceitos. Muitas entregas geram varias imagens 16:9, sem cortar textos.</p><div id="sr-preview-area"></div>`;
+  }
+  function aiConfigNotice() {
+    if (!state.review || !state.aiStatus) return '';
+    if (state.aiStatus.configured) return `<p class="muted" role="status">IA NVIDIA configurada no servidor. Modelo ativo: ${esc(state.aiStatus.model)}.</p>`;
+    return `<p class="sr-warning" role="status"><strong>IA NVIDIA não configurada em produção.</strong> Preencha ${esc(state.aiStatus.requiredEnv || 'NVIDIA_API_KEY')} nas variáveis de ambiente do servidor. Opcional: ${esc(state.aiStatus.optionalEnv || 'NVIDIA_MODEL')}.</p>`;
   }
   function goalForm() {
     if (!state.review.sprint.goal) return '';
@@ -379,6 +389,6 @@ export async function renderSprintReview() {
       state.snapshots = (await api('/snapshots')).snapshots || [];
     }
   }
-  await run(async () => { state.projects = (await api('/projects')).projects; await restoreContext(); });
+  await run(async () => { state.projects = (await api('/projects')).projects; await loadAiStatus(); await restoreContext(); });
   restoreJob();
 }

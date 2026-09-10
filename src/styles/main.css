@@ -1367,6 +1367,115 @@ input, select, textarea { font-family: inherit; }
 .evolution-card.info { border-color: rgba(96,165,250,.35); }
 .evolution-card.attention { border-color: rgba(245,158,11,.45); }
 
+.analyst-category-grid {
+  margin-bottom: 10px;
+}
+
+.resource-allocation .ra-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.resource-allocation .ra-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.ra-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ra-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) 1fr;
+  gap: 12px;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  padding: 10px;
+}
+
+.ra-person {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.ra-person span,
+.ra-person em,
+.ra-project small {
+  color: var(--text-secondary);
+  font-style: normal;
+  font-size: 12px;
+}
+
+.ra-bars {
+  position: relative;
+  min-height: 44px;
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.ra-bar {
+  position: absolute;
+  top: 8px;
+  height: 28px;
+  border-radius: 999px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ra-bar.overallocated {
+  outline: 2px solid rgba(239, 68, 68, .8);
+}
+
+.ra-gap {
+  position: absolute;
+  inset-block: 0;
+  width: 8px;
+  background: repeating-linear-gradient(45deg, rgba(245, 158, 11, .4), rgba(245, 158, 11, .4) 4px, transparent 4px, transparent 8px);
+}
+
+.ra-project {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  padding: 12px;
+  margin-bottom: 8px;
+}
+
+.ra-project h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ra-project h4 span {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+}
+
 .evolution-chart {
   width: 100%;
   min-height: 220px;

@@ -95,6 +95,7 @@ INSERT INTO public.permissions (code, name, module) VALUES
   ('gantt', 'Gantt', 'planning'),
   ('projects.kanban', 'Projetos Kanban', 'projects'),
   ('projects.health', 'Saude dos Cards', 'projects'),
+  ('projects.resource-allocation', 'Alocacao de Recursos', 'projects'),
   ('projects.executive', 'Relatorio Gerencial', 'projects'),
   ('projects.detailed', 'Relatorio Detalhado', 'projects'),
   ('analysts.general', 'Analistas Geral', 'analysts'),

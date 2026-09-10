@@ -11,3 +11,11 @@ test('Sprint Plan possui rota e permissao independentes da Sprint Review', () =>
   assert.equal(canAccessRoute('/projects/sprint-plan', { status: 'active', role: 'custom', permissions: ['projects.sprint-review'] }), false);
   assert.equal(canAccessRoute('/projects/sprint-plan', { status: 'active', role: 'custom', permissions: ['projects.sprint-plan'] }), true);
 });
+
+test('Alocação de Recursos possui rota e permissão próprias', () => {
+  const item = ACCESS_ITEMS.find(entry => entry.id === 'projects.resource-allocation');
+  assert.equal(item?.route, '/projects/resource-allocation');
+  assert.equal(MENU_PERMISSIONS.includes('projects.resource-allocation'), true);
+  assert.equal(canAccessRoute('/projects/resource-allocation', { status: 'active', role: 'custom', permissions: ['projects.sprint-review'] }), false);
+  assert.equal(canAccessRoute('/projects/resource-allocation', { status: 'active', role: 'custom', permissions: ['projects.resource-allocation'] }), true);
+});

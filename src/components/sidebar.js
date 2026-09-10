@@ -193,6 +193,7 @@ export function renderSidebar() {
         children: [
           navLink({ route: '/projects', label: 'Issues - Kanban', icon: ICONS.board, permission: 'projects.kanban' }),
           navLink({ route: '/projects/health', label: 'Saude Detalhamento Cards Projetos', icon: ICONS.dashboard, permission: 'projects.health' }),
+          navLink({ route: '/projects/resource-allocation', label: 'Alocação de Recursos', icon: ICONS.analysts, permission: 'projects.resource-allocation' }),
         ],
       })}
       ${navGroup({

@@ -6,6 +6,7 @@ import { isCardOverdue, resolveStatusCategory, StatusCategory } from '../data/mo
 import { formatDate, sanitize, sanitizeTitle, typeLabel } from '../utils/helpers.js';
 import { exportRowsWorkbook } from '../utils/excel-export.js';
 import { businessHelp } from '../utils/ui-feedback.js';
+import { calculateAnalystPerformance } from '../data/analyst-performance.js';
 
 const MIN_SAMPLE_KEY = 'rja.analysts.minimumSample';
 const SHARED_ANALYST_KEY = 'rja.analysts.sharedUserId';
@@ -241,12 +242,13 @@ function renderGeneral() {
     start: p.get('start') || '',
     end: p.get('end') || '',
   };
-  header('Analistas - Geral', 'Visao individual de atuacao, prazos, bloqueios e carga sem nota unica');
+  header('Analistas - Geral', 'Nota auditavel de performance, prazos, replanejamentos e gestao dos cards');
   if (!users.length) {
     content.innerHTML = '<div class="empty-state"><h3>Nenhum analista encontrado</h3></div>';
     return;
   }
   const m = selectedUser ? calcAnalystMetrics(selectedUser, filters) : null;
+  const performance = m ? calculateAnalystPerformance(m.cards) : null;
   const selectedIds = selectedUser ? [selectedUser.id] : [];
   if (selectedUserId) persistSharedAnalyst(selectedUserId);
 
@@ -277,6 +279,7 @@ function renderGeneral() {
       </section>
 
       <div class="kpi-grid analyst-kpi-grid">
+        <div class="kpi-card kpi-info">${businessHelp('Regra: nota de performance', 'Nota de 0 a 100 calculada por score normalizado de cada indicador vezes seu peso. Indicadores sem dados saem do denominador para evitar nota inventada.')}<div class="kpi-value">${performance.score ?? 'N/A'}</div><div class="kpi-label">Nota de Performance</div><div class="kpi-trend">${sanitize(performance.label)}</div></div>
         <div class="kpi-card">${businessHelp('Regra: projetos em atuação', 'Quantidade de projetos que possuem cards atribuídos ao profissional no período analisado.')}<div class="kpi-value">${m.projects.length}</div><div class="kpi-label">Projetos em atuacao</div></div>
         <div class="kpi-card">${businessHelp('Regra: cards sob responsabilidade', 'Cards atuais atribuídos ao profissional, excluindo os que estão concluídos.')}<div class="kpi-value">${m.current.length}</div><div class="kpi-label">Cards sob responsabilidade</div></div>
         <div class="kpi-card kpi-success">${businessHelp('Regra: cards concluídos', 'Cards do profissional classificados como Concluído.')}<div class="kpi-value">${m.done.length}</div><div class="kpi-label">Cards concluidos</div></div>
@@ -286,6 +289,28 @@ function renderGeneral() {
         <div class="kpi-card">${businessHelp('Regra: cobertura de comentários', 'Percentual de cards com pelo menos um comentário humano, quando os comentários estão disponíveis.')}<div class="kpi-value">${percentLabel(m.commentCoverage)}</div><div class="kpi-label">Cobertura comentarios</div></div>
         <div class="kpi-card">${businessHelp('Regra: sem atualização recente', 'Cards em aberto cuja última atualização ocorreu há mais de cinco dias úteis.')}<div class="kpi-value">${m.stale.length}</div><div class="kpi-label">Sem atualizacao recente</div></div>
       </div>
+
+      <section class="report-section">
+        <h3>Explicação da nota</h3>
+        <div class="kpi-grid analyst-category-grid">
+          ${performance.categories.map(item => `<div class="kpi-card"><div class="kpi-value">${item.score ?? 'N/A'}</div><div class="kpi-label">${sanitize(item.category)}</div></div>`).join('')}
+        </div>
+        <div class="table-container">
+          <table class="data-table">
+            <thead><tr><th>Indicador</th><th>Categoria</th><th>Resultado</th><th>Score</th><th>Peso</th><th>Pontos</th><th>Fórmula</th></tr></thead>
+            <tbody>${performance.indicators.map(indicator => `<tr><td>${sanitize(indicator.label)}</td><td>${sanitize(indicator.category)}</td><td>${sanitize(indicator.result)}</td><td>${indicator.score ?? 'N/A'}</td><td>${indicator.weight}%</td><td>${indicator.score === null ? 'N/A' : Math.round(indicator.score * indicator.weight) / 100}</td><td title="${sanitizeTitle(indicator.formula)}">${sanitize(indicator.formula)}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>
+        ${!performance.audit.changelogAvailable ? '<p class="report-alert warning">Histórico detalhado de replanejamento/reabertura ainda não está disponível na carga atual. A nota usa os indicadores com dados disponíveis e remove esses itens do denominador.</p>' : ''}
+      </section>
+
+      <section class="report-section">
+        <h3>Replanejamentos e reaberturas rastreáveis</h3>
+        ${performance.replans.length || performance.reopened.length ? `<div class="table-container"><table class="data-table"><thead><tr><th>Card</th><th>Evento</th><th>Anterior</th><th>Novo</th><th>Autor</th><th>Data</th><th>Classificação</th></tr></thead><tbody>${[
+          ...performance.replans.map(({ card, change }) => ({ card, event: 'Data Limite', from: change.previousDate, to: change.newDate, author: change.author, at: change.at, classification: change.classification === 'after_due' ? 'Após vencimento' : change.classification === 'late' ? 'Tardio' : 'Antecipado' })),
+          ...performance.reopened.map(({ card, event }) => ({ card, event: 'Reabertura', from: event.from, to: event.to, author: event.author, at: event.at, classification: 'Reaberto' })),
+        ].map(row => `<tr><td><a href="${sanitize(row.card.jiraUrl || '#')}" target="_blank" rel="noopener noreferrer">${sanitize(row.card.key)}</a></td><td>${sanitize(row.event)}</td><td>${sanitize(row.from || '-')}</td><td>${sanitize(row.to || '-')}</td><td>${sanitize(row.author || 'Não informado')}</td><td>${formatDate(row.at)}</td><td>${sanitize(row.classification)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Nenhum evento de replanejamento ou reabertura encontrado nos dados sincronizados.</p>'}
+      </section>
 
       <section class="report-section">
         <h3>Projetos em atuacao</h3>

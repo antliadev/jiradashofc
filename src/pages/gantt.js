@@ -23,7 +23,7 @@ import { dataService } from '../data/data-service.js';
 import {
   resolveStatusCategory, StatusCategory, isCardOverdue, isCardOverdueInReview
 } from '../data/models.js';
-import { sanitize, formatDate, priorityLabel } from '../utils/helpers.js';
+import { sanitize, sanitizeTitle, formatDate, priorityLabel } from '../utils/helpers.js';
 import {
   filterGanttItems,
   getEligibleGanttAssignees,
@@ -115,6 +115,8 @@ const state = {
   visibleLimit: GANTT_INITIAL_LIMIT,
   hasFocusedToday: false,
   pendingFocusToday: false,
+  refreshing: false,
+  refreshMessage: '',
 
   // Preferências (carregadas do localStorage)
   prefs: { ...DEFAULT_PREFS },
@@ -566,6 +568,21 @@ function focusTodayAfterRender({ force = false, smooth = false } = {}) {
       state.hasFocusedToday = true;
       state.pendingFocusToday = false;
     }
+  });
+}
+
+function captureVerticalScroll() {
+  const left = document.querySelector('.gantt-left-body');
+  const right = document.querySelector('.gantt-timeline-scroll');
+  return { top: left?.scrollTop ?? right?.scrollTop ?? 0 };
+}
+
+function restoreVerticalScroll(position = {}) {
+  window.requestAnimationFrame(() => {
+    const left = document.querySelector('.gantt-left-body');
+    const right = document.querySelector('.gantt-timeline-scroll');
+    if (left) left.scrollTop = position.top || 0;
+    if (right) right.scrollTop = position.top || 0;
   });
 }
 
@@ -1402,7 +1419,7 @@ function renderHierarchyLeftRow(row) {
           </button>
         ` : '<span class="gantt-toggle-spacer"></span>'}
         <div class="gantt-hierarchy-main">
-          <strong><a data-card-id="${sanitize(row.card.id)}">${sanitize(row.card.key)}</a> ${sanitize(row.card.title || '')}</strong>
+          <strong title="${sanitizeTitle(row.card.title || '')}"><a data-card-id="${sanitize(row.card.id)}">${sanitize(row.card.key)}</a> ${sanitize(row.card.title || '')}</strong>
           <span>${sanitize(row.subtitle || '')}</span>
         </div>
       </div>
@@ -1425,7 +1442,7 @@ function renderHierarchyTicketRow(row) {
       <div class="gantt-hierarchy-item-cell child" style="padding-left:${row.level * 18}px">
         <span class="gantt-toggle-spacer"></span>
         <div class="gantt-hierarchy-main">
-          <strong><a data-card-id="${sanitize(card.id)}">${sanitize(card.key)}</a> ${sanitize(card.title || '')}</strong>
+          <strong title="${sanitizeTitle(card.title || '')}"><a data-card-id="${sanitize(card.id)}">${sanitize(card.key)}</a> ${sanitize(card.title || '')}</strong>
           <span>${missingDates ? 'Datas incompletas' : `${formatDate(row.start)} - ${formatDate(row.end)}`}</span>
         </div>
       </div>
@@ -1512,7 +1529,7 @@ function renderGroupHeader(key, groupItems, grouping, isCollapsed) {
       <div class="gantt-group-badge" style="background:${color}20;color:${color};border:1px solid ${color}40;">
         ${grouping === 'assignee' || grouping === 'project' ? count : ''}
       </div>
-      <span class="gantt-group-name">${sanitize(label)}</span>
+      <span class="gantt-group-name" title="${sanitizeTitle(label)}">${sanitize(label)}</span>
       <div class="gantt-group-meta">
         <span class="gantt-group-count">${count}</span>
         ${overdue ? `<span class="gantt-group-warning">
@@ -1836,7 +1853,10 @@ function renderToolbar(projects, users, allItems, filteredCount) {
           `).join('')}
         </div>
       </div>
+      <div class="gantt-toolbar-divider"></div>
+      <button class="btn btn-secondary" id="gantt-refresh-jira" ${state.refreshing ? 'disabled' : ''}>${state.refreshing ? 'Atualizando...' : 'Atualizar dados Jira'}</button>
     </div>
+    ${state.refreshMessage ? `<div class="gantt-active-filters"><span class="gantt-active-filters-text">${sanitize(state.refreshMessage)}</span></div>` : ''}
     ${activeFilterCount > 0 ? `
       <div class="gantt-active-filters">
         <span class="gantt-active-filters-text">
@@ -1879,6 +1899,8 @@ function bindEvents() {
     state.visibleLimit = GANTT_INITIAL_LIMIT;
     renderGantt();
   });
+
+  document.getElementById('gantt-refresh-jira')?.addEventListener('click', () => refreshGanttData());
 
   // Clear filters
   document.getElementById('gantt-clear-filters')?.addEventListener('click', () => {
@@ -1941,12 +1963,14 @@ function bindEvents() {
     const hierarchyToggle = e.target.closest('[data-hierarchy-toggle]');
     if (hierarchyToggle) {
       const rowId = hierarchyToggle.dataset.hierarchyToggle;
+      const scrollPosition = captureVerticalScroll();
       const collapsed = { ...state.prefs.collapsedGroups };
       const currentlyCollapsed = collapsed[rowId] !== false;
       if (currentlyCollapsed) collapsed[rowId] = false;
       else delete collapsed[rowId];
       Preferences.save('collapsedGroups', collapsed);
       renderGantt();
+      restoreVerticalScroll(scrollPosition);
       return;
     }
 
@@ -2004,6 +2028,43 @@ function bindEvents() {
 
   // Sincronizar scroll vertical entre painéis
   syncScrollVertical();
+}
+
+async function refreshGanttData() {
+  if (state.refreshing) return;
+  state.refreshing = true;
+  state.refreshMessage = 'Sincronizando dados do Jira para o Gantt...';
+  renderGantt();
+  try {
+    const scope = {};
+    if (state.projectId) {
+      const project = dataService.getProjectById(state.projectId);
+      if (project?.key) scope.projectKey = project.key;
+    }
+    if (state.analystId) scope.assigneeId = state.analystId;
+    const started = await dataService.startScopedJiraSync(scope);
+    const jobId = started?.jobId || started?.job?.id;
+    let completed = !jobId;
+    if (jobId) {
+      for (let attempt = 0; attempt < 40; attempt++) {
+        const status = await dataService.getSyncStatus(jobId);
+        if (status.status === 'completed' || status.job?.status === 'completed') {
+          completed = true;
+          break;
+        }
+        if (status.status === 'failed' || status.status === 'error' || status.job?.status === 'failed') throw new Error(status.error || status.job?.error || 'Sincronização do Jira falhou.');
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      }
+    }
+    if (!completed) throw new Error('Sincronização ainda em andamento. Aguarde alguns segundos e tente novamente.');
+    await dataService.ensureLoaded({ force: true });
+    state.refreshMessage = 'Dados do Jira atualizados.';
+  } catch (error) {
+    state.refreshMessage = error.message || 'Não foi possível atualizar os dados do Jira.';
+  } finally {
+    state.refreshing = false;
+    renderGantt();
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════

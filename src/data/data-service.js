@@ -794,6 +794,7 @@ class DataService {
         changelogCount: Number(i.changelog_count || 0) || 0,
         assigneeHistory: i.assignee_history || [],
         statusHistory: i.status_history || [],
+        rawChangelog: i.raw_changelog || i.rawChangelog || {},
         blockReason: i.blocked_reason || blockReason,
         blockedAt,
         actionTaken: i.blocked_action_taken || jiraFieldText(rawFields.customfield_11377) || 'Nenhuma acao registrada',

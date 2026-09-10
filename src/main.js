@@ -27,6 +27,7 @@ const dataRoutes = new Set([
   '/projects',
   '/projects/executive',
   '/projects/health',
+  '/projects/resource-allocation',
   '/projects/detailed-report',
   '/cards',
   '/monitoring/overdue',
@@ -243,6 +244,7 @@ registerRoute('/gantt', () => renderRoute(() => import('./pages/gantt.js'), 'ren
 registerRoute('/monitoring/overdue', () => renderRoute(() => import('./pages/cards.js'), 'renderCards', { monitoring: 'overdue' }));
 registerRoute('/monitoring/blocked', () => renderRoute(() => import('./pages/cards.js'), 'renderCards', { monitoring: 'blocked' }));
 registerRoute('/projects/health', () => renderRoute(() => import('./pages/project-reports.js'), 'renderProjectHealthReport'));
+registerRoute('/projects/resource-allocation', () => renderRoute(() => import('./pages/resource-allocation.js'), 'renderResourceAllocation'));
 registerRoute('/projects/sprint-plan', () => renderRoute(() => import('./pages/sprint-plan.js'), 'renderSprintPlan'));
 registerRoute('/projects/sprint-review', () => renderRoute(() => import('./pages/sprint-review.js'), 'renderSprintReview'));
 registerRoute('/projects/executive', () => renderRoute(() => import('./pages/project-reports.js'), 'renderProjectExecutiveReport'));

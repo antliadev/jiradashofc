@@ -62,6 +62,9 @@ try {
   await page.locator('[data-multi-remove="ana"]').click();
   assert.equal(await page.locator('[data-test-option][value="ana"]').isChecked(), false);
   assert.equal(await page.evaluate(() => window.multiChanges), 1);
+  assert.deepEqual(await page.locator('[role="option"]').evaluateAll(options => (
+    options.map(option => getComputedStyle(option, '::before').content).filter(content => !['none', 'normal', ''].includes(content))
+  )), []);
 
   await page.screenshot({ path: '/tmp/select-components-mobile.png', fullPage: true });
   assert.deepEqual(errors, []);

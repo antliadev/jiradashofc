@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { renderMultiSelect } from '../src/utils/multi-select.js';
+import { readFile } from 'node:fs/promises';
+
+const cssPath = new URL('../src/styles/main.css', import.meta.url);
 
 test('renderMultiSelect preserva atributos funcionais e expõe semântica acessível', () => {
   const html = renderMultiSelect({
@@ -51,4 +54,12 @@ test('renderMultiSelect rejeita nomes arbitrários de atributos data', () => {
   });
 
   assert.doesNotMatch(html, /onclick|onmouseover/);
+});
+
+test('listas selecionáveis destacam o estado sem ícones de check', async () => {
+  const css = await readFile(cssPath, 'utf8');
+
+  assert.doesNotMatch(css, /content:\s*['"]✓['"]/);
+  assert.doesNotMatch(css, /grid-template-columns:\s*22px\s+minmax\(0,\s*1fr\)/);
+  assert.match(css, /\.select-list-option\.is-selected[\s\S]*background:\s*var\(--accent-glow\)/);
 });

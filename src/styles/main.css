@@ -218,9 +218,9 @@ input, select, textarea { font-family: inherit; }
   min-width: 0;
   display: grid;
   flex-direction: initial;
-  grid-template-columns: 22px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
-  gap: 4px;
+  gap: 0;
   width: 100%;
   min-height: 36px;
   padding: 7px 14px;
@@ -237,21 +237,11 @@ input, select, textarea { font-family: inherit; }
   cursor: pointer;
 }
 
-.select-list-option::before,
-.compact-multi-menu label::before,
-.report-toolbar .compact-multi-menu label::before {
-  content: '';
-  width: 18px;
+.select-list-option.is-selected,
+.compact-multi-menu label:has(input:checked),
+.report-toolbar .compact-multi-menu label:has(input:checked) {
+  background: var(--accent-glow);
   color: var(--text-primary);
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.select-list-option.is-selected::before,
-.compact-multi-menu label:has(input:checked)::before,
-.report-toolbar .compact-multi-menu label:has(input:checked)::before {
-  content: '✓';
 }
 
 .select-list-option:hover,

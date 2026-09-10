@@ -122,13 +122,19 @@ export function initRouter() {
         const toggle = group.querySelector('.nav-parent');
         const submenu = group.querySelector('.nav-submenu');
         toggle?.setAttribute('aria-expanded', 'true');
-        if (submenu) submenu.hidden = false;
+        if (submenu) {
+          submenu.classList.add('is-expanded');
+          submenu.setAttribute('aria-hidden', 'false');
+        }
       } else {
         group.classList.remove('expanded');
         const toggle = group.querySelector('.nav-parent');
         const submenu = group.querySelector('.nav-submenu');
         toggle?.setAttribute('aria-expanded', 'false');
-        if (submenu) submenu.hidden = true;
+        if (submenu) {
+          submenu.classList.remove('is-expanded');
+          submenu.setAttribute('aria-hidden', 'true');
+        }
       }
     });
   };

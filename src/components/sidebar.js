@@ -29,6 +29,13 @@ function getCurrentPath() {
   return (window.location.hash.replace(/^#\/?/, '/') || '/').split('?')[0];
 }
 
+function isRouteActive(route, currentPath = getCurrentPath()) {
+  if (route === '/projects') return currentPath === '/projects';
+  return route === '/'
+    ? currentPath === '/'
+    : currentPath === route || currentPath.startsWith(`${route}/`);
+}
+
 function activeMenuForPath(currentPath) {
   if (currentPath.startsWith('/contracts')) return 'contracts';
   if (currentPath.startsWith('/monitoring')) return 'monitoring';
@@ -84,8 +91,9 @@ function counterBadge(value) {
 function navLink({ route, label, icon = '', count = null, permission = null }) {
   if (!canAccessPermission(permission)) return '';
   const counter = Number.isFinite(count) ? counterBadge(count) : '';
+  const active = isRouteActive(route);
   return `
-    <button class="nav-item nav-subitem" data-route="${route}" onclick="location.hash='#${route}'" aria-label="Ir para ${label}" title="${label}">
+    <button class="nav-item nav-subitem ${active ? 'active' : ''}" data-route="${route}" onclick="location.hash='#${route}'" aria-label="Ir para ${label}" title="${label}">
       ${icon}
       <span>${label}</span>
       ${counter}
@@ -99,14 +107,16 @@ function navGroup({ id, label, icon, expanded, active, count = null, children })
   const counter = Number.isFinite(count) ? counterBadge(count) : '';
   return `
     <div class="nav-group ${expanded ? 'expanded' : ''} ${active ? 'active' : ''}" data-menu="${id}" data-active-menu="${active ? 'true' : 'false'}">
-      <button class="nav-item nav-parent" data-nav-toggle="${id}" aria-expanded="${expanded ? 'true' : 'false'}" aria-controls="submenu-${id}">
+      <button class="nav-item nav-parent" type="button" data-nav-toggle="${id}" aria-expanded="${expanded ? 'true' : 'false'}" aria-controls="submenu-${id}">
         ${icon}
         <span>${label}</span>
         ${counter}
         ${ICONS.chevron}
       </button>
-      <div class="nav-submenu" id="submenu-${id}" ${expanded ? '' : 'hidden'}>
-        ${visibleChildren.join('')}
+      <div class="nav-submenu ${expanded ? 'is-expanded' : ''}" id="submenu-${id}" aria-hidden="${expanded ? 'false' : 'true'}">
+        <div class="nav-submenu-inner">
+          ${visibleChildren.join('')}
+        </div>
       </div>
     </div>
   `;
@@ -114,7 +124,7 @@ function navGroup({ id, label, icon, expanded, active, count = null, children })
 
 function navButton({ route, label, icon, permission = null }) {
   if (!canAccessPermission(permission)) return '';
-  return `<button class="nav-item" data-route="${route}" onclick="location.hash='#${route}'" aria-label="Ir para ${label}" title="${label}">${icon}<span>${label}</span></button>`;
+  return `<button class="nav-item ${isRouteActive(route) ? 'active' : ''}" data-route="${route}" onclick="location.hash='#${route}'" aria-label="Ir para ${label}" title="${label}">${icon}<span>${label}</span></button>`;
 }
 
 export function renderSidebar() {
@@ -269,18 +279,41 @@ export function renderSidebar() {
     const submenu = group.querySelector('.nav-submenu');
     button?.setAttribute('aria-expanded', expanded ? 'true' : 'false');
     group.classList.toggle('expanded', expanded);
-    if (submenu) submenu.hidden = !expanded;
+    if (submenu) {
+      submenu.classList.toggle('is-expanded', expanded);
+      submenu.setAttribute('aria-hidden', expanded ? 'false' : 'true');
+    }
   };
 
   sidebar.querySelectorAll('.nav-group').forEach(group => {
-    group.addEventListener('mouseenter', () => setGroupExpanded(group, true));
-    group.addEventListener('focusin', () => setGroupExpanded(group, true));
+    const button = group.querySelector('[data-nav-toggle]');
+    button?.addEventListener('click', () => {
+      const shouldExpand = group.dataset.activeMenu === 'true' || group.dataset.previewExpanded === 'true' || !group.classList.contains('expanded');
+      delete group.dataset.previewExpanded;
+      sidebar.querySelectorAll('.nav-group').forEach(otherGroup => {
+        if (otherGroup !== group && otherGroup.dataset.activeMenu !== 'true') {
+          setGroupExpanded(otherGroup, false);
+          delete otherGroup.dataset.previewExpanded;
+        }
+      });
+      setGroupExpanded(group, shouldExpand);
+    });
+    group.addEventListener('mouseenter', () => {
+      if (!group.classList.contains('expanded')) group.dataset.previewExpanded = 'true';
+      setGroupExpanded(group, true);
+    });
+    group.addEventListener('focusin', () => {
+      if (!group.classList.contains('expanded')) group.dataset.previewExpanded = 'true';
+      setGroupExpanded(group, true);
+    });
     group.addEventListener('mouseleave', () => {
       if (group.dataset.activeMenu !== 'true') setGroupExpanded(group, false);
+      delete group.dataset.previewExpanded;
     });
     group.addEventListener('focusout', event => {
       if (group.dataset.activeMenu !== 'true' && !group.contains(event.relatedTarget)) {
         setGroupExpanded(group, false);
+        delete group.dataset.previewExpanded;
       }
     });
   });

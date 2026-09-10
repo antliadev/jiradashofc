@@ -51,7 +51,10 @@ export function renderLogin() {
             </form>
           ` : `
             <div class="login-form">
-              <button type="button" class="btn btn-primary btn-login btn-google" id="google-login-btn">Entrar com Google</button>
+              <button type="button" class="btn btn-primary btn-login btn-google" id="google-login-btn">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.07H12v3.92h5.38a4.6 4.6 0 0 1-2 3.02v2.55h3.24c1.9-1.75 2.98-4.33 2.98-7.42Z"/><path fill="#34A853" d="M12 22c2.7 0 4.97-.9 6.62-2.35l-3.24-2.55c-.9.6-2.05.96-3.38.96-2.6 0-4.81-1.76-5.6-4.13H3.06v2.63A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.4 13.93A6.02 6.02 0 0 1 6.08 12c0-.67.11-1.32.32-1.93V7.44H3.06A10 10 0 0 0 2 12c0 1.64.39 3.2 1.06 4.56l3.34-2.63Z"/><path fill="#EA4335" d="M12 5.94c1.47 0 2.79.5 3.83 1.5l2.87-2.87A9.64 9.64 0 0 0 12 2a10 10 0 0 0-8.94 5.44l3.34 2.63C7.19 7.7 9.4 5.94 12 5.94Z"/></svg>
+                <span>Entrar com Google</span>
+              </button>
               <div id="login-error" class="login-error" style="${authError ? '' : 'display: none;'}">${sanitize(authError)}</div>
             </div>
           `}
@@ -191,39 +194,56 @@ function addLoginStyles() {
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 20px;
+      position: relative;
+      isolation: isolate;
+      overflow: hidden;
+      padding: 24px;
       background:
-        radial-gradient(circle at 20% 15%, var(--accent-glow), transparent 34%),
-        linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+        radial-gradient(circle at 18% 14%, rgba(109, 124, 246, .15), transparent 30rem),
+        radial-gradient(circle at 82% 82%, rgba(90, 167, 255, .08), transparent 28rem),
+        var(--bg-primary);
+    }
+
+    .login-container::before {
+      content: '';
+      position: absolute;
+      z-index: -1;
+      inset: 0;
+      opacity: .16;
+      background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: radial-gradient(circle at center, black, transparent 72%);
     }
     
     .login-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 40px;
+      background: color-mix(in srgb, var(--bg-card) 92%, transparent);
+      border: 1px solid var(--border-light);
+      border-radius: 20px;
+      padding: clamp(30px, 4vw, 42px);
       width: 100%;
-      max-width: 400px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+      max-width: 420px;
+      box-shadow: 0 32px 90px rgba(0, 0, 0, .34), inset 0 1px rgba(255,255,255,.035);
+      backdrop-filter: blur(22px) saturate(130%);
     }
     
     .login-header {
       text-align: center;
-      margin-bottom: 32px;
+      margin-bottom: 30px;
     }
     
     .login-logo {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      width: 74px;
-      height: 64px;
-      border-radius: 16px;
-      background: rgba(255,255,255,.04);
-      border: 1px solid var(--border);
+      width: 70px;
+      height: 62px;
+      border-radius: 18px;
+      background: linear-gradient(145deg, var(--surface-raised), var(--bg-card));
+      border: 1px solid var(--border-light);
       color: white;
       overflow: hidden;
-      margin-bottom: 16px;
+      margin-bottom: 18px;
+      box-shadow: var(--shadow-soft), inset 0 1px rgba(255,255,255,.05);
     }
 
     .login-logo img {
@@ -234,33 +254,35 @@ function addLoginStyles() {
 
     .login-product-mark {
       width: fit-content;
-      margin: -4px auto 10px auto;
-      padding: 4px 9px;
+      margin: -5px auto 11px;
+      padding: 4px 10px;
       border-radius: 999px;
       background: var(--accent-glow);
       color: var(--accent-hover);
-      font-size: 11px;
+      font-size: 9px;
       font-weight: 900;
       letter-spacing: .14em;
     }
     
     .login-header h1 {
-      font-size: 24px;
-      font-weight: 600;
+      font-size: 26px;
+      font-weight: 740;
+      letter-spacing: -.04em;
       color: var(--text-primary);
       margin: 0 0 8px 0;
     }
     
     .login-subtitle {
       color: var(--text-muted);
-      font-size: 14px;
+      font-size: 13px;
+      line-height: 1.5;
       margin: 0;
     }
     
     .login-form {
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 16px;
     }
     
     .form-group {
@@ -276,9 +298,10 @@ function addLoginStyles() {
     }
     
     .form-group input {
-      padding: 12px 16px;
+      min-height: 44px;
+      padding: 10px 13px;
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 10px;
       background: var(--bg-input);
       color: var(--text-primary);
       font-size: 14px;
@@ -287,8 +310,8 @@ function addLoginStyles() {
     
     .form-group input:focus {
       outline: none;
-      border-color: #6366f1;
-      box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+      border-color: var(--accent);
+      box-shadow: var(--ring);
     }
     
     .form-group input::placeholder {
@@ -299,16 +322,17 @@ function addLoginStyles() {
       padding: 12px;
       background: rgba(239, 68, 68, 0.1);
       border: 1px solid rgba(239, 68, 68, 0.3);
-      border-radius: 8px;
-      color: #ef4444;
+      border-radius: 10px;
+      color: var(--danger);
       font-size: 13px;
       text-align: center;
     }
     
     .btn-login {
-      padding: 14px;
-      font-size: 15px;
-      font-weight: 600;
+      min-height: 46px;
+      padding: 12px 15px;
+      font-size: 14px;
+      font-weight: 680;
       margin-top: 8px;
     }
 
@@ -318,7 +342,11 @@ function addLoginStyles() {
       border-color: #d1d5db;
       margin-top: 0;
       width: 100%;
+      gap: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.16);
     }
+
+    .btn-google svg { width: 19px; height: 19px; flex: 0 0 auto; }
 
     .btn-google:hover {
       background: #f3f4f6;
@@ -363,7 +391,9 @@ function addLoginStyles() {
     }
     
     .login-footer {
-      margin-top: 24px;
+      margin-top: 26px;
+      padding-top: 18px;
+      border-top: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
       text-align: center;
     }
     
@@ -371,6 +401,11 @@ function addLoginStyles() {
       font-size: 12px;
       color: var(--text-muted);
       margin: 0;
+    }
+
+    @media (max-width: 480px) {
+      .login-container { align-items: stretch; padding: 12px; }
+      .login-card { align-self: center; border-radius: 16px; }
     }
   `;
   

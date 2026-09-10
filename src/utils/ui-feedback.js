@@ -71,6 +71,7 @@ export function showToast(message, type = 'info') {
 export function confirmAction({ title = 'Confirmar ação', message, confirmLabel = 'Confirmar', danger = false } = {}) {
   return new Promise(resolve => {
     const root = getFeedbackRoot();
+    const previouslyFocused = document.activeElement;
     const overlay = document.createElement('div');
     overlay.className = 'ui-modal-backdrop';
     overlay.innerHTML = `
@@ -91,14 +92,36 @@ export function confirmAction({ title = 'Confirmar ação', message, confirmLabe
     overlay.querySelector('[data-confirm-ok]').textContent = String(confirmLabel);
 
     const finish = value => {
+      document.removeEventListener('keydown', handleKeydown);
       overlay.remove();
+      if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus();
       resolve(value);
+    };
+    const handleKeydown = event => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        finish(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = [...overlay.querySelectorAll('button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')];
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     overlay.addEventListener('click', event => {
       if (event.target === overlay) finish(false);
     });
     overlay.querySelector('[data-confirm-cancel]').addEventListener('click', () => finish(false));
     overlay.querySelector('[data-confirm-ok]').addEventListener('click', () => finish(true));
+    document.addEventListener('keydown', handleKeydown);
     root.appendChild(overlay);
     overlay.querySelector('[data-confirm-ok]').focus();
   });

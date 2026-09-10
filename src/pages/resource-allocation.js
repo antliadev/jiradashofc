@@ -3,6 +3,7 @@ import { sanitize, sanitizeTitle, formatDate } from '../utils/helpers.js';
 import { projectColor, simulateAllocation, summarizeResources, timelineRange, validateAllocation, validateAllocationProject } from '../data/resource-allocation.js';
 
 const STORAGE_KEY = 'rja.resourceAllocation.v1';
+const UI_KEY = 'rja.resourceAllocation.ui.v1';
 const STATUSES = ['Planejado', 'Em andamento', 'Concluído', 'Suspenso', 'Cancelado'];
 const ZOOMS = { week: 'Semana', month: 'Mês', quarter: 'Trimestre', semester: 'Semestre', year: 'Ano' };
 const ZOOM_DAYS = { week: 14, month: 45, quarter: 120, semester: 210, year: 420 };
@@ -32,30 +33,65 @@ function loadState() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; }
 }
 
+function loadUiState() {
+  try { return JSON.parse(localStorage.getItem(UI_KEY) || '{}'); } catch { return {}; }
+}
+
 function saveState(state) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-function stateFromData() {
+function saveUiState(state) {
+  localStorage.setItem(UI_KEY, JSON.stringify(state));
+}
+
+async function fetchRemoteState() {
+  const response = await fetch('/api/jira/resource-allocation/state', { credentials: 'include' });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'Não foi possível carregar Alocação de Recursos.');
+  return payload;
+}
+
+async function saveRemoteProject(project) {
+  const response = await fetch('/api/jira/resource-allocation/projects', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project }) });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'Não foi possível salvar o projeto.');
+  return payload.project;
+}
+
+async function saveRemoteAllocation(allocation) {
+  const response = await fetch('/api/jira/resource-allocation/allocations', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ allocation }) });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'Não foi possível salvar a alocação.');
+  return payload.allocation;
+}
+
+async function stateFromData() {
   const saved = loadState();
-  const projects = Array.isArray(saved.projects) && saved.projects.length ? saved.projects : dataService.getProjects().map(project => ({
-    id: project.id,
-    name: project.name || project.key,
-    client: project.key,
-    startDate: project.plannedStartDate || new Date().toISOString().slice(0, 10),
-    endDate: project.plannedEndDate || '',
-    status: 'Em andamento',
-    note: 'Importado da base do RJA',
-  })).filter(project => project.endDate);
+  let remote = null;
+  let persistence = 'supabase';
+  let warning = '';
+  try {
+    remote = await fetchRemoteState();
+    saveState(remote);
+  } catch (error) {
+    persistence = 'local';
+    warning = `${error.message} Usando fallback local somente para desenvolvimento/validação offline.`;
+  }
+  const ui = loadUiState();
+  const source = remote || saved;
+  const projects = Array.isArray(saved.projects) && saved.projects.length ? saved.projects : [];
   return {
-    tab: saved.tab || 'professional',
-    zoom: saved.zoom || 'month',
-    viewDate: saved.viewDate || isoDate(new Date()),
-    alertDays: Number(saved.alertDays || 30),
-    filters: saved.filters || {},
-    projects,
-    allocations: Array.isArray(saved.allocations) ? saved.allocations : [],
-    history: Array.isArray(saved.history) ? saved.history : [],
+    tab: ui.tab || 'professional',
+    zoom: ui.zoom || 'month',
+    viewDate: ui.viewDate || isoDate(new Date()),
+    alertDays: Number(ui.alertDays || 30),
+    filters: ui.filters || {},
+    projects: Array.isArray(source.projects) && source.projects.length ? source.projects : projects,
+    allocations: Array.isArray(source.allocations) ? source.allocations : [],
+    history: Array.isArray(source.history) ? source.history : [],
+    persistence,
+    warning,
   };
 }
 
@@ -64,7 +100,19 @@ function optionRows(rows, selected = '', label = 'name') {
 }
 
 function persist(partial) {
-  saveState({ ...stateFromData(), ...partial });
+  saveUiState({ ...loadUiState(), ...partial });
+}
+
+function persistLocalData(state, partial) {
+  saveState({ projects: state.projects, allocations: state.allocations, history: state.history, ...partial });
+}
+
+function applySavedProject(state, project) {
+  return [...state.projects.filter(item => item.id !== project.id), project].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+}
+
+function applySavedAllocation(state, allocation) {
+  return [...state.allocations.filter(item => item.id !== allocation.id), allocation].sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
 }
 
 function filteredContext(state, users) {
@@ -149,7 +197,7 @@ function renderProfessionalView(summary, state) {
   const days = Math.max(1, Math.round((range.end - range.start) / 86400000) + 1);
   return `<section class="report-section"><h3>Visão por Profissional</h3><div class="ra-timeline">${summary.rows.map(row => `
     <article class="ra-row" data-user-id="${sanitize(row.user.id)}">
-      <div class="ra-person" title="${sanitizeTitle(row.user.email || row.user.displayName)}"><strong>${sanitize(row.user.displayName)}</strong><span>${row.coveredUntil ? `Coberto até ${formatDate(row.coveredUntil)}` : 'Sem cobertura futura'} · ${row.currentLoad}% · ${statusLabel(row.status)}</span><em>${row.noFuture ? `Sem alocação futura a partir de ${formatDate(row.nextAvailability)}` : row.nextProject ? `Próximo: ${sanitize(row.nextProject.projectId)}` : 'Sem alerta'}</em></div>
+      <div class="ra-person" title="${sanitizeTitle(row.user.email || row.user.displayName)}"><strong>${sanitize(row.user.displayName)}</strong><span>${row.coveredUntil ? `Coberto até ${formatDate(row.coveredUntil)}` : 'Sem cobertura futura'} · ${row.currentLoad}% · ${statusLabel(row.status)}</span><em>${row.noFuture ? `Sem alocação futura a partir de ${formatDate(row.nextAvailability)}` : row.nextProject ? `Próximo: ${sanitize(projectName(state, row.nextProject.projectId))}` : 'Sem alerta'}</em></div>
       <div class="ra-bars">${row.allocations.map(item => {
         const allocationStart = parseLocalDate(item.startDate);
         const allocationEnd = parseLocalDate(item.endDate);
@@ -170,6 +218,10 @@ function statusLabel(status) {
   }[status] || status;
 }
 
+function projectName(state, projectId) {
+  return state.projects.find(project => project.id === projectId)?.name || projectId;
+}
+
 function renderProjectView(projects, allocations, users) {
   return `<section class="report-section"><h3>Visão por Projeto</h3>${projects.map(project => {
     const rows = allocations.filter(item => item.projectId === project.id);
@@ -180,17 +232,30 @@ function renderProjectView(projects, allocations, users) {
   }).join('')}</section>`;
 }
 
-export function renderResourceAllocation() {
+function renderHistory(state, users) {
+  return `<section class="report-section"><h3>Histórico de alterações</h3><div class="table-container"><table class="data-table"><thead><tr><th>Data</th><th>Ação</th><th>Projeto</th><th>Profissional</th><th>Alteração</th></tr></thead><tbody>${state.history.slice(0, 50).map(event => {
+    const after = event.after || {};
+    const projectId = event.projectId || event.project_id || after.project_id || after.projectId || after.id;
+    const project = state.projects.find(item => item.id === projectId);
+    const user = users.find(item => item.id === (after.user_id || after.userId));
+    return `<tr><td>${formatDate(event.createdAt || event.created_at || event.at)}</td><td>${sanitize(event.action || 'alteração')}</td><td>${sanitize(project?.name || projectId || '-')}</td><td>${sanitize(user?.displayName || after.user_name || after.userName || '-')}</td><td>${sanitize(after.percent ? `${after.percent}% de ${after.start_date || after.startDate} a ${after.end_date || after.endDate}` : after.name || '-')}</td></tr>`;
+  }).join('') || '<tr><td colspan="5">Nenhuma alteração registrada.</td></tr>'}</tbody></table></div></section>`;
+}
+
+export async function renderResourceAllocation() {
   const header = document.getElementById('page-header');
   const content = document.getElementById('page-content');
-  const state = stateFromData();
+  header.innerHTML = '<h2>Alocação de Recursos</h2><div class="subtitle">Planejamento e acompanhamento de capacidade por profissional e projeto</div>';
+  content.innerHTML = '<div class="empty-state"><h3>Carregando Alocação de Recursos</h3><p>Consultando projetos, alocações e histórico.</p></div>';
+  const state = await stateFromData();
   const users = dataService.getUsersRanked().filter(user => user.id !== 'unassigned');
   const ctx = filteredContext(state, users);
   const summary = summarizeResources(ctx.users, ctx.projects, ctx.allocations, new Date(), state.alertDays);
   const clients = [...new Set(state.projects.map(project => project.client).filter(Boolean))].sort();
   const roles = [...new Set(state.allocations.map(item => item.role).filter(Boolean))].sort();
-  header.innerHTML = '<h2>Alocação de Recursos</h2><div class="subtitle">Planejamento e acompanhamento de capacidade por profissional e projeto</div>';
   content.innerHTML = `<div class="report-page resource-allocation">
+    ${state.warning ? `<div class="sr-warning" role="alert"><strong>Atenção:</strong> ${sanitize(state.warning)}</div>` : ''}
+    <p class="muted">Fonte dos dados de alocação: ${state.persistence === 'supabase' ? 'Supabase/API protegida' : 'fallback local do navegador'}. Profissionais vêm dos dados sincronizados do RJA.</p>
     <div class="report-tabs"><button class="${state.tab === 'professional' ? 'active' : ''}" data-tab="professional">Visão por Profissional</button><button class="${state.tab === 'project' ? 'active' : ''}" data-tab="project">Visão por Projeto</button></div>
     <div class="report-toolbar">
       <label>Busca<input id="ra-search" value="${sanitize(state.filters.search || '')}" placeholder="Profissional, projeto ou cliente"></label>
@@ -211,6 +276,7 @@ export function renderResourceAllocation() {
     ${renderKpis(summary)}
     <section class="report-section"><h3>Cadastro</h3>${renderProjectForm()}${renderAllocationForm(state, users)}</section>
     ${state.tab === 'project' ? renderProjectView(ctx.projects, ctx.allocations, users) : renderProfessionalView(summary, state)}
+    ${renderHistory(state, users)}
   </div>`;
 
   const applyFilters = () => {
@@ -234,25 +300,36 @@ export function renderResourceAllocation() {
   document.getElementById('ra-prev')?.addEventListener('click', () => { persist({ viewDate: isoDate(addDays(state.viewDate, -(ZOOM_DAYS[state.zoom] || ZOOM_DAYS.month))) }); renderResourceAllocation(); });
   document.getElementById('ra-today')?.addEventListener('click', () => { persist({ viewDate: isoDate(new Date()) }); renderResourceAllocation(); });
   document.getElementById('ra-next')?.addEventListener('click', () => { persist({ viewDate: isoDate(addDays(state.viewDate, ZOOM_DAYS[state.zoom] || ZOOM_DAYS.month)) }); renderResourceAllocation(); });
-  document.getElementById('ra-project-form')?.addEventListener('submit', event => {
+  document.getElementById('ra-project-form')?.addEventListener('submit', async event => {
     event.preventDefault();
     const form = Object.fromEntries(new FormData(event.target));
     const project = { ...form, id: form.id || crypto.randomUUID() };
     const errors = validateAllocationProject(project);
     if (errors.length) return alert(errors.join('\n'));
-    persist({ projects: [...state.projects.filter(item => item.id !== project.id), project] });
-    renderResourceAllocation();
+    try {
+      const saved = state.persistence === 'supabase' ? await saveRemoteProject(project) : project;
+      persistLocalData(state, { projects: applySavedProject(state, saved), history: [...state.history, { id: crypto.randomUUID(), action: project.id ? 'project.updated' : 'project.created', at: new Date().toISOString(), after: saved }] });
+      renderResourceAllocation();
+    } catch (error) {
+      alert(error.message);
+    }
   });
-  document.getElementById('ra-allocation-form')?.addEventListener('submit', event => {
+  document.getElementById('ra-allocation-form')?.addEventListener('submit', async event => {
     event.preventDefault();
     const form = Object.fromEntries(new FormData(event.target));
-    const allocation = { ...form, id: form.id || crypto.randomUUID(), percent: Number(form.percent) };
+    const user = users.find(item => item.id === form.userId);
+    const allocation = { ...form, id: form.id || crypto.randomUUID(), percent: Number(form.percent), userName: user?.displayName || '', userEmail: user?.email || '' };
     const errors = validateAllocation(allocation);
     if (errors.length) return alert(errors.join('\n'));
     const simulation = simulateAllocation(state.allocations, allocation);
     if (simulation.conflict && !confirm(`Sobrealocação identificada: capacidade resultante ${simulation.peak}%. Deseja salvar mesmo assim?`)) return;
     const before = state.allocations.find(item => item.id === allocation.id) || null;
-    persist({ allocations: [...state.allocations.filter(item => item.id !== allocation.id), allocation], history: [...state.history, { id: crypto.randomUUID(), at: new Date().toISOString(), before, after: allocation }] });
-    renderResourceAllocation();
+    try {
+      const saved = state.persistence === 'supabase' ? await saveRemoteAllocation(allocation) : allocation;
+      persistLocalData(state, { allocations: applySavedAllocation(state, saved), history: [...state.history, { id: crypto.randomUUID(), action: before ? 'allocation.updated' : 'allocation.created', at: new Date().toISOString(), before, after: saved }] });
+      renderResourceAllocation();
+    } catch (error) {
+      alert(error.message);
+    }
   });
 }

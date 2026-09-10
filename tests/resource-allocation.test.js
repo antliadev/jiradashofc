@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { simulateAllocation, summarizeResources, validateAllocation, validateAllocationProject } from '../src/data/resource-allocation.js';
+import { normalizeResourceAllocation, normalizeResourceProject } from '../lib/resourceAllocationStore.js';
 
 test('resource allocation validates project and allocation date ranges', () => {
   assert.deepEqual(validateAllocationProject({ name: 'SDDS', startDate: '2026-09-10', endDate: '2026-09-01', status: 'Em andamento' }), ['Data final do projeto não pode ser anterior à inicial.']);
@@ -27,4 +28,15 @@ test('resource summary calculates covered until, no future allocation and execut
   assert.equal(summary.totals.noFuture, 2);
   assert.equal(summary.totals.availableSoon, 1);
   assert.equal(summary.rows.find(row => row.user.id === 'u2').nextAvailability.toISOString().slice(0, 10), '2026-09-19');
+});
+
+test('resource allocation backend normalizes and rejects unsafe operational records', () => {
+  const project = normalizeResourceProject({ name: ' SDDS ', startDate: '2026-09-01', endDate: '2026-12-31', status: 'Em andamento' }, 'actor-1');
+  assert.equal(project.name, 'SDDS');
+  assert.equal(project.start_date, '2026-09-01');
+  assert.throws(() => normalizeResourceProject({ name: 'X', startDate: '2026-12-31', endDate: '2026-09-01', status: 'Em andamento' }, 'actor-1'), /Data final/);
+  assert.throws(() => normalizeResourceAllocation({ userId: 'u1', projectId: 'p1', startDate: '2026-09-01', endDate: '2026-09-10', percent: 50 }, 'actor-1'), /Projeto é obrigatório/);
+  const allocation = normalizeResourceAllocation({ userId: 'u1', userName: 'Ana', projectId: '11111111-1111-4111-8111-111111111111', startDate: '2026-09-01', endDate: '2026-09-10', percent: 75 }, 'actor-1');
+  assert.equal(allocation.percent, 75);
+  assert.equal(allocation.project_id, '11111111-1111-4111-8111-111111111111');
 });

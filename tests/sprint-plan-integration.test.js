@@ -16,6 +16,7 @@ test('Alocação de Recursos possui rota e permissão próprias', () => {
   const item = ACCESS_ITEMS.find(entry => entry.id === 'projects.resource-allocation');
   assert.equal(item?.route, '/projects/resource-allocation');
   assert.equal(MENU_PERMISSIONS.includes('projects.resource-allocation'), true);
+  assert.equal(permissionForJiraRequest({ path: '/resource-allocation/state', method: 'GET' }), 'projects.resource-allocation');
   assert.equal(canAccessRoute('/projects/resource-allocation', { status: 'active', role: 'custom', permissions: ['projects.sprint-review'] }), false);
   assert.equal(canAccessRoute('/projects/resource-allocation', { status: 'active', role: 'custom', permissions: ['projects.resource-allocation'] }), true);
 });

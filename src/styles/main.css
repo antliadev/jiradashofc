@@ -1389,6 +1389,25 @@ input, select, textarea { font-family: inherit; }
   letter-spacing: .06em;
 }
 
+.resource-allocation .ra-form input,
+.resource-allocation .ra-form select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.resource-allocation .ra-form input:focus,
+.resource-allocation .ra-form select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, .18);
+}
+
 .ra-timeline {
   display: flex;
   flex-direction: column;

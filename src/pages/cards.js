@@ -15,6 +15,7 @@ import {
 import { exportRowsWorkbook } from '../utils/excel-export.js';
 import { isCardOverdue, resolveStatusCategory, StatusCategory, toLocalDateOnly } from '../data/models.js';
 import { businessHelp } from '../utils/ui-feedback.js';
+import { renderMultiSelect } from '../utils/multi-select.js';
 
 const PAGE_SIZE = 100;
 const CRITICAL_OVERDUE_DAYS = 7;
@@ -377,35 +378,21 @@ function renderMonitoringFilters({ filterOptions, rows }) {
 
 function renderCompactMultiFilter(label, filterKey, options) {
   const selected = monitoringFilters[filterKey] || [];
-  const allSelected = options.length > 0 && selected.length === options.length;
-  const summary = selected.length === 0
-    ? 'Todos'
-    : selected.length === 1
-      ? options.find(option => option.value === selected[0])?.label || '1 selecionado'
-      : `${selected.length} selecionados`;
-  return `
-    <div class="compact-multi-filter">
-      <span class="filter-label">${sanitize(label)}</span>
-      <details data-filter-key="${sanitize(filterKey)}" ${openMonitoringFilter === filterKey ? 'open' : ''}>
-        <summary>
-          <span>${sanitize(summary)}</span>
-          <small>${selected.length || 'Todos'}</small>
-        </summary>
-        <div class="compact-multi-menu">
-          <label class="compact-multi-all">
-            <input type="checkbox" data-monitoring-filter-all="${sanitize(filterKey)}" ${allSelected ? 'checked' : ''} ${options.length ? '' : 'disabled'}>
-            <span>Todos</span>
-          </label>
-          ${options.map(option => `
-            <label>
-              <input type="checkbox" data-monitoring-filter="${sanitize(filterKey)}" value="${sanitize(option.value)}" ${selected.includes(option.value) ? 'checked' : ''}>
-              <span>${sanitize(option.label)}</span>
-            </label>
-          `).join('')}
-        </div>
-      </details>
-    </div>
-  `;
+  return renderMultiSelect({
+    id: `monitoring-${filterKey}`,
+    label,
+    options,
+    selectedValues: selected,
+    open: openMonitoringFilter === filterKey,
+    emptyLabel: 'Todos',
+    allLabel: 'Selecionar todos',
+    optionDataAttribute: 'data-monitoring-filter',
+    optionDataValue: filterKey,
+    allDataAttribute: 'data-monitoring-filter-all',
+    allDataValue: filterKey,
+    wrapperDataAttribute: 'data-filter-key',
+    wrapperDataValue: filterKey,
+  });
 }
 
 function renderMonitoringToolbar(rows) {
@@ -588,14 +575,11 @@ function bindMonitoringEvents(rows) {
       renderMonitoringContent();
     });
   });
-  document.querySelectorAll('.compact-multi-filter details').forEach(details => {
-    details.addEventListener('toggle', () => {
-      if (details.open) {
-        openMonitoringFilter = details.dataset.filterKey || '';
-        document.querySelectorAll('.compact-multi-filter details').forEach(other => {
-          if (other !== details) other.open = false;
-        });
-      } else if (openMonitoringFilter === details.dataset.filterKey) {
+  document.querySelectorAll('[data-multi-select][data-filter-key]').forEach(multiSelect => {
+    multiSelect.addEventListener('multi-select-toggle', event => {
+      if (event.detail.open) {
+        openMonitoringFilter = multiSelect.dataset.filterKey || '';
+      } else if (openMonitoringFilter === multiSelect.dataset.filterKey) {
         openMonitoringFilter = '';
       }
     });
@@ -672,9 +656,6 @@ function bindMonitoringOutsideClose() {
   document.addEventListener('click', event => {
     if (event.target.closest('.compact-multi-filter')) return;
     openMonitoringFilter = '';
-    document.querySelectorAll('.compact-multi-filter details[open]').forEach(details => {
-      details.open = false;
-    });
   });
 }
 

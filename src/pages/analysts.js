@@ -7,6 +7,7 @@ import { formatDate, sanitize, sanitizeTitle, typeLabel } from '../utils/helpers
 import { exportRowsWorkbook } from '../utils/excel-export.js';
 import { businessHelp } from '../utils/ui-feedback.js';
 import { calculateAnalystPerformance } from '../data/analyst-performance.js';
+import { renderMultiSelect } from '../utils/multi-select.js';
 
 const MIN_SAMPLE_KEY = 'rja.analysts.minimumSample';
 const SHARED_ANALYST_KEY = 'rja.analysts.sharedUserId';
@@ -94,40 +95,23 @@ function analystOptions(users, selectedIds = [], { includeEmpty = true } = {}) {
 }
 
 function renderProfessionalsPicker(users, selectedIds = []) {
-  const selectedSet = new Set(selectedIds);
-  const selectedUsers = users.filter(user => selectedSet.has(user.id));
-  const allSelected = users.length > 0 && selectedUsers.length === users.length;
-  const summary = allSelected
-    ? 'Todos os profissionais'
-    : selectedUsers.length === 0
-      ? 'Nenhum selecionado'
-      : selectedUsers.length === 1
-        ? selectedUsers[0].displayName
-        : `${selectedUsers.length} profissionais`;
-
-  return `
-    <div class="compact-multi-filter analyst-professionals-filter">
-      <span class="filter-label">Profissionais</span>
-      <details id="cmp-users-picker" ${comparisonProfessionalsOpen ? 'open' : ''}>
-        <summary aria-label="Selecionar profissionais para comparativo">
-          <span>${sanitize(summary)}</span>
-          <small>${selectedUsers.length}</small>
-        </summary>
-        <div class="compact-multi-menu analyst-professionals-menu">
-          <label class="compact-multi-all">
-            <input type="checkbox" id="cmp-users-all" ${allSelected ? 'checked' : ''}>
-            <span>Todos</span>
-          </label>
-          ${users.map(user => `
-            <label title="${sanitizeTitle(user.email || user.displayName)}">
-              <input type="checkbox" data-cmp-user value="${sanitize(user.id)}" ${selectedSet.has(user.id) ? 'checked' : ''}>
-              <span>${sanitize(user.displayName)}</span>
-            </label>
-          `).join('')}
-        </div>
-      </details>
-    </div>
-  `;
+  return renderMultiSelect({
+    id: 'cmp-users-picker',
+    label: 'Profissionais',
+    options: users.map(user => ({
+      value: user.id,
+      label: user.displayName,
+      title: user.email || user.displayName,
+    })),
+    selectedValues: selectedIds,
+    open: comparisonProfessionalsOpen,
+    emptyLabel: 'Nenhum selecionado',
+    allLabel: 'Selecionar todos',
+    ariaLabel: 'Selecionar profissionais para comparativo',
+    optionDataAttribute: 'data-cmp-user',
+    allDataAttribute: 'data-cmp-users-all',
+    className: 'analyst-professionals-filter',
+  });
 }
 
 function getSharedAnalystId(users) {
@@ -551,10 +535,10 @@ function bindComparative(selectedIds, filters, view) {
     });
   };
   const users = dataService.getUsersRanked().filter(user => user.id !== 'unassigned');
-  document.getElementById('cmp-users-picker')?.addEventListener('toggle', event => {
-    comparisonProfessionalsOpen = event.target.open;
+  document.getElementById('cmp-users-picker')?.closest('[data-multi-select]')?.addEventListener('multi-select-toggle', event => {
+    comparisonProfessionalsOpen = event.detail.open;
   });
-  document.getElementById('cmp-users-all')?.addEventListener('change', event => {
+  document.querySelector('[data-cmp-users-all]')?.addEventListener('change', event => {
     document.querySelectorAll('[data-cmp-user]').forEach(input => {
       input.checked = event.target.checked;
     });
@@ -563,7 +547,7 @@ function bindComparative(selectedIds, filters, view) {
   document.querySelectorAll('[data-cmp-user]').forEach(input => {
     input.addEventListener('change', () => {
       const selectedCount = document.querySelectorAll('[data-cmp-user]:checked').length;
-      const allInput = document.getElementById('cmp-users-all');
+      const allInput = document.querySelector('[data-cmp-users-all]');
       if (allInput) allInput.checked = users.length > 0 && selectedCount === users.length;
       apply();
     });

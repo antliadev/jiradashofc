@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { issuesEligibleForWorklogSync } from '../lib/syncJobService.js';
 import { AUTO_SYNC_STALE_GRACE_MS, getSyncFreshness } from '../src/utils/sync-freshness.js';
 
 test('producao nao usa Vercel Cron incompatível com Hobby para intervalo de 30 minutos', async () => {
@@ -28,6 +29,25 @@ test('sincronizacao automatica usa JQL incremental e nao remove dados antigos', 
   assert.match(service, /allowEmpty: options\.allowEmpty \?\? false/);
   assert.match(service, /Nenhum ticket alterado na janela incremental/);
   assert.match(service, /createSyncJob\(\s*credentialsFromEnv,\s*`auto-sync-\$\{source\}`,\s*\{\s*pruneObsolete: false,\s*allowEmpty: true\s*\}/s);
+});
+
+test('sync global limita worklogs a cards recentes sem impedir sync filtrado de horas', () => {
+  const now = new Date('2026-09-11T20:00:00.000Z');
+  const issues = [
+    { key: 'DOCW-142', fields: { project: { key: 'DOCW' }, updated: '2026-09-10T12:00:00.000Z' } },
+    { key: 'DOCW-26', fields: { project: { key: 'DOCW' }, updated: '2026-05-01T12:00:00.000Z' } },
+    { key: 'P1-1808', fields: { project: { key: 'P1' }, summary: 'Docwise Workspace', updated: '2026-09-01T12:00:00.000Z' } },
+    { key: 'P1-1', fields: { project: { key: 'P1' }, summary: 'Outro projeto', updated: '2026-09-10T12:00:00.000Z' } }
+  ];
+
+  assert.deepEqual(
+    issuesEligibleForWorklogSync(issues, { now }).map(issue => issue.key),
+    ['DOCW-142', 'P1-1808']
+  );
+  assert.deepEqual(
+    issuesEligibleForWorklogSync(issues, { scoped: true, now }).map(issue => issue.key),
+    ['DOCW-142', 'DOCW-26', 'P1-1808']
+  );
 });
 
 test('sincronizacao automatica recupera timeout sem depender de acao manual', async () => {

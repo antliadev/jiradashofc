@@ -243,10 +243,21 @@ export function renderSidebar() {
   });
 
   document.getElementById('sidebar-collapse-toggle')?.addEventListener('click', () => {
+    const isAutoExpanded = isSidebarCollapsed() && sidebar.getBoundingClientRect().width > 100;
+    if (isSidebarCollapsed() && (sidebar.matches(':hover') || isAutoExpanded)) {
+      document.body.classList.add('sidebar-hover-suppressed');
+      document.getElementById('sidebar-collapse-toggle')?.blur();
+      return;
+    }
     const collapsed = !isSidebarCollapsed();
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(collapsed));
+    document.body.classList.remove('sidebar-hover-suppressed');
     document.body.classList.toggle('sidebar-collapsed', collapsed);
     renderSidebar();
+  });
+
+  sidebar.addEventListener('mouseleave', () => {
+    document.body.classList.remove('sidebar-hover-suppressed');
   });
 
   document.getElementById('logout-button')?.addEventListener('click', async () => {

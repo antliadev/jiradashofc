@@ -51,6 +51,20 @@ try {
   await page.locator('#sidebar-collapse-toggle').click();
   assert.equal(await page.evaluate(() => document.body.classList.contains('sidebar-collapsed')), true);
   assert.match(await page.locator('.sidebar').evaluate(el => getComputedStyle(el).transitionProperty), /width|transform/);
+  assert.equal(await page.locator('.sidebar').evaluate(el => getComputedStyle(el).transitionDuration.split(',')[0].trim()), '0.52s');
+  await page.mouse.move(32, 40);
+  await page.waitForFunction(() => parseFloat(getComputedStyle(document.querySelector('.sidebar')).width) > 220);
+  assert.equal(await page.locator('.sidebar').evaluate(el => parseFloat(getComputedStyle(el).width) > 220), true);
+  await page.locator('#sidebar-collapse-toggle').click();
+  assert.equal(await page.evaluate(() => document.body.classList.contains('sidebar-collapsed')), true);
+  assert.equal(await page.evaluate(() => document.body.classList.contains('sidebar-hover-suppressed')), true);
+  await page.waitForFunction(() => parseFloat(getComputedStyle(document.querySelector('.sidebar')).width) < 100);
+  assert.equal(await page.locator('.sidebar').evaluate(el => parseFloat(getComputedStyle(el).width) < 100), true);
+  await page.mouse.move(500, 40);
+  assert.equal(await page.evaluate(() => document.body.classList.contains('sidebar-hover-suppressed')), false);
+  await page.mouse.move(32, 40);
+  await page.waitForFunction(() => parseFloat(getComputedStyle(document.querySelector('.sidebar')).width) > 220);
+  assert.equal(await page.locator('.sidebar').evaluate(el => parseFloat(getComputedStyle(el).width) > 220), true);
   assert.match(await projectsSubmenu.evaluate(el => getComputedStyle(el).transitionProperty), /grid-template-rows|opacity|transform/);
 
   await page.screenshot({ path: '/tmp/sidebar-accordion.png', fullPage: true });

@@ -25,7 +25,17 @@ test('sincronizacao automatica usa JQL incremental e nao remove dados antigos', 
   assert.match(service, /AUTO_SYNC_JQL = process\.env\.AUTO_SYNC_JQL/);
   assert.match(service, /readAutoSyncCredentialsFromEnv/);
   assert.match(service, /processQueued = false/);
-  assert.match(service, /createSyncJob\(\s*credentialsFromEnv,\s*`auto-sync-\$\{source\}`,\s*\{\s*pruneObsolete: false\s*\}/s);
+  assert.match(service, /allowEmpty: options\.allowEmpty \?\? false/);
+  assert.match(service, /Nenhum ticket alterado na janela incremental/);
+  assert.match(service, /createSyncJob\(\s*credentialsFromEnv,\s*`auto-sync-\$\{source\}`,\s*\{\s*pruneObsolete: false,\s*allowEmpty: true\s*\}/s);
+});
+
+test('worker protegido retorna erro HTTP quando a execucao automatica falha de verdade', async () => {
+  const worker = await readFile(new URL('../api/jira/sync/worker.js', import.meta.url), 'utf8');
+  const router = await readFile(new URL('../server/routes/jira.js', import.meta.url), 'utf8');
+
+  assert.match(worker, /res\.status\(result\?\.success === false \? 500 : 200\)/);
+  assert.match(router, /res\.status\(result\?\.success === false \? 500 : 200\)/);
 });
 
 test('status de sucesso antigo demais fica marcado como atraso operacional', () => {

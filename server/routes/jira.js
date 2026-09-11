@@ -377,7 +377,7 @@ router.all('/sync/worker', async (req, res) => {
 
   try {
     const result = await executeAutoSync('api-worker', { forceScheduleCheck: true });
-    return res.status(200).json({ success: true, ...result });
+    return res.status(result?.success === false ? 500 : 200).json({ success: true, ...result });
   } catch (error) {
     console.error('[sync-worker] Erro:', error.message);
     return res.status(500).json({ success: false, error: error.message });

@@ -24,7 +24,21 @@ try {
     dataService.getProjectById = id => dataService.getProjects().find(project => project.id === id);
     dataService.getUserById = id => dataService.getUsers().find(user => user.id === id);
     (await import('/src/pages/gantt.js')).renderGantt();
+    (await import('/src/utils/select-list.js')).initSelectLists();
   });
+  await page.locator('.select-list-trigger').first().click();
+  const optionPoint = await page.locator('[data-select-list-option]').first().evaluate(option => {
+    const rect = option.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  });
+  assert.equal(await page.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest('[data-select-list-option]')), optionPoint), true);
+  assert.equal(await page.locator('.select-list-menu').first().evaluate(menu => {
+    const menuZ = Number(getComputedStyle(menu).zIndex);
+    const mainZValue = getComputedStyle(document.querySelector('.gantt-main')).zIndex;
+    const mainZ = Number.isFinite(Number(mainZValue)) ? Number(mainZValue) : 0;
+    return menu.parentElement === document.body && menuZ > mainZ;
+  }), true);
+  await page.keyboard.press('Escape');
   assert.deepEqual(await page.locator('#gantt-assignee option').allTextContents(), ['Todos', 'Ana', 'Bruno']);
   await page.selectOption('#gantt-project', 'p1');
   assert.deepEqual(await page.locator('#gantt-assignee option').allTextContents(), ['Todos', 'Ana']);

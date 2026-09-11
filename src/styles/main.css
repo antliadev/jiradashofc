@@ -156,11 +156,20 @@ input, select, textarea { font-family: inherit; }
   box-shadow: var(--shadow);
 }
 
+.select-list-menu-portal {
+  position: fixed;
+  top: auto;
+  left: auto;
+  z-index: 5000;
+  width: auto;
+}
+
 .select-list-menu {
   display: none;
 }
 
-.select-list.is-open .select-list-menu {
+.select-list.is-open .select-list-menu,
+.select-list-menu.is-open {
   display: block;
 }
 

@@ -5,6 +5,14 @@ const SEARCH_THRESHOLD = 8;
 let initialized = false;
 let selectListId = 0;
 
+function getMenu(wrapper) {
+  return wrapper?._selectListMenu || wrapper?.querySelector?.('[data-select-list-menu]');
+}
+
+function getTrigger(wrapper) {
+  return wrapper?.querySelector?.('[data-select-list-trigger]');
+}
+
 function optionLabel(option) {
   return option?.textContent?.trim() || option?.label || '';
 }
@@ -16,8 +24,16 @@ function selectedLabel(select) {
 function close(wrapper, { restoreFocus = false } = {}) {
   if (!wrapper?.classList.contains('is-open')) return;
   wrapper.classList.remove('is-open');
-  wrapper.querySelector('[data-select-list-trigger]')?.setAttribute('aria-expanded', 'false');
-  if (restoreFocus) wrapper.querySelector('[data-select-list-trigger]')?.focus();
+  getTrigger(wrapper)?.setAttribute('aria-expanded', 'false');
+  const menu = getMenu(wrapper);
+  if (menu) {
+    menu.classList.remove('is-open');
+    menu.style.left = '';
+    menu.style.top = '';
+    menu.style.width = '';
+    menu.style.maxHeight = '';
+  }
+  if (restoreFocus) getTrigger(wrapper)?.focus();
 }
 
 function closeAll(except = null) {
@@ -27,7 +43,7 @@ function closeAll(except = null) {
 }
 
 function visibleOptions(wrapper) {
-  return [...wrapper.querySelectorAll('[data-select-list-option]')]
+  return [...(getMenu(wrapper)?.querySelectorAll('[data-select-list-option]') || [])]
     .filter(option => !option.hidden && !option.disabled);
 }
 
@@ -48,18 +64,45 @@ function open(wrapper, { focusMenu = false } = {}) {
   if (!select || select.disabled) return;
   closeAll(wrapper);
   wrapper.classList.add('is-open');
-  wrapper.querySelector('[data-select-list-trigger]')?.setAttribute('aria-expanded', 'true');
+  getTrigger(wrapper)?.setAttribute('aria-expanded', 'true');
+  const menu = getMenu(wrapper);
+  if (menu) {
+    menu.classList.add('is-open');
+    positionMenu(wrapper);
+  }
   if (!focusMenu) return;
-  const search = wrapper.querySelector('[data-select-list-search]');
+  const search = getMenu(wrapper)?.querySelector('[data-select-list-search]');
   if (search) search.focus();
   else focusOption(wrapper, 1);
+}
+
+function positionMenu(wrapper) {
+  const trigger = getTrigger(wrapper);
+  const menu = getMenu(wrapper);
+  if (!trigger || !menu || !wrapper.classList.contains('is-open')) return;
+  const rect = trigger.getBoundingClientRect();
+  const viewportGap = 10;
+  const minWidth = Math.max(rect.width, 180);
+  const preferredWidth = Math.min(Math.max(minWidth, 280), window.innerWidth - viewportGap * 2);
+  const left = Math.min(Math.max(viewportGap, rect.left), window.innerWidth - preferredWidth - viewportGap);
+  const spaceBelow = window.innerHeight - rect.bottom - viewportGap;
+  const spaceAbove = rect.top - viewportGap;
+  const openAbove = spaceBelow < 220 && spaceAbove > spaceBelow;
+  const availableHeight = Math.max(160, openAbove ? spaceAbove : spaceBelow);
+
+  menu.style.width = `${preferredWidth}px`;
+  menu.style.left = `${left}px`;
+  menu.style.maxHeight = `${Math.min(360, availableHeight)}px`;
+  menu.style.top = openAbove
+    ? `${Math.max(viewportGap, rect.top - Math.min(menu.scrollHeight || 360, availableHeight) - 7)}px`
+    : `${Math.min(window.innerHeight - viewportGap, rect.bottom + 7)}px`;
 }
 
 function sync(wrapper) {
   const select = wrapper.querySelector('select');
   const value = wrapper.querySelector('[data-select-list-value]');
-  const menu = wrapper.querySelector('[data-select-list-menu]');
-  const trigger = wrapper.querySelector('[data-select-list-trigger]');
+  const menu = getMenu(wrapper);
+  const trigger = getTrigger(wrapper);
   if (!select || !value || !menu || !trigger) return;
 
   value.textContent = selectedLabel(select);
@@ -85,12 +128,13 @@ function chooseOption(wrapper, item) {
 function filterOptions(wrapper, query) {
   const normalized = query.trim().toLocaleLowerCase('pt-BR');
   let visible = 0;
-  wrapper.querySelectorAll('[data-select-list-option]').forEach(option => {
+  getMenu(wrapper)?.querySelectorAll('[data-select-list-option]').forEach(option => {
     const matches = !normalized || option.textContent.toLocaleLowerCase('pt-BR').includes(normalized);
     option.hidden = !matches;
     if (matches) visible += 1;
   });
-  wrapper.querySelector('[data-select-list-empty]')?.toggleAttribute('hidden', visible > 0);
+  getMenu(wrapper)?.querySelector('[data-select-list-empty]')?.toggleAttribute('hidden', visible > 0);
+  positionMenu(wrapper);
 }
 
 function enhanceSelect(select) {
@@ -114,9 +158,11 @@ function enhanceSelect(select) {
 
   const menu = document.createElement('div');
   menu.id = menuId;
-  menu.className = 'select-list-menu';
+  menu.className = 'select-list-menu select-list-menu-portal';
   menu.setAttribute('role', 'listbox');
   menu.setAttribute('data-select-list-menu', '');
+  menu.setAttribute('data-select-list-owner', menuId);
+  wrapper._selectListMenu = menu;
 
   if (select.options.length >= SEARCH_THRESHOLD) {
     const searchWrap = document.createElement('div');
@@ -181,7 +227,8 @@ function enhanceSelect(select) {
   });
 
   select.addEventListener('change', () => sync(wrapper));
-  wrapper.append(button, menu);
+  wrapper.append(button);
+  document.body.appendChild(menu);
   sync(wrapper);
 }
 
@@ -206,6 +253,7 @@ export function initSelectLists() {
 
   document.addEventListener('click', event => {
     if (event.target.closest('.select-list')) return;
+    if (event.target.closest('.select-list-menu')) return;
     closeAll();
   });
 
@@ -214,4 +262,11 @@ export function initSelectLists() {
     const wrapper = document.activeElement?.closest?.('.select-list') || document.querySelector('.select-list.is-open');
     if (wrapper) close(wrapper, { restoreFocus: true });
   });
+
+  window.addEventListener('resize', () => {
+    document.querySelectorAll('.select-list.is-open').forEach(positionMenu);
+  });
+  window.addEventListener('scroll', () => {
+    document.querySelectorAll('.select-list.is-open').forEach(positionMenu);
+  }, true);
 }

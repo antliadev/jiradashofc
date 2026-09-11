@@ -9,7 +9,10 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/select-components-fixture', route => route.fulfill({
     contentType: 'text/html',
-    body: '<html><head><meta charset="utf-8"><link rel="stylesheet" href="/src/styles/main.css"></head><body><main id="fixture" class="report-toolbar"></main></body></html>',
+    body: `<html><head><meta charset="utf-8"><link rel="stylesheet" href="/src/styles/main.css"></head><body>
+      <main id="fixture" class="report-toolbar" style="position:relative; z-index:2; max-height:74px; overflow:hidden;"></main>
+      <section id="blocking-layer" style="position:relative; z-index:3000; height:360px; margin-top:8px; background:rgba(30,41,59,.95);"></section>
+    </body></html>`,
   }));
   await page.goto('http://127.0.0.1:5173/select-components-fixture');
   await page.evaluate(async () => {
@@ -43,6 +46,13 @@ try {
   const singleTrigger = page.locator('.select-list-trigger');
   await singleTrigger.click();
   assert.equal(await singleTrigger.getAttribute('aria-expanded'), 'true');
+  assert.equal(await page.locator('.select-list-menu').evaluate(menu => menu.parentElement === document.body), true);
+  assert.equal(await page.locator('.select-list-menu').evaluate(menu => getComputedStyle(menu).position), 'fixed');
+  const optionPoint = await page.locator('[data-select-list-option]').first().evaluate(option => {
+    const rect = option.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  });
+  assert.equal(await page.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest('[data-select-list-option]')), optionPoint), true);
   await page.locator('[data-select-list-search]').fill('Status 7');
   await page.locator('[data-select-list-option]:visible').click();
   assert.equal(await page.locator('#single-select').inputValue(), '7');

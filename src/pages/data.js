@@ -8,6 +8,7 @@ import { dataService } from '../data/data-service.js';
 import { renderSidebar } from '../components/sidebar.js';
 import { sanitize } from '../utils/helpers.js';
 import { confirmAction, setButtonBusy, showToast } from '../utils/ui-feedback.js';
+import { getSyncFreshness } from '../utils/sync-freshness.js';
 
 let syncStatus = null;
 let pollingInterval = null;
@@ -116,8 +117,9 @@ function renderDataContent() {
     : (syncStatus?.status || metadata.lastSyncStatus || 'idle');
 
   const rawLastSync = syncStatus?.finishedAt || metadata.lastSyncedAt || syncStatus?.startedAt || syncStatus?.createdAt;
-  const lastSyncDate = rawLastSync ? new Date(rawLastSync) : null;
-  const formattedLastSync = (lastSyncDate && !isNaN(lastSyncDate.getTime()))
+  const freshness = getSyncFreshness(rawLastSync);
+  const lastSyncDate = freshness.lastSyncDate;
+  const formattedLastSync = lastSyncDate
     ? lastSyncDate.toLocaleString('pt-BR', {
         day: '2-digit',
         month: '2-digit',
@@ -128,9 +130,12 @@ function renderDataContent() {
       })
     : 'Nenhuma sincronização realizada';
 
-  const isSuccess = effectiveStatus === 'success';
+  const isStale = !isProcessing && effectiveStatus === 'success' && freshness.isStale;
+  const isSuccess = effectiveStatus === 'success' && !isStale;
   const isError = effectiveStatus === 'error';
-  const errorMessage = syncStatus?.error || metadata.error || null;
+  const errorMessage = isStale
+    ? 'A sincronização automática está atrasada. O último ciclo registrado passou da janela esperada de 30 minutos; verifique o agendador e execute uma sincronização manual se precisar atualizar agora.'
+    : syncStatus?.error || metadata.error || null;
 
   content.innerHTML = `
     <div class="sync-container">
@@ -149,7 +154,7 @@ function renderDataContent() {
       </div>
 
       <!-- Card principal de status da sincronização -->
-      <div class="sync-status-card ${isProcessing ? 'status-running' : isSuccess ? 'status-success' : isError ? 'status-error' : 'status-idle'}">
+      <div class="sync-status-card ${isProcessing ? 'status-running' : isSuccess ? 'status-success' : isStale ? 'status-stale' : isError ? 'status-error' : 'status-idle'}">
         <div class="status-indicator">
           ${isProcessing ? `
             <div class="status-icon-badge running">
@@ -160,6 +165,14 @@ function renderDataContent() {
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
                 <polyline points="22 4 12 14.01 9 11.01"/>
+              </svg>
+            </div>
+          ` : isStale ? `
+            <div class="status-icon-badge stale">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
               </svg>
             </div>
           ` : isError ? `
@@ -181,15 +194,17 @@ function renderDataContent() {
           `}
 
           <div class="status-text-group">
-            <span class="status-pill ${isProcessing ? 'pill-running' : isSuccess ? 'pill-success' : isError ? 'pill-error' : 'pill-idle'}">
-              ${isProcessing ? 'Sincronizando no backend' : isSuccess ? 'Bem-sucedida' : isError ? 'Falha na sincronização' : 'Aguardando sincronização'}
+            <span class="status-pill ${isProcessing ? 'pill-running' : isSuccess ? 'pill-success' : isStale ? 'pill-stale' : isError ? 'pill-error' : 'pill-idle'}">
+              ${isProcessing ? 'Sincronizando no backend' : isSuccess ? 'Bem-sucedida' : isStale ? 'Sincronização atrasada' : isError ? 'Falha na sincronização' : 'Aguardando sincronização'}
             </span>
             <h3 class="status-title">
               ${isProcessing
                 ? 'Sincronização em andamento...'
                 : isSuccess
                   ? 'Sincronizado com sucesso'
-                  : isError
+                  : isStale
+                    ? 'Dados fora da janela automática'
+                    : isError
                     ? 'Erro na sincronização'
                     : 'Nenhuma sincronização recente'}
             </h3>
@@ -203,15 +218,15 @@ function renderDataContent() {
           </div>
           <div class="info-block">
             <span class="info-label">Status</span>
-            <strong class="info-value ${isSuccess ? 'text-success' : isError ? 'text-danger' : isProcessing ? 'text-accent' : ''}">
-              ${isProcessing ? 'Processando' : isSuccess ? 'Concluída com sucesso' : isError ? 'Falhou' : 'Pendente'}
+            <strong class="info-value ${isSuccess ? 'text-success' : isStale ? 'text-warning' : isError ? 'text-danger' : isProcessing ? 'text-accent' : ''}">
+              ${isProcessing ? 'Processando' : isSuccess ? 'Concluída com sucesso' : isStale ? 'Atrasada' : isError ? 'Falhou' : 'Pendente'}
             </strong>
           </div>
         </div>
 
-        ${isError && errorMessage ? `
+        ${(isError || isStale) && errorMessage ? `
           <div class="sync-error-box">
-            <strong>Detalhe do erro:</strong>
+            <strong>${isStale ? 'Atenção:' : 'Detalhe do erro:'}</strong>
             <p>${sanitize(errorMessage)}</p>
           </div>
         ` : ''}
@@ -354,6 +369,10 @@ function addDataStyles() {
       background: #ef4444;
     }
 
+    .sync-status-card.status-stale::before {
+      background: #f59e0b;
+    }
+
     .sync-status-card.status-running::before {
       background: var(--accent);
     }
@@ -388,6 +407,11 @@ function addDataStyles() {
     .status-icon-badge.error {
       background: rgba(239, 68, 68, 0.12);
       color: #ef4444;
+    }
+
+    .status-icon-badge.stale {
+      background: rgba(245, 158, 11, 0.14);
+      color: #f59e0b;
     }
 
     .status-icon-badge.running {
@@ -426,6 +450,11 @@ function addDataStyles() {
     .status-pill.pill-error {
       background: rgba(239, 68, 68, 0.15);
       color: #ef4444;
+    }
+
+    .status-pill.pill-stale {
+      background: rgba(245, 158, 11, 0.17);
+      color: #f59e0b;
     }
 
     .status-pill.pill-running {
@@ -476,6 +505,7 @@ function addDataStyles() {
 
     .text-success { color: #10b981 !important; }
     .text-danger { color: #ef4444 !important; }
+    .text-warning { color: #f59e0b !important; }
     .text-accent { color: var(--accent) !important; }
 
     .sync-error-box {

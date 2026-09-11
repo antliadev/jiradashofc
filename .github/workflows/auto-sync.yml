@@ -1,0 +1,31 @@
+name: Auto Sync Jira
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    name: Trigger production Jira sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate required secret
+        env:
+          RJA_CRON_SECRET: ${{ secrets.RJA_CRON_SECRET }}
+        run: |
+          if [ -z "$RJA_CRON_SECRET" ]; then
+            echo "Missing repository secret RJA_CRON_SECRET."
+            exit 1
+          fi
+
+      - name: Call protected production worker
+        env:
+          RJA_CRON_SECRET: ${{ secrets.RJA_CRON_SECRET }}
+        run: |
+          curl --fail-with-body --show-error --silent \
+            --request POST \
+            --header "Authorization: Bearer ${RJA_CRON_SECRET}" \
+            --header "Content-Type: application/json" \
+            https://radarjira.antlia.com.br/api/jira/sync/worker

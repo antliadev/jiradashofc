@@ -24,6 +24,7 @@ test('sincronizacao automatica usa JQL incremental e nao remove dados antigos', 
   assert.match(service, /DEFAULT_AUTO_SYNC_JQL = 'updated >= -90m ORDER BY updated DESC'/);
   assert.match(service, /AUTO_SYNC_JQL = process\.env\.AUTO_SYNC_JQL/);
   assert.match(service, /readAutoSyncCredentialsFromEnv/);
+  assert.match(service, /processQueued = false/);
   assert.match(service, /createSyncJob\(\s*credentialsFromEnv,\s*`auto-sync-\$\{source\}`,\s*\{\s*pruneObsolete: false\s*\}/s);
 });
 

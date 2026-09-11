@@ -388,6 +388,13 @@ function renderHealthReport() {
     .map(item => ({ ...item, impact: calculateCardImpact(item.card, configured), assigneeName: dataService.getUserById(item.card.assigneeId)?.displayName || 'Sem responsavel definido' }))
     .filter(item => item.impact.risk > 0)
     .sort((a, b) => b.impact.risk - a.impact.risk);
+  const healthAssigneeOptions = [...new Map(riskCards
+    .map(item => [item.card.assigneeId || 'unassigned', item.assigneeName]))
+    .entries()]
+    .filter(([id]) => id === 'unassigned' || dataService.getUsers().some(user => user.id === id));
+  if (healthAssigneeFilter && !healthAssigneeOptions.some(([id]) => id === healthAssigneeFilter)) {
+    healthAssigneeFilter = '';
+  }
   const filteredCards = filterHealthRows(riskCards, { search: healthSearch, status: healthStatusFilter, risk: healthRiskFilter, assignee: healthAssigneeFilter, sort: healthSort, direction: healthSortDirection });
   const totalPages = Math.max(1, Math.ceil(filteredCards.length / healthPageSize));
   healthPage = Math.min(healthPage, totalPages);
@@ -457,7 +464,7 @@ function renderHealthReport() {
         <div class="filter-bar health-card-filters">
           <label><span class="filter-label">Buscar card</span><input type="search" id="health-card-search" placeholder="Chave, titulo ou responsavel" value="${sanitize(healthSearch)}"></label>
           <label><span class="filter-label">Status</span><select id="health-card-status"><option value="">Todos</option>${[...new Set(riskCards.map(item => item.card.status))].sort().map(option => `<option value="${sanitize(option)}" ${option === healthStatusFilter ? 'selected' : ''}>${sanitize(option)}</option>`).join('')}</select></label>
-          <label><span class="filter-label">Responsavel</span><select id="health-card-assignee"><option value="">Todos</option>${[...new Map(riskCards.map(item => [item.card.assigneeId || 'unassigned', item.assigneeName]))].map(([id, name]) => `<option value="${sanitize(id)}" ${healthAssigneeFilter === id ? 'selected' : ''}>${sanitize(name)}</option>`).join('')}</select></label>
+          <label><span class="filter-label">Responsavel</span><select id="health-card-assignee"><option value="">Todos</option>${healthAssigneeOptions.map(([id, name]) => `<option value="${sanitize(id)}" ${healthAssigneeFilter === id ? 'selected' : ''}>${sanitize(name)}</option>`).join('')}</select></label>
           <label><span class="filter-label">Risco do card</span><select id="health-card-risk"><option value="">Todos</option><option value="critical" ${healthRiskFilter === 'critical' ? 'selected' : ''}>Critico (85-100)</option><option value="high" ${healthRiskFilter === 'high' ? 'selected' : ''}>Alto (60-84)</option><option value="attention" ${healthRiskFilter === 'attention' ? 'selected' : ''}>Atencao (1-59)</option></select></label>
           <label><span class="filter-label">Ordenar por</span><select id="health-sort">${[['risk', 'Risco'], ['key', 'Chave'], ['title', 'Titulo'], ['updatedAt', 'Atualizacao']].map(([key, label]) => `<option value="${key}" ${healthSort === key ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
           <label><span class="filter-label">Ordem</span><select id="health-sort-direction"><option value="desc" ${healthSortDirection === 'desc' ? 'selected' : ''}>Decrescente</option><option value="asc" ${healthSortDirection === 'asc' ? 'selected' : ''}>Crescente</option></select></label>

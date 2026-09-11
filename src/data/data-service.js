@@ -10,6 +10,7 @@ import {
   isCardOverdue, calculateProjectProgress, calculateProjectHealth,
 } from './models.js';
 import { buildProjectScheduleSummary } from './schedule-service.js';
+import { isHiddenRjaUser } from '../../shared/rja-hidden-users.js';
 
 const DASHBOARD_DATA_TIMEOUT_MS = 120000;
 const DASHBOARD_CACHE_KEY = 'jiraDash.dashboardPayload.v2';
@@ -710,7 +711,9 @@ class DataService {
     projects.forEach(project => projectByKey.set(project.key, project));
     
     // Transformar usuários/analistas
-    const users = jiraAnalysts.map(a => ({
+    const users = jiraAnalysts
+    .filter(a => !isHiddenRjaUser(a))
+    .map(a => ({
       id: a.id,
       displayName: a.name,
       email: a.email || '',
@@ -850,7 +853,7 @@ class DataService {
     this._setCollections({
       projects: [...projects],
       cards: [...cards],
-      users: [...users]
+      users: users.filter(user => !isHiddenRjaUser(user))
     });
     this._source = DataSourceType.IMPORTED;
     this._lastSync = new Date().toISOString();

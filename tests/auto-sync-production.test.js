@@ -21,13 +21,22 @@ test('GitHub Actions aciona o worker protegido de producao a cada 30 minutos', a
 test('sincronizacao automatica usa JQL incremental e nao remove dados antigos', async () => {
   const service = await readFile(new URL('../lib/syncJobService.js', import.meta.url), 'utf8');
 
-  assert.match(service, /DEFAULT_AUTO_SYNC_JQL = 'updated >= -90m ORDER BY updated DESC'/);
+  assert.match(service, /DEFAULT_AUTO_SYNC_JQL = 'updated >= -45m ORDER BY updated DESC'/);
   assert.match(service, /AUTO_SYNC_JQL = process\.env\.AUTO_SYNC_JQL/);
   assert.match(service, /readAutoSyncCredentialsFromEnv/);
   assert.match(service, /processQueued = false/);
   assert.match(service, /allowEmpty: options\.allowEmpty \?\? false/);
   assert.match(service, /Nenhum ticket alterado na janela incremental/);
   assert.match(service, /createSyncJob\(\s*credentialsFromEnv,\s*`auto-sync-\$\{source\}`,\s*\{\s*pruneObsolete: false,\s*allowEmpty: true\s*\}/s);
+});
+
+test('sincronizacao automatica recupera timeout sem depender de acao manual', async () => {
+  const service = await readFile(new URL('../lib/syncJobService.js', import.meta.url), 'utf8');
+
+  assert.match(service, /ACTIVE_JOB_STALE_MS = 6 \* 60 \* 1000/);
+  assert.match(service, /A proxima execucao automatica tentara novamente/);
+  assert.doesNotMatch(service, /Inicie uma nova sincronizacao/);
+  assert.match(service, /if \(isActiveJobTimedOut\(active\)\) \{\s*await finalizeTimedOutJob\(active\);\s*active = null;\s*\}/s);
 });
 
 test('worker protegido retorna erro HTTP quando a execucao automatica falha de verdade', async () => {

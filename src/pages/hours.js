@@ -300,6 +300,7 @@ function renderReport(report) {
           <span class="hours-refresh-status ${hoursRefreshMessage ? 'success' : ''}" id="hours-refresh-status" aria-live="polite">${sanitize(hoursRefreshMessage)}</span>
         </div>
       </div>
+      ${report.persistenceWarning ? `<div class="hours-data-warning" role="status">${sanitize(report.persistenceWarning)}</div>` : ''}
 
       <div class="hours-kpis">
         <article class="hours-kpi used">${businessHelp('Regra: horas utilizadas', 'Soma dos worklogs do projeto na competência. No contrato cumulativo, inclui também o saldo das competências anteriores.')}<span>${isCumulative ? 'Horas utilizadas acumuladas' : 'Horas utilizadas'}</span><strong>${sanitize(formatHours(report.usedHours))}</strong><small>${isCumulative ? `${formatHours(report.periodUsedHours)} nesta competência · ` : ''}de ${sanitize(formatHours(report.allowanceHours))}</small></article>

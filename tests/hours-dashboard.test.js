@@ -5,6 +5,8 @@ import {
   buildCrawfordHoursDashboard,
   capacityStatus,
   competenceFromStarted,
+  isCompetenceEligibleForLiveReconciliation,
+  mergeWorklogsById,
   parseDocwiseAdjustmentIssue,
   validateCompetence
 } from '../lib/hoursDashboardService.js';
@@ -64,6 +66,30 @@ test('dashboard agrupa por competencia e epic/aplicacao sem solicitante', () => 
 test('valida competencia da API', () => {
   assert.equal(validateCompetence('2026-08'), '2026-08');
   assert.throws(() => validateCompetence('08/2026'), /YYYY-MM/);
+});
+
+test('reconciliacao ao vivo cobre competencia atual e recente sem consultar historico antigo', () => {
+  const now = new Date('2026-09-11T12:00:00.000Z');
+  assert.equal(isCompetenceEligibleForLiveReconciliation('2026-09', now), true);
+  assert.equal(isCompetenceEligibleForLiveReconciliation('2026-08', now), true);
+  assert.equal(isCompetenceEligibleForLiveReconciliation('2026-07', now), false);
+});
+
+test('mescla worklogs persistidos e Jira ao vivo por ID sem duplicar horas', () => {
+  const merged = mergeWorklogsById(
+    [
+      { worklog_id: '1', issue_key: 'DOCW-137', time_spent_seconds: 4 * 3600 },
+      { worklog_id: '2', issue_key: 'DOCW-142', time_spent_seconds: 2 * 3600 }
+    ],
+    [
+      { worklog_id: '2', issue_key: 'DOCW-142', time_spent_seconds: 2 * 3600 },
+      { worklog_id: '3', issue_key: 'DOCW-157', time_spent_seconds: 6 * 3600 }
+    ]
+  );
+
+  assert.equal(merged.length, 3);
+  assert.equal(merged.reduce((total, row) => total + row.time_spent_seconds, 0), 12 * 3600);
+  assert.deepEqual(merged.map(row => row.issue_key).sort(), ['DOCW-137', 'DOCW-142', 'DOCW-157']);
 });
 
 test('dashboard Docwise usa somente worklogs DOCW e identifica o cliente', () => {

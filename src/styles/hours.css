@@ -16,6 +16,7 @@
 .hours-actions .btn:disabled { opacity:.45; cursor:not-allowed; }
 .hours-refresh-status { flex-basis:100%; min-height:16px; color:var(--text-secondary); font-size:11px; text-align:right; }
 .hours-refresh-status.success { color:#34d399; font-weight:800; }
+.hours-data-warning { border:1px solid rgba(37,99,235,.28); border-radius:10px; color:var(--text-secondary); font-size:12px; margin:-10px 0 16px; padding:10px 12px; background:rgba(37,99,235,.08); }
 .hours-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
 .hours-kpi { min-height:124px; padding:20px; position:relative; overflow:visible; }
 .hours-kpi > .business-help { position:absolute; top:10px; right:10px; }

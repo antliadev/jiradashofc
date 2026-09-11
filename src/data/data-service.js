@@ -674,7 +674,7 @@ class DataService {
     const response = await this._fetchWithTimeout(
       `${this._apiBase}/hours-dashboard?${params.toString()}`,
       { headers: this._getHeaders() },
-      15000
+      60000
     );
 
     if (!response.ok) {

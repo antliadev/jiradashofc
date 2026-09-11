@@ -1,8 +1,8 @@
 /**
  * api/jira/sync/worker.js - Protected backend worker for scheduled auto-sync jobs.
  *
- * Configured in Vercel Cron to run every 30 minutes, every day.
- * Calls executeAutoSync to import Jira issues autonomously into Supabase.
+ * Triggered by the external scheduler every 30 minutes, every day.
+ * Calls executeAutoSync to import recent Jira issue changes into Supabase.
  */
 import { executeAutoSync } from '../../../lib/syncJobService.js';
 

@@ -18,6 +18,15 @@ test('GitHub Actions aciona o worker protegido de producao a cada 30 minutos', a
   assert.match(workflow, /secrets\.RJA_CRON_SECRET/);
 });
 
+test('sincronizacao automatica usa JQL incremental e nao remove dados antigos', async () => {
+  const service = await readFile(new URL('../lib/syncJobService.js', import.meta.url), 'utf8');
+
+  assert.match(service, /DEFAULT_AUTO_SYNC_JQL = 'updated >= -90m ORDER BY updated DESC'/);
+  assert.match(service, /AUTO_SYNC_JQL = process\.env\.AUTO_SYNC_JQL/);
+  assert.match(service, /readAutoSyncCredentialsFromEnv/);
+  assert.match(service, /createSyncJob\(\s*credentialsFromEnv,\s*`auto-sync-\$\{source\}`,\s*\{\s*pruneObsolete: false\s*\}/s);
+});
+
 test('status de sucesso antigo demais fica marcado como atraso operacional', () => {
   const stale = getSyncFreshness('2026-09-10T20:25:37.000Z', '2026-09-11T13:19:00.000Z');
   assert.equal(stale.isStale, true);

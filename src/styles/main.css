@@ -1655,37 +1655,381 @@ input, select, textarea { font-family: inherit; }
   background: repeating-linear-gradient(45deg, rgba(245, 158, 11, .4), rgba(245, 158, 11, .4) 4px, transparent 4px, transparent 8px);
 }
 
-.ra-project {
+.ra-project-view {
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-card);
-  padding: 12px;
-  margin-bottom: 8px;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, .08), transparent 34%),
+    var(--bg-card);
+  padding: 16px;
+  box-shadow: var(--shadow-soft);
 }
 
-.ra-project h4 {
+.ra-project-view .section-header {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 16px;
 }
 
-.ra-project h4 span {
-  width: 14px;
-  height: 14px;
+.ra-project-view .section-header h3 {
+  margin: 0 0 4px;
+}
+
+.ra-project-view .section-header p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.ra-view-count {
+  border: 1px solid var(--border);
   border-radius: 999px;
+  background: var(--surface-raised, var(--bg-secondary));
+  color: var(--text-secondary);
+  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  white-space: nowrap;
+}
+
+.ra-project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  gap: 14px;
+}
+
+.ra-project-card {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .04), transparent 42%),
+    var(--bg-primary);
+  padding: 14px;
+  overflow: hidden;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .03);
+}
+
+.ra-project-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: rgba(59, 130, 246, .8);
+}
+
+.ra-project-card.active::before { background: rgba(34, 197, 94, .95); }
+.ra-project-card.planned::before { background: rgba(59, 130, 246, .95); }
+.ra-project-card.attention::before { background: rgba(245, 158, 11, .95); }
+.ra-project-card.finished::before { background: rgba(148, 163, 184, .9); }
+
+.ra-project-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.ra-project-title {
+  min-width: 0;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.ra-project-title h4 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+.ra-project-title p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ra-project-color {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  margin-top: 3px;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, .12);
+}
+
+.ra-project-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.ra-project-status {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 8px;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+}
+
+.ra-project-status.active {
+  border-color: rgba(34, 197, 94, .28);
+  color: #10b981;
+  background: rgba(16, 185, 129, .1);
+}
+
+.ra-project-status.planned {
+  border-color: rgba(59, 130, 246, .28);
+  color: #3b82f6;
+  background: rgba(59, 130, 246, .1);
+}
+
+.ra-project-status.attention {
+  border-color: rgba(245, 158, 11, .32);
+  color: #f59e0b;
+  background: rgba(245, 158, 11, .12);
+}
+
+.ra-project-status.finished {
+  border-color: rgba(148, 163, 184, .32);
+  color: var(--text-secondary);
+  background: rgba(148, 163, 184, .1);
+}
+
+.ra-project-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.ra-project-metrics div {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  padding: 9px 10px;
+}
+
+.ra-project-metrics strong {
+  display: block;
+  font-size: 18px;
+  line-height: 1.05;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.ra-project-metrics span {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.ra-project-load {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.ra-project-load span {
+  display: block;
+  height: 100%;
+  min-width: 3px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #22c55e, #3b82f6);
+}
+
+.ra-project-allocations {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ra-project-allocation {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--bg-card);
+  padding: 9px;
+}
+
+.ra-project-allocation.active { border-color: rgba(34, 197, 94, .24); }
+.ra-project-allocation.planned { border-color: rgba(59, 130, 246, .22); }
+.ra-project-allocation.finished { opacity: .78; }
+
+.ra-user-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: linear-gradient(135deg, #6366f1, #2563eb);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: .03em;
+}
+
+.ra-allocation-main {
+  min-width: 0;
+}
+
+.ra-allocation-main strong,
+.ra-allocation-main span {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ra-allocation-main strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.ra-allocation-main span {
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.ra-allocation-percent,
+.ra-allocation-status {
+  border-radius: 999px;
+  padding: 5px 8px;
+  font-size: 11px;
+  font-weight: 900;
+  white-space: nowrap;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.ra-allocation-percent.success {
+  color: #10b981;
+  background: rgba(16, 185, 129, .12);
+}
+
+.ra-allocation-percent.warning {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, .12);
+}
+
+.ra-allocation-percent.danger {
+  color: #ef4444;
+  background: rgba(239, 68, 68, .12);
+}
+
+.ra-allocation-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ra-project-empty {
+  border: 1px dashed var(--border);
+  border-radius: 13px;
+  background: var(--bg-secondary);
+  padding: 16px;
+  color: var(--text-secondary);
+}
+
+.ra-project-empty strong,
+.ra-project-empty span {
+  display: block;
+}
+
+.ra-project-empty strong {
+  color: var(--text-primary);
+  margin-bottom: 4px;
 }
 
 .ra-project .btn-compact,
-.ra-project p .btn-compact {
+.ra-project p .btn-compact,
+.ra-project-card .btn-compact {
   min-height: 26px;
   padding: 4px 8px;
-  margin-left: 6px;
   font-size: 11px;
 }
 
-.ra-project .btn-compact.danger {
+.ra-project .btn-compact.danger,
+.ra-project-card .btn-compact.danger {
   color: var(--danger, #ef4444);
+}
+
+@media (max-width: 980px) {
+  .ra-project-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ra-project-allocation {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .ra-allocation-status,
+  .ra-allocation-actions {
+    grid-column: 2 / -1;
+  }
+
+  .ra-allocation-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .ra-project-view {
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .ra-project-view .section-header,
+  .ra-project-card-header {
+    flex-direction: column;
+  }
+
+  .ra-project-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ra-project-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ra-project-allocation {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .ra-allocation-percent,
+  .ra-allocation-status,
+  .ra-allocation-actions {
+    grid-column: 1 / -1;
+  }
+
+  .ra-allocation-actions .btn {
+    flex: 1 1 120px;
+    justify-content: center;
+  }
 }
 
 .resource-allocation-timeline-mode {

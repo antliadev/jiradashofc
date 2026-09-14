@@ -363,14 +363,99 @@ function projectName(state, projectId) {
   return state.projects.find(project => project.id === projectId)?.name || projectId;
 }
 
+function initials(name) {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  return (parts.length > 1 ? `${parts[0][0]}${parts[parts.length - 1][0]}` : parts[0]?.slice(0, 2) || '?').toUpperCase();
+}
+
+function temporalAllocationStatus(item, reference = new Date()) {
+  const start = parseLocalDate(item.startDate);
+  const end = parseLocalDate(item.endDate);
+  const today = parseLocalDate(reference);
+  if (!start || !end) return { id: 'attention', label: 'Atenção' };
+  if (today < start) return { id: 'planned', label: 'Planejado' };
+  if (today > end) return { id: 'finished', label: 'Finalizado' };
+  return { id: 'active', label: 'Em andamento' };
+}
+
+function projectStatusClass(status) {
+  const value = String(status || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (value.includes('conclu')) return 'finished';
+  if (value.includes('suspens') || value.includes('cancel')) return 'attention';
+  if (value.includes('andamento')) return 'active';
+  return 'planned';
+}
+
 function renderProjectView(projects, allocations, users) {
-  return `<section class="report-section"><h3>Visão por Projeto</h3>${projects.map(project => {
-    const rows = allocations.filter(item => item.projectId === project.id);
-    return `<article class="ra-project"><h4><span style="background:${projectColor(project.id)}"></span>${sanitize(project.name)} <small>${sanitize(project.client || '')}</small><button class="btn btn-ghost btn-compact" type="button" data-edit-project="${sanitize(project.id)}">Editar projeto</button></h4>${rows.length ? rows.map(item => {
+  const today = parseLocalDate(new Date());
+  return `<section class="ra-project-view">
+    <div class="section-header">
+      <div>
+        <h3>Visão por Projeto</h3>
+        <p>Projetos, profissionais alocados, períodos, capacidade e ações em uma visão executiva.</p>
+      </div>
+      <span class="ra-view-count">${projects.length} projeto(s)</span>
+    </div>
+    <div class="ra-project-grid">${projects.map(project => {
+    const rows = allocations
+      .filter(item => item.projectId === project.id)
+      .sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)) || String(a.userName).localeCompare(String(b.userName), 'pt-BR'));
+    const activeRows = rows.filter(item => {
+      const start = parseLocalDate(item.startDate);
+      const end = parseLocalDate(item.endDate);
+      return start && end && today >= start && today <= end;
+    });
+    const people = new Set(rows.map(item => item.userId || item.userName).filter(Boolean));
+    const activeLoad = activeRows.reduce((sum, item) => sum + Number(item.percent || 0), 0);
+    const plannedRows = rows.filter(item => temporalAllocationStatus(item).id === 'planned').length;
+    const statusClass = projectStatusClass(project.status);
+    const coverageText = project.startDate && project.endDate
+      ? `${formatDate(project.startDate)} → ${formatDate(project.endDate)}`
+      : 'Período não informado';
+    const loadWidth = Math.min(100, Math.max(0, activeLoad));
+    return `<article class="ra-project ra-project-card ${statusClass}">
+      <header class="ra-project-card-header">
+        <div class="ra-project-title">
+          <span class="ra-project-color" style="background:${projectColor(project.id)}"></span>
+          <div>
+            <h4>${sanitize(project.name)}</h4>
+            <p>${sanitize(project.client || 'Cliente não informado')} · ${coverageText}</p>
+          </div>
+        </div>
+        <div class="ra-project-actions">
+          <span class="ra-project-status ${statusClass}">${sanitize(project.status || 'Planejado')}</span>
+          <button class="btn btn-secondary btn-compact" type="button" data-edit-project="${sanitize(project.id)}">Editar projeto</button>
+        </div>
+      </header>
+      <div class="ra-project-metrics">
+        <div><strong>${people.size}</strong><span>Profissionais</span></div>
+        <div><strong>${rows.length}</strong><span>Alocações</span></div>
+        <div><strong>${activeLoad}%</strong><span>Capacidade ativa</span></div>
+        <div><strong>${plannedRows}</strong><span>Futuras</span></div>
+      </div>
+      <div class="ra-project-load" aria-label="Capacidade ativa do projeto">
+        <span style="width:${loadWidth}%"></span>
+      </div>
+      <div class="ra-project-allocations">${rows.length ? rows.map(item => {
       const user = users.find(user => user.id === item.userId);
-      return `<p>${sanitize(user?.displayName || item.userName || item.userId)} · ${formatDate(item.startDate)} → ${formatDate(item.endDate)} · ${sanitize(item.percent)}% ${item.role ? `· ${sanitize(item.role)}` : ''} <button class="btn btn-ghost btn-compact" type="button" data-edit-allocation="${sanitize(item.id)}">Editar</button> <button class="btn btn-ghost btn-compact danger" type="button" data-delete-allocation="${sanitize(item.id)}">Remover</button></p>`;
-    }).join('') : '<p class="muted">Sem profissionais alocados.</p>'}</article>`;
-  }).join('')}</section>`;
+      const displayName = user?.displayName || item.userName || item.userId || 'Profissional';
+      const allocationStatus = temporalAllocationStatus(item);
+      return `<div class="ra-project-allocation ${allocationStatus.id}">
+          <div class="ra-user-avatar">${sanitize(initials(displayName))}</div>
+          <div class="ra-allocation-main">
+            <strong>${sanitize(displayName)}</strong>
+            <span>${item.role ? `${sanitize(item.role)} · ` : ''}${formatDate(item.startDate)} → ${formatDate(item.endDate)}</span>
+          </div>
+          <span class="ra-allocation-percent ${Number(item.percent || 0) > 100 ? 'danger' : Number(item.percent || 0) >= 100 ? 'success' : 'warning'}">${sanitize(item.percent)}%</span>
+          <span class="ra-allocation-status">${allocationStatus.label}</span>
+          <div class="ra-allocation-actions">
+            <button class="btn btn-ghost btn-compact" type="button" data-edit-allocation="${sanitize(item.id)}">Editar</button>
+            <button class="btn btn-ghost btn-compact danger" type="button" data-delete-allocation="${sanitize(item.id)}">Remover</button>
+          </div>
+        </div>`;
+    }).join('') : '<div class="ra-project-empty"><strong>Sem profissionais alocados</strong><span>Use o cadastro acima para vincular profissionais a este projeto.</span></div>'}</div>
+    </article>`;
+  }).join('')}</div></section>`;
 }
 
 function renderHistory(state, users) {
@@ -397,7 +482,8 @@ export async function renderResourceAllocation() {
   const clients = [...new Set(state.projects.map(project => project.client).filter(Boolean))].sort();
   const roles = [...new Set(state.allocations.map(item => item.role).filter(Boolean))].sort();
   const isTimeline = state.tab === 'timeline';
-  content.innerHTML = `<div class="report-page resource-allocation ${isTimeline ? 'resource-allocation-timeline-mode' : ''}">
+  const isProject = state.tab === 'project';
+  content.innerHTML = `<div class="report-page resource-allocation ${isTimeline ? 'resource-allocation-timeline-mode' : ''} ${isProject ? 'resource-allocation-project-mode' : ''}">
     ${state.warning ? `<div class="sr-warning" role="alert"><strong>Atenção:</strong> ${sanitize(state.warning)}</div>` : ''}
     ${isTimeline ? '<p class="muted">Visão visual da alocação de profissionais em projetos ao longo do tempo.</p>' : `<p class="muted">Fonte dos dados de alocação: ${state.persistence === 'supabase' ? 'Supabase/API protegida' : 'fallback local do navegador'}. Profissionais vêm dos dados sincronizados do RJA.</p>`}
     <div class="report-tabs"><button class="${state.tab === 'professional' ? 'active' : ''}" data-tab="professional">Visão por Profissional</button><button class="${state.tab === 'project' ? 'active' : ''}" data-tab="project">Visão por Projeto</button><button class="${state.tab === 'timeline' ? 'active' : ''}" data-tab="timeline">Visão Timeline</button></div>

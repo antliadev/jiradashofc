@@ -7,6 +7,7 @@ const UI_KEY = 'rja.resourceAllocation.ui.v1';
 const STATUSES = ['Planejado', 'Em andamento', 'Concluído', 'Suspenso', 'Cancelado'];
 const ZOOMS = { week: 'Semana', month: 'Mês', quarter: 'Trimestre', semester: 'Semestre', year: 'Ano' };
 const ZOOM_DAYS = { week: 14, month: 45, quarter: 120, semester: 210, year: 420 };
+const HIDDEN_RESOURCE_PROFESSIONALS = ['bruno', 'bruna', 'leandro', 'pedro', 'lucas', 'suellen'];
 
 function parseLocalDate(value) {
   if (!value) return null;
@@ -66,6 +67,29 @@ async function saveRemoteAllocation(allocation) {
   return payload.allocation;
 }
 
+async function deleteRemoteAllocation(id) {
+  const response = await fetch(`/api/jira/resource-allocation/allocations/${encodeURIComponent(id)}`, { method: 'DELETE', credentials: 'include' });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'Não foi possível remover a alocação.');
+  return payload.allocation;
+}
+
+function normalizeName(value = '') {
+  return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
+function isHiddenResourceProfessional(user = {}) {
+  const clean = normalizeName(user.displayName || user.name || user.email || user.id);
+  return HIDDEN_RESOURCE_PROFESSIONALS.some(name => clean === name || clean.startsWith(`${name} `) || clean.includes(` ${name} `));
+}
+
+function resourceUsers(users = []) {
+  return users
+    .filter(user => user.id !== 'unassigned')
+    .filter(user => !isHiddenResourceProfessional(user))
+    .sort((a, b) => String(a.displayName || a.name || '').localeCompare(String(b.displayName || b.name || ''), 'pt-BR', { sensitivity: 'base' }));
+}
+
 async function stateFromData() {
   const saved = loadState();
   let remote = null;
@@ -115,6 +139,10 @@ function applySavedAllocation(state, allocation) {
   return [...state.allocations.filter(item => item.id !== allocation.id), allocation].sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
 }
 
+function removeSavedAllocation(state, id) {
+  return state.allocations.filter(item => item.id !== id);
+}
+
 function filteredContext(state, users) {
   const text = String(state.filters.search || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const projects = state.projects.filter(project => {
@@ -153,7 +181,8 @@ function renderProjectForm(project = {}) {
     <label>Término previsto<input name="endDate" type="date" required value="${sanitize(project.endDate || '')}"></label>
     <label>Status<select name="status" required>${STATUSES.map(status => `<option ${project.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select></label>
     <label>Observação<input name="note" value="${sanitize(project.note || '')}"></label>
-    <button class="btn btn-secondary" type="submit">Salvar projeto</button>
+    <button class="btn btn-secondary" type="submit">${project.id ? 'Atualizar projeto' : 'Salvar projeto'}</button>
+    ${project.id ? '<button class="btn btn-ghost" type="button" id="ra-cancel-project-edit">Cancelar edição</button>' : ''}
   </form>`;
 }
 
@@ -170,7 +199,8 @@ function renderAllocationForm(state, users, allocation = {}) {
     <label>Percentual<input name="percent" type="number" min="1" max="200" step="1" required value="${sanitize(allocation.percent || 100)}"></label>
     <label>Função<input name="role" value="${sanitize(allocation.role || '')}"></label>
     <label>Observação<input name="note" value="${sanitize(allocation.note || '')}"></label>
-    <button class="btn btn-primary" type="submit">Salvar alocação</button>
+    <button class="btn btn-primary" type="submit">${allocation.id ? 'Atualizar alocação' : 'Salvar alocação'}</button>
+    ${allocation.id ? '<button class="btn btn-ghost" type="button" id="ra-cancel-allocation-edit">Cancelar edição</button>' : ''}
     ${simulation ? `<p class="${simulation.conflict ? 'sr-warning' : 'muted'}">Simulação: capacidade resultante máxima ${simulation.peak}%. ${simulation.conflict ? 'Conflito identificado; ao salvar será solicitada confirmação.' : 'Sem sobrealocação.'}</p>` : ''}
   </form>`;
 }
@@ -209,6 +239,95 @@ function renderProfessionalView(summary, state) {
     </article>`).join('')}</div></section>`;
 }
 
+function renderScaleHeader(range, zoom) {
+  const labels = [];
+  const step = zoom === 'week' ? 7 : zoom === 'quarter' ? 30 : zoom === 'semester' ? 45 : zoom === 'year' ? 60 : 30;
+  const days = Math.max(1, Math.round((range.end - range.start) / 86400000) + 1);
+  for (let cursor = new Date(range.start); cursor <= range.end; cursor = addDays(cursor, step)) {
+    const left = Math.max(0, Math.round(((cursor - range.start) / 86400000) / days * 100));
+    labels.push(`<span style="left:${left}%">${cursor.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}</span>`);
+  }
+  return labels.join('');
+}
+
+function timelineStatus(row) {
+  if (row.status === 'overallocated') return 'overallocated';
+  if (row.availableSoon || row.noFuture) return 'attention';
+  if (row.status === 'available') return 'available';
+  return 'allocated';
+}
+
+function groupRows(rows, state) {
+  const groupBy = state.filters.groupBy || 'role';
+  if (groupBy === 'project') {
+    return state.projects.map(project => ({
+      title: project.name,
+      subtitle: project.client || 'Projeto',
+      rows: rows.filter(row => row.allocations.some(item => item.projectId === project.id)),
+    })).filter(group => group.rows.length);
+  }
+  if (groupBy === 'client') {
+    const clients = [...new Set(state.projects.map(project => project.client || 'Sem cliente'))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    return clients.map(client => ({
+      title: client,
+      subtitle: 'Cliente',
+      rows: rows.filter(row => row.allocations.some(item => (state.projects.find(project => project.id === item.projectId)?.client || 'Sem cliente') === client)),
+    })).filter(group => group.rows.length);
+  }
+  const roles = [...new Set(rows.map(row => row.current[0]?.role || row.allocations[0]?.role || 'Sem função'))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  return roles.map(role => ({
+    title: role,
+    subtitle: `${rows.filter(row => (row.current[0]?.role || row.allocations[0]?.role || 'Sem função') === role).length} profissional(is)`,
+    rows: rows.filter(row => (row.current[0]?.role || row.allocations[0]?.role || 'Sem função') === role),
+  }));
+}
+
+function renderTimelineView(summary, state) {
+  const visibleEnd = addDays(state.viewDate, ZOOM_DAYS[state.zoom] || ZOOM_DAYS.month);
+  const range = state.filters.start || state.filters.end
+    ? { start: parseLocalDate(state.filters.start || state.viewDate), end: parseLocalDate(state.filters.end || visibleEnd) }
+    : { start: parseLocalDate(state.viewDate), end: visibleEnd };
+  const days = Math.max(1, Math.round((range.end - range.start) / 86400000) + 1);
+  const today = parseLocalDate(new Date());
+  const todayLeft = today >= range.start && today <= range.end ? Math.round(((today - range.start) / 86400000) / days * 100) : null;
+  const groups = groupRows(summary.rows, state);
+  return `<section class="report-section ra-timeline-view">
+    <div class="section-header">
+      <div><h3>Timeline de Alocação</h3><p>Onde cada profissional está alocado hoje, até quando está coberto e quando ficará sem projeto.</p></div>
+      <label>Agrupar por <select id="ra-group-filter"><option value="role" ${state.filters.groupBy === 'role' ? 'selected' : ''}>Função</option><option value="project" ${state.filters.groupBy === 'project' ? 'selected' : ''}>Projeto</option><option value="client" ${state.filters.groupBy === 'client' ? 'selected' : ''}>Cliente</option></select></label>
+    </div>
+    <div class="ra-timeline-shell">
+      <div class="ra-timeline-table">
+        <div class="ra-timeline-head">
+          <span>Profissional</span><span>% alocação</span><div class="ra-scale">${renderScaleHeader(range, state.zoom)}${todayLeft !== null ? `<i style="left:${todayLeft}%">Hoje</i>` : ''}</div>
+        </div>
+        ${groups.map(group => `<details class="ra-group" open><summary>${sanitize(group.title)} <small>${sanitize(group.subtitle)}</small></summary>${group.rows.map(row => {
+          const status = timelineStatus(row);
+          return `<article class="ra-timeline-row ${status}" data-user-id="${sanitize(row.user.id)}">
+            <div class="ra-sticky-person"><span class="ra-dot ${status}"></span><strong>${sanitize(row.user.displayName)}</strong><small>${row.coveredUntil ? `Coberto até ${formatDate(row.coveredUntil)}` : 'Sem alocação futura'}</small></div>
+            <div class="ra-load-badge ${row.currentLoad > 100 ? 'danger' : row.currentLoad >= 100 ? 'success' : row.currentLoad > 0 ? 'warning' : ''}">${row.currentLoad}%</div>
+            <div class="ra-timeline-track">${todayLeft !== null ? `<span class="ra-today-line" style="left:${todayLeft}%"></span>` : ''}${row.allocations.map(item => {
+              const allocationStart = parseLocalDate(item.startDate);
+              const allocationEnd = parseLocalDate(item.endDate);
+              if (!allocationStart || !allocationEnd || allocationEnd < range.start || allocationStart > range.end) return '';
+              const start = Math.max(0, Math.round(((allocationStart - range.start) / 86400000) / days * 100));
+              const width = Math.max(4, Math.round((((allocationEnd - allocationStart) / 86400000) + 1) / days * 100));
+              const project = state.projects.find(project => project.id === item.projectId);
+              const title = `${project?.name || item.projectId} · ${item.percent}% · ${formatDate(item.startDate)} a ${formatDate(item.endDate)}${item.role ? ` · ${item.role}` : ''}`;
+              return `<button type="button" class="ra-timeline-bar" data-edit-allocation="${sanitize(item.id)}" style="left:${start}%;width:${Math.min(width, 100 - start)}%;background:${projectColor(item.projectId)}" title="${sanitizeTitle(title)}"><span>${sanitize(project?.name || item.projectId)}</span><small>${formatDate(item.startDate)} → ${formatDate(item.endDate)}</small></button>`;
+            }).join('')}${row.noFuture ? '<span class="ra-no-future">Sem alocação futura</span>' : ''}</div>
+          </article>`;
+        }).join('')}</details>`).join('') || '<p class="muted">Nenhum profissional encontrado para os filtros atuais.</p>'}
+      </div>
+      <aside class="ra-timeline-aside">
+        <div class="ra-calendar-card"><h4>Calendário de Alocação</h4><strong>${parseLocalDate(state.viewDate).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</strong><p>Use Anterior, Hoje e Próximo para navegar a janela temporal.</p></div>
+        <div class="ra-legend"><h4>Legenda de Status</h4><span><i class="ra-dot allocated"></i> Em andamento</span><span><i class="ra-dot warning"></i> Atenção / parcial</span><span><i class="ra-dot overallocated"></i> Sobre alocado</span><span><i class="ra-dot available"></i> Disponível</span></div>
+        <div class="ra-period-summary"><h4>Resumo do período</h4><p>Alocados: <strong>${summary.totals.full}</strong></p><p>Parciais: <strong>${summary.totals.partial}</strong></p><p>Disponíveis: <strong>${summary.totals.available}</strong></p><p>Sem futuro: <strong>${summary.totals.noFuture}</strong></p></div>
+      </aside>
+    </div>
+  </section>`;
+}
+
 function statusLabel(status) {
   return {
     overallocated: 'Sobrealocado',
@@ -225,9 +344,9 @@ function projectName(state, projectId) {
 function renderProjectView(projects, allocations, users) {
   return `<section class="report-section"><h3>Visão por Projeto</h3>${projects.map(project => {
     const rows = allocations.filter(item => item.projectId === project.id);
-    return `<article class="ra-project"><h4><span style="background:${projectColor(project.id)}"></span>${sanitize(project.name)} <small>${sanitize(project.client || '')}</small></h4>${rows.length ? rows.map(item => {
+    return `<article class="ra-project"><h4><span style="background:${projectColor(project.id)}"></span>${sanitize(project.name)} <small>${sanitize(project.client || '')}</small><button class="btn btn-ghost btn-compact" type="button" data-edit-project="${sanitize(project.id)}">Editar projeto</button></h4>${rows.length ? rows.map(item => {
       const user = users.find(user => user.id === item.userId);
-      return `<p>${sanitize(user?.displayName || item.userId)} · ${formatDate(item.startDate)} → ${formatDate(item.endDate)} · ${sanitize(item.percent)}% ${item.role ? `· ${sanitize(item.role)}` : ''}</p>`;
+      return `<p>${sanitize(user?.displayName || item.userName || item.userId)} · ${formatDate(item.startDate)} → ${formatDate(item.endDate)} · ${sanitize(item.percent)}% ${item.role ? `· ${sanitize(item.role)}` : ''} <button class="btn btn-ghost btn-compact" type="button" data-edit-allocation="${sanitize(item.id)}">Editar</button> <button class="btn btn-ghost btn-compact danger" type="button" data-delete-allocation="${sanitize(item.id)}">Remover</button></p>`;
     }).join('') : '<p class="muted">Sem profissionais alocados.</p>'}</article>`;
   }).join('')}</section>`;
 }
@@ -248,7 +367,9 @@ export async function renderResourceAllocation() {
   header.innerHTML = '<h2>Alocação de Recursos</h2><div class="subtitle">Planejamento e acompanhamento de capacidade por profissional e projeto</div>';
   content.innerHTML = '<div class="empty-state"><h3>Carregando Alocação de Recursos</h3><p>Consultando projetos, alocações e histórico.</p></div>';
   const state = await stateFromData();
-  const users = dataService.getUsersRanked().filter(user => user.id !== 'unassigned');
+  const users = resourceUsers(dataService.getUsersRanked());
+  const editingProject = state.filters.editProjectId ? state.projects.find(project => project.id === state.filters.editProjectId) : null;
+  const editingAllocation = state.filters.editAllocationId ? state.allocations.find(allocation => allocation.id === state.filters.editAllocationId) : null;
   const ctx = filteredContext(state, users);
   const summary = summarizeResources(ctx.users, ctx.projects, ctx.allocations, new Date(), state.alertDays);
   const clients = [...new Set(state.projects.map(project => project.client).filter(Boolean))].sort();
@@ -256,7 +377,7 @@ export async function renderResourceAllocation() {
   content.innerHTML = `<div class="report-page resource-allocation">
     ${state.warning ? `<div class="sr-warning" role="alert"><strong>Atenção:</strong> ${sanitize(state.warning)}</div>` : ''}
     <p class="muted">Fonte dos dados de alocação: ${state.persistence === 'supabase' ? 'Supabase/API protegida' : 'fallback local do navegador'}. Profissionais vêm dos dados sincronizados do RJA.</p>
-    <div class="report-tabs"><button class="${state.tab === 'professional' ? 'active' : ''}" data-tab="professional">Visão por Profissional</button><button class="${state.tab === 'project' ? 'active' : ''}" data-tab="project">Visão por Projeto</button></div>
+    <div class="report-tabs"><button class="${state.tab === 'professional' ? 'active' : ''}" data-tab="professional">Visão por Profissional</button><button class="${state.tab === 'project' ? 'active' : ''}" data-tab="project">Visão por Projeto</button><button class="${state.tab === 'timeline' ? 'active' : ''}" data-tab="timeline">Visão Timeline</button></div>
     <div class="report-toolbar">
       <label>Busca<input id="ra-search" value="${sanitize(state.filters.search || '')}" placeholder="Profissional, projeto ou cliente"></label>
       <label>Projeto<select id="ra-project-filter"><option value="">Todos</option>${optionRows(state.projects, state.filters.projectId)}</select></label>
@@ -274,8 +395,8 @@ export async function renderResourceAllocation() {
       <button class="btn btn-secondary" id="ra-clear">Limpar</button>
     </div>
     ${renderKpis(summary)}
-    <section class="report-section"><h3>Cadastro</h3>${renderProjectForm()}${renderAllocationForm(state, users)}</section>
-    ${state.tab === 'project' ? renderProjectView(ctx.projects, ctx.allocations, users) : renderProfessionalView(summary, state)}
+    <section class="report-section"><h3>Cadastro</h3>${renderProjectForm(editingProject || {})}${renderAllocationForm(state, users, editingAllocation || {})}</section>
+    ${state.tab === 'timeline' ? renderTimelineView(summary, state) : state.tab === 'project' ? renderProjectView(ctx.projects, ctx.allocations, users) : renderProfessionalView(summary, state)}
     ${renderHistory(state, users)}
   </div>`;
 
@@ -290,16 +411,32 @@ export async function renderResourceAllocation() {
       availability: document.getElementById('ra-availability-filter')?.value || '',
       start: document.getElementById('ra-start-filter')?.value || '',
       end: document.getElementById('ra-end-filter')?.value || '',
+      groupBy: document.getElementById('ra-group-filter')?.value || state.filters.groupBy || 'role',
     }, zoom: document.getElementById('ra-zoom')?.value || state.zoom });
     renderResourceAllocation();
   };
   document.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click', () => { persist({ tab: button.dataset.tab }); renderResourceAllocation(); }));
-  ['ra-project-filter', 'ra-client-filter', 'ra-user-filter', 'ra-role-filter', 'ra-status-filter', 'ra-availability-filter', 'ra-start-filter', 'ra-end-filter', 'ra-zoom'].forEach(id => document.getElementById(id)?.addEventListener('change', applyFilters));
+  ['ra-project-filter', 'ra-client-filter', 'ra-user-filter', 'ra-role-filter', 'ra-status-filter', 'ra-availability-filter', 'ra-start-filter', 'ra-end-filter', 'ra-zoom', 'ra-group-filter'].forEach(id => document.getElementById(id)?.addEventListener('change', applyFilters));
   document.getElementById('ra-search')?.addEventListener('input', applyFilters);
   document.getElementById('ra-clear')?.addEventListener('click', () => { persist({ filters: {} }); renderResourceAllocation(); });
   document.getElementById('ra-prev')?.addEventListener('click', () => { persist({ viewDate: isoDate(addDays(state.viewDate, -(ZOOM_DAYS[state.zoom] || ZOOM_DAYS.month))) }); renderResourceAllocation(); });
   document.getElementById('ra-today')?.addEventListener('click', () => { persist({ viewDate: isoDate(new Date()) }); renderResourceAllocation(); });
   document.getElementById('ra-next')?.addEventListener('click', () => { persist({ viewDate: isoDate(addDays(state.viewDate, ZOOM_DAYS[state.zoom] || ZOOM_DAYS.month)) }); renderResourceAllocation(); });
+  document.getElementById('ra-cancel-project-edit')?.addEventListener('click', () => { persist({ filters: { ...state.filters, editProjectId: '' } }); renderResourceAllocation(); });
+  document.getElementById('ra-cancel-allocation-edit')?.addEventListener('click', () => { persist({ filters: { ...state.filters, editAllocationId: '' } }); renderResourceAllocation(); });
+  document.querySelectorAll('[data-edit-project]').forEach(button => button.addEventListener('click', () => { persist({ filters: { ...state.filters, editProjectId: button.dataset.editProject } }); renderResourceAllocation(); }));
+  document.querySelectorAll('[data-edit-allocation]').forEach(button => button.addEventListener('click', () => { persist({ filters: { ...state.filters, editAllocationId: button.dataset.editAllocation } }); renderResourceAllocation(); }));
+  document.querySelectorAll('[data-delete-allocation]').forEach(button => button.addEventListener('click', async () => {
+    const id = button.dataset.deleteAllocation;
+    if (!confirm('Remover este profissional do projeto? O histórico da alteração será preservado.')) return;
+    try {
+      if (state.persistence === 'supabase') await deleteRemoteAllocation(id);
+      persistLocalData(state, { allocations: removeSavedAllocation(state, id), history: [...state.history, { id: crypto.randomUUID(), action: 'allocation.deleted', at: new Date().toISOString(), before: state.allocations.find(item => item.id === id), after: null }] });
+      renderResourceAllocation();
+    } catch (error) {
+      alert(error.message);
+    }
+  }));
   document.getElementById('ra-project-form')?.addEventListener('submit', async event => {
     event.preventDefault();
     const form = Object.fromEntries(new FormData(event.target));
@@ -308,7 +445,8 @@ export async function renderResourceAllocation() {
     if (errors.length) return alert(errors.join('\n'));
     try {
       const saved = state.persistence === 'supabase' ? await saveRemoteProject(project) : project;
-      persistLocalData(state, { projects: applySavedProject(state, saved), history: [...state.history, { id: crypto.randomUUID(), action: project.id ? 'project.updated' : 'project.created', at: new Date().toISOString(), after: saved }] });
+      persistLocalData(state, { projects: applySavedProject(state, saved), history: [...state.history, { id: crypto.randomUUID(), action: form.id ? 'project.updated' : 'project.created', at: new Date().toISOString(), after: saved }] });
+      persist({ filters: { ...state.filters, editProjectId: '' } });
       renderResourceAllocation();
     } catch (error) {
       alert(error.message);
@@ -327,6 +465,7 @@ export async function renderResourceAllocation() {
     try {
       const saved = state.persistence === 'supabase' ? await saveRemoteAllocation(allocation) : allocation;
       persistLocalData(state, { allocations: applySavedAllocation(state, saved), history: [...state.history, { id: crypto.randomUUID(), action: before ? 'allocation.updated' : 'allocation.created', at: new Date().toISOString(), before, after: saved }] });
+      persist({ filters: { ...state.filters, editAllocationId: '' } });
       renderResourceAllocation();
     } catch (error) {
       alert(error.message);

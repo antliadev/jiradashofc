@@ -32,11 +32,16 @@ try {
     localStorage.removeItem('rja.resourceAllocation.v1');
     localStorage.removeItem('rja.resourceAllocation.ui.v1');
     const { dataService } = await import('/src/data/data-service.js');
-    dataService.getUsersRanked = () => [{ id: 'u1', displayName: 'Ana', email: 'ana@example.test' }, { id: 'u2', displayName: 'Bruno', email: 'bruno@example.test' }];
+    dataService.getUsersRanked = () => [
+      { id: 'u1', displayName: 'Ana', email: 'ana@example.test' },
+      { id: 'u2', displayName: 'Bruno', email: 'bruno@example.test' },
+      { id: 'u3', displayName: 'Carlos', email: 'carlos@example.test' },
+    ];
     await (await import('/src/pages/resource-allocation.js')).renderResourceAllocation();
   });
   assert.match(await page.locator('#page-header').innerText(), /Alocação de Recursos/);
   assert.equal(await page.locator('.ra-row').count(), 2);
+  assert.doesNotMatch(await page.locator('#ra-user-filter').innerText(), /Bruno/);
   await page.selectOption('#ra-allocation-form select[name="userId"]', 'u1');
   await page.selectOption('#ra-allocation-form select[name="projectId"]', projectId);
   await page.fill('#ra-allocation-form input[name="startDate"]', '2020-01-01');
@@ -57,6 +62,9 @@ try {
   assert.equal(await page.locator('.ra-row').count(), 1);
   await page.click('[data-tab="project"]');
   assert.match(await page.locator('.ra-project').innerText(), /Radar Jira Antlia/);
+  await page.click('[data-tab="timeline"]');
+  assert.match(await page.locator('.ra-timeline-view').innerText(), /Timeline de Alocação/);
+  assert.equal(await page.locator('.ra-timeline-row').count(), 1);
   await page.screenshot({ path: '/tmp/resource-allocation.png', fullPage: true });
   assert.deepEqual(errors, []);
   console.log('Browser passed: resource allocation opens, saves allocation, confirms overcapacity, filters and project tab.');

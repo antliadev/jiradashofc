@@ -27,13 +27,25 @@ import {
   listProjectMetadata,
   upsertProjectMetadata,
 } from '../../lib/projectMetadataService.js';
-import { createSyncJob, createSyncJobFromEnv, createScopedSyncJobFromEnv, getSyncJobStatus, runSyncJob, executeAutoSync } from '../../lib/syncJobService.js';
+import { createSyncJob, createSyncJobFromEnv, createScopedSyncJobFromEnv, getSyncJobStatus, runSyncJob, executeAutoSync, ensureRecentAutoSync } from '../../lib/syncJobService.js';
 import { fetchHoursDashboard } from '../../lib/hoursDashboardService.js';
 
 const router = express.Router();
 router.use('/sprint-review', sprintReviewRoutes);
 router.use('/sprint-plan', sprintPlanRoutes);
 router.use('/resource-allocation', resourceAllocationRoutes);
+
+function triggerSelfHealingSync(req, source = 'app-read') {
+  const task = () => ensureRecentAutoSync(source).catch(error => {
+    console.warn('[sync/self-healing] Falha ao verificar frescor do sync:', error.message);
+  });
+
+  if (typeof req.waitUntil === 'function') {
+    req.waitUntil(task());
+  } else if (process.env.VERCEL !== '1') {
+    setImmediate(task);
+  }
+}
 
 router.get('/system/status', async (req, res) => {
   const supabaseConfig = checkSupabaseConfig();
@@ -389,6 +401,7 @@ router.all('/sync/worker', async (req, res) => {
 // ─────────────────────────────────────────────
 router.get('/dashboard', async (req, res) => {
   try {
+    triggerSelfHealingSync(req, 'dashboard-read');
     const latestJob = await getSyncJobStatus().catch(() => null);
     const data = await fetchDashboardDataFromDatabase({ force: req.query.force === 'true' || req.query.force === '1' });
     const total = data.totalIssues || 0;
@@ -474,6 +487,7 @@ router.post('/project-metadata', async (req, res) => {
 // ─────────────────────────────────────────────
 router.get('/issues', async (req, res) => {
   try {
+    triggerSelfHealingSync(req, 'issues-read');
     const { project, status, assignee, priority, type } = req.query;
     const filters = { project, status, assignee, priority, type };
 

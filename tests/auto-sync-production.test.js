@@ -17,6 +17,8 @@ test('GitHub Actions aciona o worker protegido de producao a cada 30 minutos', a
   assert.match(workflow, /https:\/\/radarjira\.antlia\.com\.br\/api\/jira\/sync\/worker/);
   assert.match(workflow, /Authorization: Bearer \$\{RJA_CRON_SECRET\}/);
   assert.match(workflow, /secrets\.RJA_CRON_SECRET/);
+  assert.match(workflow, /--retry 3/);
+  assert.match(workflow, /--retry-all-errors/);
 });
 
 test('sincronizacao automatica usa JQL incremental e nao remove dados antigos', async () => {
@@ -54,9 +56,21 @@ test('sincronizacao automatica recupera timeout sem depender de acao manual', as
   const service = await readFile(new URL('../lib/syncJobService.js', import.meta.url), 'utf8');
 
   assert.match(service, /ACTIVE_JOB_STALE_MS = 6 \* 60 \* 1000/);
+  assert.match(service, /AUTO_SYNC_STALE_MS = 35 \* 60 \* 1000/);
   assert.match(service, /A proxima execucao automatica tentara novamente/);
   assert.doesNotMatch(service, /Inicie uma nova sincronizacao/);
   assert.match(service, /if \(isActiveJobTimedOut\(active\)\) \{\s*await finalizeTimedOutJob\(active\);\s*active = null;\s*\}/s);
+});
+
+test('app dispara autocorrecao incremental quando o ultimo sync fica velho', async () => {
+  const service = await readFile(new URL('../lib/syncJobService.js', import.meta.url), 'utf8');
+  const router = await readFile(new URL('../server/routes/jira.js', import.meta.url), 'utf8');
+
+  assert.match(service, /export async function ensureRecentAutoSync/);
+  assert.match(service, /getSupabaseLatestSuccessfulJob/);
+  assert.match(service, /return executeAutoSync\(source, \{ forceScheduleCheck: false, processQueued: false \}\)/);
+  assert.match(router, /triggerSelfHealingSync\(req, 'dashboard-read'\)/);
+  assert.match(router, /triggerSelfHealingSync\(req, 'issues-read'\)/);
 });
 
 test('worker protegido retorna erro HTTP quando a execucao automatica falha de verdade', async () => {

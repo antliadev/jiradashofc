@@ -71,10 +71,20 @@ try {
   assert.equal(await page.locator('.ra-project-allocation .ra-user-avatar img').count(), 2);
   assert.match(await page.locator('.ra-project-allocation').first().innerText(), /Ana Maria Colaboradora de Teste/);
   await page.evaluate(async () => {
+    document.documentElement.dataset.theme = 'light';
     localStorage.setItem('rja.resourceAllocation.ui.v1', JSON.stringify({ tab: 'timeline', zoom: 'semester', viewDate: '2026-09-01', filters: {} }));
     await (await import('/src/pages/resource-allocation.js')).renderResourceAllocation();
   });
   assert.match(await page.locator('.ra-timeline-view').innerText(), /Timeline de Alocação/);
+  const lightTimelineColors = await page.locator('.ra-timeline-table').evaluate(el => {
+    const table = getComputedStyle(el);
+    const head = getComputedStyle(document.querySelector('.ra-timeline-head'));
+    const person = getComputedStyle(document.querySelector('.ra-sticky-person'));
+    return { table: table.backgroundColor, head: head.backgroundColor, person: person.backgroundColor };
+  });
+  assert.doesNotMatch(lightTimelineColors.table, /rgb\(7, 19, 36\)|rgb\(8, 23, 42\)/);
+  assert.doesNotMatch(lightTimelineColors.head, /rgb\(18, 39, 68\)/);
+  assert.doesNotMatch(lightTimelineColors.person, /rgb\(12, 30, 54\)/);
   assert.equal(await page.locator('.ra-timeline-row[data-user-id="u1"]').count(), 1);
   assert.equal(await page.locator('.ra-timeline-row[data-user-id="u1"] .ra-timeline-subrow .ra-timeline-bar').count(), 2);
   assert.match(await page.locator('.ra-timeline-row[data-user-id="u1"]').innerText(), /120%/);

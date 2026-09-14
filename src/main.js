@@ -45,6 +45,7 @@ const dataRoutes = new Set([
 ]);
 const AUTH_CACHE_TTL_MS = 0;
 const SESSION_MONITOR_INTERVAL_MS = 15000;
+const CHUNK_RECOVERY_STORAGE_KEY = 'rja.chunk-recovery-url';
 let authCache = {
   authenticated: false,
   checkedAt: 0
@@ -55,6 +56,25 @@ const RECOVERY_STORAGE_KEY = 'rja.auth.recovery';
 
 function normalizePath(path) {
   return (path || '/').split('?')[0] || '/';
+}
+
+function isDynamicImportFailure(error) {
+  const message = String(error?.message || '');
+  return /Failed to fetch dynamically imported module|Importing a module script failed|Loading chunk \d+ failed|error loading dynamically imported module/i.test(message);
+}
+
+function renderRouteImportError(error) {
+  const content = document.getElementById('page-content');
+  if (!content) return;
+  content.innerHTML = `
+    <div class="empty-state">
+      <h3>Atualização necessária</h3>
+      <p>O app foi atualizado e esta tela precisa carregar os arquivos novos da produção.</p>
+      <p class="muted">${sanitize(error?.message || 'Nao foi possivel carregar o modulo da tela.')}</p>
+      <button class="btn btn-primary" id="reload-app-version">Recarregar tela</button>
+    </div>
+  `;
+  document.getElementById('reload-app-version')?.addEventListener('click', () => window.location.reload());
 }
 
 function captureSupabaseRecoveryState() {
@@ -218,8 +238,21 @@ async function renderRoute(importPage, renderName, params = {}, options = {}) {
     }
   }
 
-  const module = await importPage();
-  module[renderName](params);
+  try {
+    const module = await importPage();
+    sessionStorage.removeItem(CHUNK_RECOVERY_STORAGE_KEY);
+    module[renderName](params);
+  } catch (error) {
+    if (!isDynamicImportFailure(error)) throw error;
+    const currentUrl = window.location.href;
+    const recoveredUrl = sessionStorage.getItem(CHUNK_RECOVERY_STORAGE_KEY);
+    if (recoveredUrl !== currentUrl) {
+      sessionStorage.setItem(CHUNK_RECOVERY_STORAGE_KEY, currentUrl);
+      window.location.reload();
+      return;
+    }
+    renderRouteImportError(error);
+  }
 }
 
 // ─── Configuração de Rotas ──────────────────────────────

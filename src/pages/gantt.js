@@ -1513,7 +1513,7 @@ function renderAggregateBar(row, range) {
 
 function renderGroupHeader(key, groupItems, grouping, isCollapsed) {
   const projects = dataService.getProjects();
-  const users = dataService.getUsers();
+  const users = dataService.getUsersForSelection();
   const label = getGroupLabel(key, grouping, projects, users);
   const color = getGroupColor(key, grouping);
   const count = groupItems.length;
@@ -1876,7 +1876,7 @@ function bindEvents() {
   // Filtros
   document.getElementById('gantt-project')?.addEventListener('change', e => {
     state.projectId = e.target.value;
-    const eligibleAssignees = getEligibleGanttAssignees(state.allItems, dataService.getUsers(), state.projectId);
+    const eligibleAssignees = getEligibleGanttAssignees(state.allItems, dataService.getUsersForSelection(), state.projectId);
     state.analystId = normalizeGanttAssignee(state.analystId, eligibleAssignees);
     state.visibleLimit = GANTT_INITIAL_LIMIT;
     renderGantt();
@@ -2147,7 +2147,7 @@ export function renderGantt() {
 
   // Carregar dados
   const projects = dataService.getProjects();
-  const users = dataService.getUsers();
+  const users = dataService.getUsersForSelection();
   const cards = dataService.getCards();
 
   // Processar timeline

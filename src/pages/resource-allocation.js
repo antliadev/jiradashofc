@@ -241,13 +241,32 @@ function renderProfessionalView(summary, state) {
 
 function renderScaleHeader(range, zoom) {
   const labels = [];
-  const step = zoom === 'week' ? 7 : zoom === 'quarter' ? 30 : zoom === 'semester' ? 45 : zoom === 'year' ? 60 : 30;
   const days = Math.max(1, Math.round((range.end - range.start) / 86400000) + 1);
-  for (let cursor = new Date(range.start); cursor <= range.end; cursor = addDays(cursor, step)) {
-    const left = Math.max(0, Math.round(((cursor - range.start) / 86400000) / days * 100));
-    labels.push(`<span style="left:${left}%">${cursor.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}</span>`);
+  const cursor = new Date(range.start.getFullYear(), range.start.getMonth(), 1);
+  if (cursor < range.start) cursor.setMonth(cursor.getMonth() + 1);
+  for (; cursor <= range.end; cursor.setMonth(cursor.getMonth() + 1)) {
+    const left = Math.max(0, Math.min(100, ((cursor - range.start) / 86400000) / days * 100));
+    labels.push(`<span style="left:${left.toFixed(4)}%">${cursor.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}</span>`);
+  }
+  if (!labels.length || zoom === 'week') {
+    const left = Math.max(0, Math.min(100, ((range.start - range.start) / 86400000) / days * 100));
+    labels.unshift(`<span style="left:${left.toFixed(4)}%">${range.start.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}</span>`);
   }
   return labels.join('');
+}
+
+function todayMarkerStyle(left) {
+  const bounded = Math.max(0, Math.min(100, Number(left || 0)));
+  return `--today-left:${bounded.toFixed(4)}%;`;
+}
+
+function timelineBarStyle(segment) {
+  const left = Math.max(0, Math.min(100, Number(segment.left || 0)));
+  const width = Math.max(1.2, Math.min(Number(segment.width || 0), 100 - left));
+  const needsPercentGutter = left < 4;
+  return needsPercentGutter
+    ? `left:calc(${left.toFixed(4)}% + var(--ra-subrow-percent-space));width:max(48px, calc(${width.toFixed(4)}% - var(--ra-subrow-percent-space)));background:${projectColor(segment.projectId)}`
+    : `left:${left.toFixed(4)}%;width:${width.toFixed(4)}%;background:${projectColor(segment.projectId)}`;
 }
 
 function renderAllocationCalendar(viewDate) {
@@ -371,7 +390,7 @@ function renderTimelineView(summary, state) {
     <div class="ra-timeline-shell">
       <div class="ra-timeline-table">
         <div class="ra-timeline-head">
-          <span>Profissional</span><span>% alocação</span><div class="ra-scale">${renderScaleHeader(range, state.zoom)}${todayLeft !== null ? `<i style="left:${todayLeft}%">Hoje</i>` : ''}</div>
+          <span>Profissional</span><span>% alocação</span><div class="ra-scale">${renderScaleHeader(range, state.zoom)}${todayLeft !== null ? `<i style="${todayMarkerStyle(todayLeft)}">Hoje</i>` : ''}</div>
         </div>
         ${groups.map(group => `<details class="ra-group" open><summary>${sanitize(group.title)} <small>${sanitize(group.subtitle)}</small></summary>${group.rows.map(row => {
           const visibleAllocations = row.allocations
@@ -389,7 +408,7 @@ function renderTimelineView(summary, state) {
               const title = `${project?.name || item.projectId} · ${item.percent}% · ${formatDate(item.startDate)} a ${formatDate(item.endDate)}${item.role ? ` · ${item.role}` : ''}`;
               return `<div class="ra-timeline-subrow">
                 <span class="ra-subrow-percent ${Number(item.percent || 0) > 100 ? 'danger' : Number(item.percent || 0) >= 100 ? 'success' : 'warning'}">${sanitize(item.percent)}%</span>
-                <button type="button" class="ra-timeline-bar ${segment.clippedStart ? 'is-clipped-start' : ''} ${segment.clippedEnd ? 'is-clipped-end' : ''}" data-edit-allocation="${sanitize(item.id)}" style="left:${segment.left.toFixed(4)}%;width:${Math.max(1.2, segment.width).toFixed(4)}%;background:${projectColor(item.projectId)}" title="${sanitizeTitle(title)}"><span>${sanitize(project?.name || item.projectId)}</span><small>${formatDate(item.startDate)} → ${formatDate(item.endDate)}</small></button>
+                <button type="button" class="ra-timeline-bar ${segment.clippedStart ? 'is-clipped-start' : ''} ${segment.clippedEnd ? 'is-clipped-end' : ''}" data-edit-allocation="${sanitize(item.id)}" style="${timelineBarStyle({ ...segment, projectId: item.projectId })}" title="${sanitizeTitle(title)}"><span>${sanitize(project?.name || item.projectId)}</span><small>${formatDate(item.startDate)} → ${formatDate(item.endDate)}</small></button>
               </div>`;
             }).join('')}${availability ? `<div class="ra-timeline-subrow ra-availability-subrow"><span class="ra-subrow-percent available">0%</span><span class="ra-no-future" style="left:${availability.left.toFixed(4)}%;width:${Math.max(1.2, availability.width).toFixed(4)}%" title="${sanitizeTitle(availability.title)}">${sanitize(availability.label)}</span></div>` : visibleAllocations.length ? '' : '<div class="ra-empty-timeline">Sem alocação neste período</div>'}</div>
           </article>`;
@@ -524,7 +543,7 @@ export async function renderResourceAllocation() {
   header.innerHTML = '<h2>Alocação de Recursos</h2><div class="subtitle">Planejamento e acompanhamento de capacidade por profissional e projeto</div>';
   content.innerHTML = '<div class="empty-state"><h3>Carregando Alocação de Recursos</h3><p>Consultando projetos, alocações e histórico.</p></div>';
   const state = await stateFromData();
-  const users = resourceUsers(dataService.getUsersRanked());
+  const users = resourceUsers(dataService.getUsersForSelection());
   const editingProject = state.filters.editProjectId ? state.projects.find(project => project.id === state.filters.editProjectId) : null;
   const editingAllocation = state.filters.editAllocationId ? state.allocations.find(allocation => allocation.id === state.filters.editAllocationId) : null;
   const ctx = filteredContext(state, users);

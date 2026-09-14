@@ -37,7 +37,7 @@ try {
     localStorage.removeItem('rja.resourceAllocation.v1');
     localStorage.removeItem('rja.resourceAllocation.ui.v1');
     const { dataService } = await import('/src/data/data-service.js');
-    dataService.getUsersRanked = () => [
+    dataService.getUsersForSelection = () => [
       { id: 'u1', displayName: 'Ana Maria Colaboradora de Teste', email: 'ana@example.test', avatarUrl },
       { id: 'u2', displayName: 'Bruno', email: 'bruno@example.test' },
       { id: 'u3', displayName: 'Carlos', email: 'carlos@example.test' },
@@ -78,11 +78,15 @@ try {
   assert.equal(await page.locator('.ra-timeline-row[data-user-id="u1"]').count(), 1);
   assert.equal(await page.locator('.ra-timeline-row[data-user-id="u1"] .ra-timeline-subrow .ra-timeline-bar').count(), 2);
   assert.match(await page.locator('.ra-timeline-row[data-user-id="u1"]').innerText(), /120%/);
+  const scaleText = await page.locator('.ra-scale').innerText();
+  ['set.', 'out.', 'nov.', 'dez.', 'jan.', 'fev.', 'mar.'].forEach(month => assert.match(scaleText, new RegExp(month.replace('.', '\\.'), 'i')));
   assert.equal(await page.locator('.ra-timeline-row[data-user-id="u1"]').evaluate(el => el.classList.contains('overallocated')), true);
   const firstBar = page.locator('.ra-timeline-row[data-user-id="u1"] .ra-timeline-bar').first();
   const firstBarBox = await firstBar.boundingBox();
+  const firstPercentBox = await page.locator('.ra-timeline-row[data-user-id="u1"] .ra-subrow-percent').first().boundingBox();
+  assert.ok(firstBarBox.x > firstPercentBox.x + firstPercentBox.width - 2, 'barra nao deve cobrir o chip de percentual no inicio da timeline');
   const trackBox = await page.locator('.ra-timeline-row[data-user-id="u1"] .ra-timeline-track').boundingBox();
-  assert.ok(firstBarBox.x <= trackBox.x + 18, 'barra iniciada antes da janela deve comecar no limite visivel');
+  assert.ok(firstBarBox.x <= trackBox.x + 72, 'barra iniciada antes da janela deve respeitar somente o respiro visual do percentual');
   assert.ok(firstBarBox.x + firstBarBox.width < trackBox.x + trackBox.width - 80, 'barra com fim em 31/12/2026 nao deve se estender ate o fim da timeline');
   await page.screenshot({ path: '/tmp/resource-allocation.png', fullPage: true });
   assert.deepEqual(errors, []);

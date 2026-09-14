@@ -21,3 +21,21 @@ test('opcoes de status podem ser filtradas por projeto', () => {
   assert.deepEqual(dataService.getStatusOptions(), ['Aguardando validacao PR', 'Bloqueado', 'Em andamento']);
 });
 
+test('usuarios para listas seguem exclusao global e ordem alfabetica', () => {
+  dataService.importData(
+    [{ id: 'p1', key: 'P1', name: 'Projeto 1' }],
+    [],
+    [
+      { id: 'u3', displayName: 'Carlos Silva', email: 'carlos@example.test' },
+      { id: 'u1', displayName: 'Álvaro Costa', email: 'alvaro@example.test' },
+      { id: 'u-hidden', displayName: 'Rafael Ribeiro', email: 'rafael.ribeiro@antlia.com.br' },
+      { id: 'u2', displayName: 'Bruno Alves', email: 'bruno@example.test' },
+    ]
+  );
+
+  assert.deepEqual(dataService.getUsersForSelection().map(user => user.displayName), [
+    'Álvaro Costa',
+    'Bruno Alves',
+    'Carlos Silva',
+  ]);
+});

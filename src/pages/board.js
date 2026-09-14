@@ -179,7 +179,7 @@ function renderIssueExplorer() {
 
 function filtersTemplate() {
   const projects = dataService.getProjects();
-  const users = dataService.getUsers();
+  const users = dataService.getUsersForSelection();
   const advancedCount = [currentFilters.priority, currentFilters.type, currentFilters.dueDate]
     .filter(Boolean).length + Number(currentFilters.showNoDate) + Number(currentFilters.showNoAnalyst);
   return `<div class="issue-primary-filters">

@@ -19,6 +19,7 @@ try {
     ];
     dataService.getProjects = () => [{ id: 'p1', key: 'A', name: 'Projeto A' }, { id: 'p2', key: 'B', name: 'Projeto B' }];
     dataService.getUsers = () => [{ id: 'u1', displayName: 'Ana' }, { id: 'u2', displayName: 'Bruno' }];
+    dataService.getUsersForSelection = () => dataService.getUsers();
     dataService.getCards = () => cards;
     dataService.getCardById = id => cards.find(card => card.id === id);
     dataService.getProjectById = id => dataService.getProjects().find(project => project.id === id);

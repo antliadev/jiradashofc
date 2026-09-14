@@ -37,7 +37,7 @@ export function renderDashboard() {
   const header = document.getElementById('page-header');
   const metadata = dataService.getSyncMetadata();
   const projects = dataService.getProjects();
-  const users = dataService.getUsers();
+  const users = dataService.getUsersForSelection();
   
   // Verificar se há filtros ativos
   const activeFilters = getActiveFilterCount();
@@ -188,7 +188,7 @@ function clearFilterChip(key, label, tone = 'accent') {
 function renderDashboardContent() {
   const content = document.getElementById('page-content');
   const projects = dataService.getProjects();
-  const users = dataService.getUsers();
+  const users = dataService.getUsersForSelection();
   
   // Obter estatísticas com filtros
   const stats = getFilteredStats();
@@ -609,7 +609,7 @@ function getFilteredProjects() {
  */
 function getFilteredWorkload() {
   let cards = [...dataService.getCards()];
-  const users = dataService.getUsers();
+  const users = dataService.getUsersForSelection();
   
   // Aplicar filtros aos cards
   if (dashboardFilters.projectId) {
@@ -652,7 +652,7 @@ function getFilteredWorkload() {
 function renderActiveFilters() {
   const filters = [];
   const projects = dataService.getProjects();
-  const users = dataService.getUsers();
+  const users = dataService.getUsersForSelection();
   
   if (dashboardFilters.projectId) {
     const p = projects.find(p => p.id === dashboardFilters.projectId);

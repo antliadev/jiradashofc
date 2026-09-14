@@ -216,7 +216,7 @@ function renderModeTabs(mode, sharedUserId = '') {
 function renderGeneral() {
   const content = document.getElementById('page-content');
   const p = params();
-  const users = dataService.getUsersRanked().filter(user => user.id !== 'unassigned');
+  const users = dataService.getUsersForSelection().filter(user => user.id !== 'unassigned');
   const selectedUserId = getSharedAnalystId(users);
   const selectedUser = selectedUserId ? dataService.getUserById(selectedUserId) : null;
   const filters = {
@@ -380,7 +380,7 @@ function bindGeneral(selectedUser) {
 function renderComparative() {
   const content = document.getElementById('page-content');
   const p = params();
-  const users = dataService.getUsersRanked().filter(user => user.id !== 'unassigned');
+  const users = dataService.getUsersForSelection().filter(user => user.id !== 'unassigned');
   const selectedIds = p.has('users')
     ? (p.get('users') || '').split(',').filter(Boolean)
     : users.map(user => user.id);
@@ -534,7 +534,7 @@ function bindComparative(selectedIds, filters, view) {
       sort: params().get('sort') || '',
     });
   };
-  const users = dataService.getUsersRanked().filter(user => user.id !== 'unassigned');
+  const users = dataService.getUsersForSelection().filter(user => user.id !== 'unassigned');
   document.getElementById('cmp-users-picker')?.closest('[data-multi-select]')?.addEventListener('multi-select-toggle', event => {
     comparisonProfessionalsOpen = event.detail.open;
   });
@@ -560,7 +560,7 @@ function bindComparative(selectedIds, filters, view) {
 function renderEvolution() {
   const content = document.getElementById('page-content');
   const p = params();
-  const users = dataService.getUsersRanked().filter(user => user.id !== 'unassigned');
+  const users = dataService.getUsersForSelection().filter(user => user.id !== 'unassigned');
   const selectedUserId = getSharedAnalystId(users);
   const selectedUser = selectedUserId ? dataService.getUserById(selectedUserId) : null;
   const end = p.get('end') || new Date().toISOString().slice(0, 10);

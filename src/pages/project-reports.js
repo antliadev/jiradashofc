@@ -391,7 +391,8 @@ function renderHealthReport() {
   const healthAssigneeOptions = [...new Map(riskCards
     .map(item => [item.card.assigneeId || 'unassigned', item.assigneeName]))
     .entries()]
-    .filter(([id]) => id === 'unassigned' || dataService.getUsers().some(user => user.id === id));
+    .filter(([id]) => id === 'unassigned' || dataService.getUsersForSelection().some(user => user.id === id))
+    .sort(([, left], [, right]) => String(left).localeCompare(String(right), 'pt-BR', { sensitivity: 'base', numeric: true }));
   if (healthAssigneeFilter && !healthAssigneeOptions.some(([id]) => id === healthAssigneeFilter)) {
     healthAssigneeFilter = '';
   }

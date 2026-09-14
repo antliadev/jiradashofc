@@ -930,6 +930,10 @@ class DataService {
   getCardById(id) { return this._cards.find(c => c.id === id) || null; }
 
   getUsers() { return [...this._users]; }
+  getUsersForSelection() {
+    return [...this._users].sort((a, b) => String(a.displayName || a.name || a.email || a.id || '')
+      .localeCompare(String(b.displayName || b.name || b.email || b.id || ''), 'pt-BR', { sensitivity: 'base', numeric: true }));
+  }
   getUserById(id) { return this._ensureDerived().userById.get(id) || null; }
   getStatusOptions(projectId = null) {
     if (!projectId) return [...this._ensureDerived().statusOptions];

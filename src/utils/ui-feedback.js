@@ -12,11 +12,90 @@ function escapeHtml(value) {
 
 export function businessHelp(title, description) {
   return `
-    <button type="button" class="business-help" aria-label="${escapeHtml(title)}">
+    <button type="button" class="business-help" aria-label="${escapeHtml(title)}" data-help-title="${escapeHtml(title)}" data-help-description="${escapeHtml(description)}">
       <span aria-hidden="true">?</span>
-      <span class="business-help-popover" role="tooltip"><strong>${escapeHtml(title)}</strong>${escapeHtml(description)}</span>
     </button>
   `;
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+export function initBusinessHelpTooltips() {
+  let tooltip = null;
+  let activeButton = null;
+
+  const ensureTooltip = () => {
+    if (tooltip) return tooltip;
+    tooltip = document.createElement('div');
+    tooltip.className = 'business-help-popover';
+    tooltip.setAttribute('role', 'tooltip');
+    tooltip.setAttribute('aria-hidden', 'true');
+    tooltip.innerHTML = '<strong></strong><span></span>';
+    document.body.appendChild(tooltip);
+    return tooltip;
+  };
+
+  const hide = () => {
+    if (!tooltip) return;
+    tooltip.classList.remove('is-visible');
+    tooltip.setAttribute('aria-hidden', 'true');
+    if (activeButton) activeButton.removeAttribute('aria-describedby');
+    activeButton = null;
+  };
+
+  const position = () => {
+    if (!tooltip || !activeButton) return;
+    const margin = 12;
+    const buttonRect = activeButton.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+    const preferredTop = buttonRect.bottom + 10;
+    const top = preferredTop + tooltipRect.height + margin <= window.innerHeight
+      ? preferredTop
+      : Math.max(margin, buttonRect.top - tooltipRect.height - 10);
+    const left = clamp(
+      buttonRect.left + buttonRect.width / 2 - tooltipRect.width / 2,
+      margin,
+      window.innerWidth - tooltipRect.width - margin
+    );
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+  };
+
+  const show = button => {
+    const title = button.dataset.helpTitle || button.getAttribute('aria-label') || 'Informação';
+    const description = button.dataset.helpDescription || '';
+    activeButton = button;
+    const node = ensureTooltip();
+    node.id = 'business-help-floating-tooltip';
+    node.querySelector('strong').textContent = title;
+    node.querySelector('span').textContent = description;
+    button.setAttribute('aria-describedby', node.id);
+    node.setAttribute('aria-hidden', 'false');
+    node.classList.add('is-visible');
+    position();
+  };
+
+  document.addEventListener('pointerover', event => {
+    const button = event.target.closest?.('.business-help');
+    if (button) show(button);
+  });
+  document.addEventListener('focusin', event => {
+    const button = event.target.closest?.('.business-help');
+    if (button) show(button);
+  });
+  document.addEventListener('pointerout', event => {
+    if (event.target.closest?.('.business-help')) hide();
+  });
+  document.addEventListener('focusout', event => {
+    if (event.target.closest?.('.business-help')) hide();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') hide();
+  });
+  window.addEventListener('scroll', position, true);
+  window.addEventListener('resize', position);
 }
 
 function getFeedbackRoot() {

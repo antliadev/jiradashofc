@@ -9,12 +9,13 @@ import { dataService } from './data/data-service.js';
 import { canAccessRoute, firstAllowedRoute, getCurrentUser, HOME_ROUTE, setCurrentUser } from './utils/access-control.js';
 import { sanitize } from './utils/helpers.js';
 import { getTheme, toggleTheme } from './utils/theme.js';
-import { renderPageLoading } from './utils/ui-feedback.js';
+import { initBusinessHelpTooltips, renderPageLoading } from './utils/ui-feedback.js';
 import { initSelectLists } from './utils/select-list.js';
 import { initMultiSelects } from './utils/multi-select.js';
 
 initSelectLists();
 initMultiSelects();
+initBusinessHelpTooltips();
 dataService.subscribe(() => {
   if (!document.getElementById('sidebar')?.classList.contains('hidden')) {
     renderSidebar();

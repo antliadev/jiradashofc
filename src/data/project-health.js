@@ -43,15 +43,25 @@ function isMappedStatus(card, statusMap) {
 }
 
 export function businessDaysBetween(start, end = new Date()) {
-  const from = toDate(start);
-  const until = toDate(end);
+  const toUtcDateOnly = value => {
+    if (!value) return null;
+    if (typeof value === 'string') {
+      const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (match) return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+    }
+    const date = toDate(value);
+    return validDate(date) ? new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())) : null;
+  };
+  const from = toUtcDateOnly(start);
+  const until = toUtcDateOnly(end);
   if (!validDate(from) || !validDate(until) || until <= from) return 0;
   let days = 0;
   const cursor = new Date(from);
-  cursor.setHours(12, 0, 0, 0);
-  while (cursor < until) {
-    if (cursor.getDay() !== 0 && cursor.getDay() !== 6) days += 1;
-    cursor.setDate(cursor.getDate() + 1);
+  cursor.setUTCDate(cursor.getUTCDate() + 1);
+  while (cursor <= until) {
+    const day = cursor.getUTCDay();
+    if (day !== 0 && day !== 6) days += 1;
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return days;
 }

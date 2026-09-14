@@ -205,7 +205,7 @@ function renderAllocationForm(state, users, allocation = {}) {
   </form>`;
 }
 
-function renderKpis(summary) {
+function renderKpis(summary, { compact = false } = {}) {
   const items = [
     ['Total de profissionais', summary.totals.professionals],
     ['Totalmente alocados', summary.totals.full],
@@ -213,9 +213,9 @@ function renderKpis(summary) {
     ['Disponíveis', summary.totals.available],
     ['Sobrealocados', summary.totals.overallocated],
     ['Sem alocação futura', summary.totals.noFuture],
-    ['Disponíveis nos próximos 30 dias', summary.totals.availableSoon],
   ];
-  return `<div class="kpi-grid">${items.map(([label, value]) => `<div class="kpi-card"><div class="kpi-value">${value}</div><div class="kpi-label">${sanitize(label)}</div></div>`).join('')}</div>`;
+  if (!compact) items.push(['Disponíveis nos próximos 30 dias', summary.totals.availableSoon]);
+  return `<div class="kpi-grid ra-kpi-grid">${items.map(([label, value]) => `<div class="kpi-card"><div class="kpi-value">${value}</div><div class="kpi-label">${sanitize(label)}</div></div>`).join('')}</div>`;
 }
 
 function renderProfessionalView(summary, state) {
@@ -248,6 +248,23 @@ function renderScaleHeader(range, zoom) {
     labels.push(`<span style="left:${left}%">${cursor.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}</span>`);
   }
   return labels.join('');
+}
+
+function renderAllocationCalendar(viewDate) {
+  const reference = parseLocalDate(viewDate);
+  const first = new Date(reference.getFullYear(), reference.getMonth(), 1);
+  const start = new Date(first);
+  start.setDate(first.getDate() - first.getDay());
+  const todayIso = isoDate(new Date());
+  const selectedIso = isoDate(reference);
+  const cells = [];
+  for (let index = 0; index < 42; index++) {
+    const day = addDays(start, index);
+    const inMonth = day.getMonth() === reference.getMonth();
+    const dayIso = isoDate(day);
+    cells.push(`<span class="${inMonth ? '' : 'muted'} ${dayIso === todayIso || dayIso === selectedIso ? 'active' : ''}">${day.getDate()}</span>`);
+  }
+  return `<div class="ra-calendar-grid"><b>D</b><b>S</b><b>T</b><b>Q</b><b>Q</b><b>S</b><b>S</b>${cells.join('')}</div>`;
 }
 
 function timelineStatus(row) {
@@ -291,10 +308,15 @@ function renderTimelineView(summary, state) {
   const today = parseLocalDate(new Date());
   const todayLeft = today >= range.start && today <= range.end ? Math.round(((today - range.start) / 86400000) / days * 100) : null;
   const groups = groupRows(summary.rows, state);
-  return `<section class="report-section ra-timeline-view">
+  return `<section class="ra-timeline-view">
     <div class="section-header">
-      <div><h3>Timeline de Alocação</h3><p>Onde cada profissional está alocado hoje, até quando está coberto e quando ficará sem projeto.</p></div>
-      <label>Agrupar por <select id="ra-group-filter"><option value="role" ${state.filters.groupBy === 'role' ? 'selected' : ''}>Função</option><option value="project" ${state.filters.groupBy === 'project' ? 'selected' : ''}>Projeto</option><option value="client" ${state.filters.groupBy === 'client' ? 'selected' : ''}>Cliente</option></select></label>
+      <div><h3>Timeline de Alocação</h3><p>Visão temporal dos profissionais, capacidade e lacunas de alocação.</p></div>
+      <div class="ra-timeline-actions">
+        <label>Agrupar por <select id="ra-group-filter"><option value="role" ${state.filters.groupBy === 'role' ? 'selected' : ''}>Função</option><option value="project" ${state.filters.groupBy === 'project' ? 'selected' : ''}>Projeto</option><option value="client" ${state.filters.groupBy === 'client' ? 'selected' : ''}>Cliente</option></select></label>
+        <button type="button" class="btn btn-secondary" id="ra-zoom-out">−</button>
+        <button type="button" class="btn btn-secondary" id="ra-fit-timeline">⌕</button>
+        <button type="button" class="btn btn-secondary" id="ra-zoom-in">+</button>
+      </div>
     </div>
     <div class="ra-timeline-shell">
       <div class="ra-timeline-table">
@@ -315,14 +337,14 @@ function renderTimelineView(summary, state) {
               const project = state.projects.find(project => project.id === item.projectId);
               const title = `${project?.name || item.projectId} · ${item.percent}% · ${formatDate(item.startDate)} a ${formatDate(item.endDate)}${item.role ? ` · ${item.role}` : ''}`;
               return `<button type="button" class="ra-timeline-bar" data-edit-allocation="${sanitize(item.id)}" style="left:${start}%;width:${Math.min(width, 100 - start)}%;background:${projectColor(item.projectId)}" title="${sanitizeTitle(title)}"><span>${sanitize(project?.name || item.projectId)}</span><small>${formatDate(item.startDate)} → ${formatDate(item.endDate)}</small></button>`;
-            }).join('')}${row.noFuture ? '<span class="ra-no-future">Sem alocação futura</span>' : ''}</div>
+            }).join('')}${row.noFuture ? '<span class="ra-no-future">Sem alocação futura</span>' : row.currentLoad < 100 ? `<span class="ra-no-future">${Math.max(0, 100 - row.currentLoad)}% disponível</span>` : ''}</div>
           </article>`;
         }).join('')}</details>`).join('') || '<p class="muted">Nenhum profissional encontrado para os filtros atuais.</p>'}
       </div>
       <aside class="ra-timeline-aside">
-        <div class="ra-calendar-card"><h4>Calendário de Alocação</h4><strong>${parseLocalDate(state.viewDate).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</strong><p>Use Anterior, Hoje e Próximo para navegar a janela temporal.</p></div>
-        <div class="ra-legend"><h4>Legenda de Status</h4><span><i class="ra-dot allocated"></i> Em andamento</span><span><i class="ra-dot warning"></i> Atenção / parcial</span><span><i class="ra-dot overallocated"></i> Sobre alocado</span><span><i class="ra-dot available"></i> Disponível</span></div>
-        <div class="ra-period-summary"><h4>Resumo do período</h4><p>Alocados: <strong>${summary.totals.full}</strong></p><p>Parciais: <strong>${summary.totals.partial}</strong></p><p>Disponíveis: <strong>${summary.totals.available}</strong></p><p>Sem futuro: <strong>${summary.totals.noFuture}</strong></p></div>
+        <div class="ra-calendar-card"><h4>Calendário de Alocação</h4><strong>${parseLocalDate(state.viewDate).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</strong>${renderAllocationCalendar(state.viewDate)}</div>
+        <div class="ra-legend"><h4>Legenda de Status</h4><span><i class="ra-dot allocated"></i><b>Em andamento</b><small>Projeto em execução</small></span><span><i class="ra-dot planned"></i><b>Planejado</b><small>Alocação confirmada</small></span><span><i class="ra-dot warning"></i><b>Atenção</b><small>Risco de sobrealocação</small></span><span><i class="ra-dot overallocated"></i><b>Sobre alocado</b><small>Acima de 100%</small></span><span><i class="ra-dot finished"></i><b>Finalizado</b><small>Projeto concluído</small></span><span><i class="ra-empty-line"></i><b>Sem alocação</b><small>Período sem projeto</small></span></div>
+        <div class="ra-period-summary"><h4>Resumo do Período</h4><p>Profissionais alocados <strong>${summary.totals.full}</strong></p><p>Parcialmente alocados <strong>${summary.totals.partial}</strong></p><p>Disponíveis <strong>${summary.totals.available}</strong></p><p>Sobre alocados <strong>${summary.totals.overallocated}</strong></p><p>Sem alocação futura <strong>${summary.totals.noFuture}</strong></p></div>
       </aside>
     </div>
   </section>`;
@@ -374,9 +396,10 @@ export async function renderResourceAllocation() {
   const summary = summarizeResources(ctx.users, ctx.projects, ctx.allocations, new Date(), state.alertDays);
   const clients = [...new Set(state.projects.map(project => project.client).filter(Boolean))].sort();
   const roles = [...new Set(state.allocations.map(item => item.role).filter(Boolean))].sort();
-  content.innerHTML = `<div class="report-page resource-allocation">
+  const isTimeline = state.tab === 'timeline';
+  content.innerHTML = `<div class="report-page resource-allocation ${isTimeline ? 'resource-allocation-timeline-mode' : ''}">
     ${state.warning ? `<div class="sr-warning" role="alert"><strong>Atenção:</strong> ${sanitize(state.warning)}</div>` : ''}
-    <p class="muted">Fonte dos dados de alocação: ${state.persistence === 'supabase' ? 'Supabase/API protegida' : 'fallback local do navegador'}. Profissionais vêm dos dados sincronizados do RJA.</p>
+    ${isTimeline ? '<p class="muted">Visão visual da alocação de profissionais em projetos ao longo do tempo.</p>' : `<p class="muted">Fonte dos dados de alocação: ${state.persistence === 'supabase' ? 'Supabase/API protegida' : 'fallback local do navegador'}. Profissionais vêm dos dados sincronizados do RJA.</p>`}
     <div class="report-tabs"><button class="${state.tab === 'professional' ? 'active' : ''}" data-tab="professional">Visão por Profissional</button><button class="${state.tab === 'project' ? 'active' : ''}" data-tab="project">Visão por Projeto</button><button class="${state.tab === 'timeline' ? 'active' : ''}" data-tab="timeline">Visão Timeline</button></div>
     <div class="report-toolbar">
       <label>Busca<input id="ra-search" value="${sanitize(state.filters.search || '')}" placeholder="Profissional, projeto ou cliente"></label>
@@ -394,10 +417,10 @@ export async function renderResourceAllocation() {
       <button class="btn btn-secondary" id="ra-next" title="Avançar janela">Próximo</button>
       <button class="btn btn-secondary" id="ra-clear">Limpar</button>
     </div>
-    ${renderKpis(summary)}
-    <section class="report-section"><h3>Cadastro</h3>${renderProjectForm(editingProject || {})}${renderAllocationForm(state, users, editingAllocation || {})}</section>
-    ${state.tab === 'timeline' ? renderTimelineView(summary, state) : state.tab === 'project' ? renderProjectView(ctx.projects, ctx.allocations, users) : renderProfessionalView(summary, state)}
-    ${renderHistory(state, users)}
+    ${renderKpis(summary, { compact: isTimeline })}
+    ${isTimeline ? '' : `<section class="report-section"><h3>Cadastro</h3>${renderProjectForm(editingProject || {})}${renderAllocationForm(state, users, editingAllocation || {})}</section>`}
+    ${isTimeline ? renderTimelineView(summary, state) : state.tab === 'project' ? renderProjectView(ctx.projects, ctx.allocations, users) : renderProfessionalView(summary, state)}
+    ${isTimeline ? '' : renderHistory(state, users)}
   </div>`;
 
   const applyFilters = () => {
@@ -422,6 +445,20 @@ export async function renderResourceAllocation() {
   document.getElementById('ra-prev')?.addEventListener('click', () => { persist({ viewDate: isoDate(addDays(state.viewDate, -(ZOOM_DAYS[state.zoom] || ZOOM_DAYS.month))) }); renderResourceAllocation(); });
   document.getElementById('ra-today')?.addEventListener('click', () => { persist({ viewDate: isoDate(new Date()) }); renderResourceAllocation(); });
   document.getElementById('ra-next')?.addEventListener('click', () => { persist({ viewDate: isoDate(addDays(state.viewDate, ZOOM_DAYS[state.zoom] || ZOOM_DAYS.month)) }); renderResourceAllocation(); });
+  document.getElementById('ra-zoom-out')?.addEventListener('click', () => {
+    const order = Object.keys(ZOOMS);
+    persist({ zoom: order[Math.max(0, order.indexOf(state.zoom) - 1)] || state.zoom });
+    renderResourceAllocation();
+  });
+  document.getElementById('ra-zoom-in')?.addEventListener('click', () => {
+    const order = Object.keys(ZOOMS);
+    persist({ zoom: order[Math.min(order.length - 1, order.indexOf(state.zoom) + 1)] || state.zoom });
+    renderResourceAllocation();
+  });
+  document.getElementById('ra-fit-timeline')?.addEventListener('click', () => {
+    persist({ filters: { ...state.filters, start: '', end: '' }, zoom: 'month', viewDate: isoDate(new Date()) });
+    renderResourceAllocation();
+  });
   document.getElementById('ra-cancel-project-edit')?.addEventListener('click', () => { persist({ filters: { ...state.filters, editProjectId: '' } }); renderResourceAllocation(); });
   document.getElementById('ra-cancel-allocation-edit')?.addEventListener('click', () => { persist({ filters: { ...state.filters, editAllocationId: '' } }); renderResourceAllocation(); });
   document.querySelectorAll('[data-edit-project]').forEach(button => button.addEventListener('click', () => { persist({ filters: { ...state.filters, editProjectId: button.dataset.editProject } }); renderResourceAllocation(); }));

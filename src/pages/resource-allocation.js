@@ -495,17 +495,13 @@ function renderProjectView(projects, allocations, users) {
       const displayName = user?.displayName || item.userName || item.userId || 'Profissional';
       const allocationStatus = temporalAllocationStatus(item);
       return `<div class="ra-project-allocation ${allocationStatus.id}">
-          <div class="ra-user-avatar">${sanitize(initials(displayName))}</div>
+          <div class="ra-user-avatar">${user?.avatarUrl ? `<img src="${sanitizeTitle(user.avatarUrl)}" alt="${sanitizeTitle(displayName)}" onerror="const parent=this.parentElement;this.remove();parent.textContent='${sanitizeTitle(initials(displayName))}'">` : sanitize(initials(displayName))}</div>
           <div class="ra-allocation-main">
             <strong>${sanitize(displayName)}</strong>
             <span>${item.role ? `${sanitize(item.role)} · ` : ''}${formatDate(item.startDate)} → ${formatDate(item.endDate)}</span>
           </div>
           <span class="ra-allocation-percent ${Number(item.percent || 0) > 100 ? 'danger' : Number(item.percent || 0) >= 100 ? 'success' : 'warning'}">${sanitize(item.percent)}%</span>
           <span class="ra-allocation-status">${allocationStatus.label}</span>
-          <div class="ra-allocation-actions">
-            <button class="btn btn-ghost btn-compact" type="button" data-edit-allocation="${sanitize(item.id)}">Editar</button>
-            <button class="btn btn-ghost btn-compact danger" type="button" data-delete-allocation="${sanitize(item.id)}">Remover</button>
-          </div>
         </div>`;
     }).join('') : '<div class="ra-project-empty"><strong>Sem profissionais alocados</strong><span>Use o cadastro acima para vincular profissionais a este projeto.</span></div>'}</div>
     </article>`;

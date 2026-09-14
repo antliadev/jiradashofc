@@ -9,6 +9,7 @@ try {
   const dialogs = [];
   const projectId = '11111111-1111-4111-8111-111111111111';
   const secondProjectId = '22222222-2222-4222-8222-222222222222';
+  const avatarSvg = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="#6366f1"/><text x="20" y="25" text-anchor="middle" fill="white" font-size="14">AM</text></svg>')}`;
   const allocations = [];
   const history = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -32,17 +33,17 @@ try {
     return route.fulfill({ status: 404, json: { error: 'unexpected route' } });
   });
   await page.goto('http://127.0.0.1:5173/ra-fixture');
-  await page.evaluate(async () => {
+  await page.evaluate(async avatarUrl => {
     localStorage.removeItem('rja.resourceAllocation.v1');
     localStorage.removeItem('rja.resourceAllocation.ui.v1');
     const { dataService } = await import('/src/data/data-service.js');
     dataService.getUsersRanked = () => [
-      { id: 'u1', displayName: 'Ana', email: 'ana@example.test' },
+      { id: 'u1', displayName: 'Ana Maria Colaboradora de Teste', email: 'ana@example.test', avatarUrl },
       { id: 'u2', displayName: 'Bruno', email: 'bruno@example.test' },
       { id: 'u3', displayName: 'Carlos', email: 'carlos@example.test' },
     ];
     await (await import('/src/pages/resource-allocation.js')).renderResourceAllocation();
-  });
+  }, avatarSvg);
   assert.match(await page.locator('#page-header').innerText(), /Alocação de Recursos/);
   assert.equal(await page.locator('.ra-row').count(), 2);
   assert.doesNotMatch(await page.locator('#ra-user-filter').innerText(), /Bruno/);
@@ -66,6 +67,9 @@ try {
   assert.match(await page.locator('.ra-row[data-user-id="u1"]').innerText(), /120%/);
   await page.click('[data-tab="project"]');
   assert.match(await page.locator('.ra-project').first().innerText(), /Payment Integration|Dengo/);
+  assert.equal(await page.locator('.ra-project-allocation [data-edit-allocation], .ra-project-allocation [data-delete-allocation]').count(), 0);
+  assert.equal(await page.locator('.ra-project-allocation .ra-user-avatar img').count(), 2);
+  assert.match(await page.locator('.ra-project-allocation').first().innerText(), /Ana Maria Colaboradora de Teste/);
   await page.evaluate(async () => {
     localStorage.setItem('rja.resourceAllocation.ui.v1', JSON.stringify({ tab: 'timeline', zoom: 'semester', viewDate: '2026-09-01', filters: {} }));
     await (await import('/src/pages/resource-allocation.js')).renderResourceAllocation();

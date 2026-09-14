@@ -1,6 +1,6 @@
 import { dataService } from '../data/data-service.js';
 import { sanitize, sanitizeTitle, formatDate } from '../utils/helpers.js';
-import { projectColor, simulateAllocation, summarizeResources, timelineRange, validateAllocation, validateAllocationProject } from '../data/resource-allocation.js';
+import { allocationLoadByDay, projectColor, simulateAllocation, summarizeResources, timelineRange, validateAllocation, validateAllocationProject } from '../data/resource-allocation.js';
 
 const STORAGE_KEY = 'rja.resourceAllocation.v1';
 const UI_KEY = 'rja.resourceAllocation.ui.v1';
@@ -267,6 +267,56 @@ function renderAllocationCalendar(viewDate) {
   return `<div class="ra-calendar-grid"><b>D</b><b>S</b><b>T</b><b>Q</b><b>Q</b><b>S</b><b>S</b>${cells.join('')}</div>`;
 }
 
+function daySpan(start, end) {
+  return Math.max(1, Math.round((end - start) / 86400000) + 1);
+}
+
+function visibleAllocationSegment(allocation, range) {
+  const allocationStart = parseLocalDate(allocation.startDate);
+  const allocationEnd = parseLocalDate(allocation.endDate);
+  if (!allocationStart || !allocationEnd || allocationEnd < range.start || allocationStart > range.end) return null;
+  const days = daySpan(range.start, range.end);
+  const visibleStart = allocationStart < range.start ? range.start : allocationStart;
+  const visibleEnd = allocationEnd > range.end ? range.end : allocationEnd;
+  const left = ((visibleStart - range.start) / 86400000) / days * 100;
+  const width = daySpan(visibleStart, visibleEnd) / days * 100;
+  return {
+    allocationStart,
+    allocationEnd,
+    visibleStart,
+    visibleEnd,
+    left: Math.max(0, left),
+    width: Math.min(width, 100 - Math.max(0, left)),
+    clippedStart: allocationStart < range.start,
+    clippedEnd: allocationEnd > range.end,
+  };
+}
+
+function peakVisibleLoad(allocations, userId, range) {
+  return allocationLoadByDay(allocations, userId, range.start, range.end)
+    .reduce((peak, day) => Math.max(peak, day.total), 0);
+}
+
+function availabilitySegmentForRow(row, range) {
+  const lastEnd = row.allocations.reduce((max, item) => {
+    const end = parseLocalDate(item.endDate);
+    return end && (!max || end > max) ? end : max;
+  }, null);
+  if (!lastEnd || lastEnd >= range.end) return null;
+  const start = addDays(lastEnd, 1);
+  const visibleStart = start < range.start ? range.start : start;
+  if (visibleStart > range.end) return null;
+  const days = daySpan(range.start, range.end);
+  const left = ((visibleStart - range.start) / 86400000) / days * 100;
+  const width = daySpan(visibleStart, range.end) / days * 100;
+  return {
+    left: Math.max(0, left),
+    width: Math.min(width, 100 - Math.max(0, left)),
+    label: '100% disponível',
+    title: `Disponível a partir de ${formatDate(start)}`,
+  };
+}
+
 function timelineStatus(row) {
   if (row.status === 'overallocated') return 'overallocated';
   if (row.availableSoon || row.noFuture) return 'attention';
@@ -304,7 +354,7 @@ function renderTimelineView(summary, state) {
   const range = state.filters.start || state.filters.end
     ? { start: parseLocalDate(state.filters.start || state.viewDate), end: parseLocalDate(state.filters.end || visibleEnd) }
     : { start: parseLocalDate(state.viewDate), end: visibleEnd };
-  const days = Math.max(1, Math.round((range.end - range.start) / 86400000) + 1);
+  const days = daySpan(range.start, range.end);
   const today = parseLocalDate(new Date());
   const todayLeft = today >= range.start && today <= range.end ? Math.round(((today - range.start) / 86400000) / days * 100) : null;
   const groups = groupRows(summary.rows, state);
@@ -324,20 +374,24 @@ function renderTimelineView(summary, state) {
           <span>Profissional</span><span>% alocação</span><div class="ra-scale">${renderScaleHeader(range, state.zoom)}${todayLeft !== null ? `<i style="left:${todayLeft}%">Hoje</i>` : ''}</div>
         </div>
         ${groups.map(group => `<details class="ra-group" open><summary>${sanitize(group.title)} <small>${sanitize(group.subtitle)}</small></summary>${group.rows.map(row => {
-          const status = timelineStatus(row);
+          const visibleAllocations = row.allocations
+            .map(item => ({ item, segment: visibleAllocationSegment(item, range) }))
+            .filter(entry => entry.segment)
+            .sort((a, b) => a.segment.visibleStart - b.segment.visibleStart || String(a.item.projectId).localeCompare(String(b.item.projectId)));
+          const peakLoad = peakVisibleLoad(state.allocations, row.user.id, range);
+          const status = peakLoad > 100 ? 'overallocated' : timelineStatus(row);
+          const availability = availabilitySegmentForRow(row, range);
           return `<article class="ra-timeline-row ${status}" data-user-id="${sanitize(row.user.id)}">
             <div class="ra-sticky-person"><span class="ra-dot ${status}"></span><strong>${sanitize(row.user.displayName)}</strong><small>${row.coveredUntil ? `Coberto até ${formatDate(row.coveredUntil)}` : 'Sem alocação futura'}</small></div>
-            <div class="ra-load-badge ${row.currentLoad > 100 ? 'danger' : row.currentLoad >= 100 ? 'success' : row.currentLoad > 0 ? 'warning' : ''}">${row.currentLoad}%</div>
-            <div class="ra-timeline-track">${todayLeft !== null ? `<span class="ra-today-line" style="left:${todayLeft}%"></span>` : ''}${row.allocations.map(item => {
-              const allocationStart = parseLocalDate(item.startDate);
-              const allocationEnd = parseLocalDate(item.endDate);
-              if (!allocationStart || !allocationEnd || allocationEnd < range.start || allocationStart > range.end) return '';
-              const start = Math.max(0, Math.round(((allocationStart - range.start) / 86400000) / days * 100));
-              const width = Math.max(4, Math.round((((allocationEnd - allocationStart) / 86400000) + 1) / days * 100));
+            <div class="ra-load-badge ${peakLoad > 100 ? 'danger' : peakLoad >= 100 ? 'success' : peakLoad > 0 ? 'warning' : ''}">${peakLoad}%</div>
+            <div class="ra-timeline-track">${todayLeft !== null ? `<span class="ra-today-line" style="left:${todayLeft}%"></span>` : ''}${visibleAllocations.map(({ item, segment }) => {
               const project = state.projects.find(project => project.id === item.projectId);
               const title = `${project?.name || item.projectId} · ${item.percent}% · ${formatDate(item.startDate)} a ${formatDate(item.endDate)}${item.role ? ` · ${item.role}` : ''}`;
-              return `<button type="button" class="ra-timeline-bar" data-edit-allocation="${sanitize(item.id)}" style="left:${start}%;width:${Math.min(width, 100 - start)}%;background:${projectColor(item.projectId)}" title="${sanitizeTitle(title)}"><span>${sanitize(project?.name || item.projectId)}</span><small>${formatDate(item.startDate)} → ${formatDate(item.endDate)}</small></button>`;
-            }).join('')}${row.noFuture ? '<span class="ra-no-future">Sem alocação futura</span>' : row.currentLoad < 100 ? `<span class="ra-no-future">${Math.max(0, 100 - row.currentLoad)}% disponível</span>` : ''}</div>
+              return `<div class="ra-timeline-subrow">
+                <span class="ra-subrow-percent ${Number(item.percent || 0) > 100 ? 'danger' : Number(item.percent || 0) >= 100 ? 'success' : 'warning'}">${sanitize(item.percent)}%</span>
+                <button type="button" class="ra-timeline-bar ${segment.clippedStart ? 'is-clipped-start' : ''} ${segment.clippedEnd ? 'is-clipped-end' : ''}" data-edit-allocation="${sanitize(item.id)}" style="left:${segment.left.toFixed(4)}%;width:${Math.max(1.2, segment.width).toFixed(4)}%;background:${projectColor(item.projectId)}" title="${sanitizeTitle(title)}"><span>${sanitize(project?.name || item.projectId)}</span><small>${formatDate(item.startDate)} → ${formatDate(item.endDate)}</small></button>
+              </div>`;
+            }).join('')}${availability ? `<div class="ra-timeline-subrow ra-availability-subrow"><span class="ra-subrow-percent available">0%</span><span class="ra-no-future" style="left:${availability.left.toFixed(4)}%;width:${Math.max(1.2, availability.width).toFixed(4)}%" title="${sanitizeTitle(availability.title)}">${sanitize(availability.label)}</span></div>` : visibleAllocations.length ? '' : '<div class="ra-empty-timeline">Sem alocação neste período</div>'}</div>
           </article>`;
         }).join('')}</details>`).join('') || '<p class="muted">Nenhum profissional encontrado para os filtros atuais.</p>'}
       </div>

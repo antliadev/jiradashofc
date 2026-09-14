@@ -2243,7 +2243,7 @@ input, select, textarea { font-family: inherit; }
 }
 
 .ra-timeline-row {
-  min-height: 54px;
+  min-height: 58px;
   border-top: 1px solid rgba(95, 132, 183, .16);
 }
 
@@ -2259,6 +2259,7 @@ input, select, textarea { font-family: inherit; }
   background: rgba(12, 30, 54, .96);
   border-right: 1px solid var(--ra-line, var(--border));
   color: #eaf2ff;
+  min-height: inherit;
 }
 
 .ra-sticky-person small {
@@ -2284,7 +2285,10 @@ input, select, textarea { font-family: inherit; }
 
 .ra-timeline-track {
   position: relative;
-  min-height: 54px;
+  display: grid;
+  gap: 6px;
+  min-height: 58px;
+  padding: 8px 10px;
   background:
     linear-gradient(90deg, rgba(95, 132, 183, .16) 1px, transparent 1px),
     rgba(8, 23, 42, .62);
@@ -2292,9 +2296,36 @@ input, select, textarea { font-family: inherit; }
   overflow: hidden;
 }
 
+.ra-timeline-subrow {
+  position: relative;
+  min-height: 34px;
+}
+
+.ra-subrow-percent {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  z-index: 2;
+  transform: translateY(-50%);
+  min-width: 42px;
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: rgba(15, 23, 42, .68);
+  color: #eaf2ff;
+  font-size: 10px;
+  font-weight: 900;
+  text-align: center;
+  box-shadow: 0 0 0 1px rgba(148, 163, 184, .18);
+}
+
+.ra-subrow-percent.success { color: #86efac; }
+.ra-subrow-percent.warning { color: #fbbf24; }
+.ra-subrow-percent.danger { color: #fca5a5; }
+.ra-subrow-percent.available { color: #aebed4; }
+
 .ra-timeline-bar {
   position: absolute;
-  top: 9px;
+  top: 0;
   height: 34px;
   border: 0;
   border-radius: 7px;
@@ -2308,6 +2339,16 @@ input, select, textarea { font-family: inherit; }
   overflow: hidden;
   cursor: pointer;
   box-shadow: 0 10px 24px rgba(0, 0, 0, .24);
+}
+
+.ra-timeline-bar.is-clipped-start {
+  border-top-left-radius: 2px;
+  border-bottom-left-radius: 2px;
+}
+
+.ra-timeline-bar.is-clipped-end {
+  border-top-right-radius: 2px;
+  border-bottom-right-radius: 2px;
 }
 
 .ra-timeline-bar span,
@@ -2340,15 +2381,28 @@ input, select, textarea { font-family: inherit; }
 
 .ra-no-future {
   position: absolute;
-  top: 15px;
-  right: 14px;
+  top: 0;
+  height: 34px;
   border: 1px dashed rgba(170, 193, 224, .55);
   border-radius: 7px;
   color: #aebed4;
-  padding: 4px 12px;
+  padding: 8px 12px;
   font-size: 11px;
-  min-width: 180px;
   text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: rgba(15, 23, 42, .26);
+}
+
+.ra-empty-timeline {
+  min-height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed rgba(170, 193, 224, .42);
+  border-radius: 7px;
+  color: #aebed4;
+  font-size: 11px;
 }
 
 .ra-timeline-aside {

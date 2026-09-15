@@ -16,6 +16,21 @@ function addDays(date, days) {
   return next;
 }
 
+function addCalendarMonths(date, months) {
+  const source = toDate(date) || toDate(new Date());
+  const next = new Date(source);
+  const day = next.getDate();
+  next.setDate(1);
+  next.setMonth(next.getMonth() + Number(months || 0));
+  next.setDate(Math.min(day, new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate()));
+  return next;
+}
+
+function startOfNextMonthWindow(date, months) {
+  const source = toDate(date) || toDate(new Date());
+  return new Date(source.getFullYear(), source.getMonth() + Number(months || 1), 1);
+}
+
 export function projectColor(projectId) {
   const text = String(projectId || '');
   let hash = 0;
@@ -69,9 +84,11 @@ export function simulateAllocation(allocations, allocation) {
   return { peak, conflict: peak > 100, days: resulting };
 }
 
-export function summarizeResources(users, projects, allocations, todayValue = new Date(), alertDays = 30) {
+export function summarizeResources(users, projects, allocations, todayValue = new Date(), alertMonths = 1) {
   const today = toDate(todayValue);
-  const alertUntil = addDays(today, alertDays);
+  const months = Math.max(1, Number(alertMonths || 1));
+  const alertFrom = startOfNextMonthWindow(today, months);
+  const alertUntil = addCalendarMonths(today, months);
   const byUser = users.map(user => {
     const userAllocations = allocations.filter(item => item.userId === user.id).sort((a, b) => String(a.startDate).localeCompare(String(b.startDate)));
     const current = userAllocations.filter(item => overlaps(item, { startDate: today, endDate: today }));
@@ -101,7 +118,7 @@ export function summarizeResources(users, projects, allocations, todayValue = ne
       nextAvailability,
       nextProject,
       gaps,
-      noFuture: current.length > 0 && future.length === 0,
+      noFuture: !coveredUntil || coveredUntil < alertFrom,
       availableSoon: coveredUntil && coveredUntil >= today && coveredUntil <= alertUntil && future.length === 0,
       projectNames: current.map(item => projects.find(project => project.id === item.projectId)?.name || item.projectId),
     };

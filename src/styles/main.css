@@ -2286,23 +2286,54 @@ input, select, textarea { font-family: inherit; }
 .ra-scale {
   position: relative;
   min-height: 58px;
-  background: linear-gradient(90deg, rgba(95, 132, 183, .18) 1px, transparent 1px);
-  background-size: 12.5% 100%;
+  overflow: hidden;
 }
 
 :root[data-theme="light"] .ra-scale {
-  background-image: linear-gradient(90deg, rgba(148, 163, 184, .32) 1px, transparent 1px);
+  background: #edf4ff;
 }
 
-.ra-scale span {
+.ra-month-grid {
   position: absolute;
-  top: 32px;
-  transform: translateX(-50%);
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.ra-month-grid i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 1px solid rgba(95, 132, 183, .28);
+  border-right: 1px solid rgba(95, 132, 183, .12);
+  background: rgba(95, 132, 183, .045);
+}
+
+.ra-month-grid i:nth-child(even) {
+  background: rgba(95, 132, 183, .075);
+}
+
+:root[data-theme="light"] .ra-month-grid i {
+  border-left-color: rgba(148, 163, 184, .34);
+  border-right-color: rgba(148, 163, 184, .18);
+  background: rgba(219, 234, 254, .42);
+}
+
+:root[data-theme="light"] .ra-month-grid i:nth-child(even) {
+  background: rgba(226, 232, 240, .62);
+}
+
+.ra-scale .ra-month-label {
+  position: absolute;
+  top: 30px;
+  z-index: 1;
   white-space: nowrap;
-  max-width: 86px;
+  max-width: none;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-align: center;
   font-size: 10px;
+  padding: 0 4px;
 }
 
 .ra-scale i {
@@ -2418,21 +2449,17 @@ input, select, textarea { font-family: inherit; }
   gap: 6px;
   min-height: 58px;
   padding: 8px 10px;
-  background:
-    linear-gradient(90deg, rgba(95, 132, 183, .16) 1px, transparent 1px),
-    rgba(8, 23, 42, .62);
-  background-size: 12.5% 100%;
+  background: rgba(8, 23, 42, .62);
   overflow: hidden;
 }
 
 :root[data-theme="light"] .ra-timeline-track {
-  background:
-    linear-gradient(90deg, rgba(148, 163, 184, .26) 1px, transparent 1px),
-    #f8fbff;
+  background: #f8fbff;
 }
 
 .ra-timeline-subrow {
   position: relative;
+  z-index: 2;
   min-height: 34px;
 }
 
@@ -2468,6 +2495,7 @@ input, select, textarea { font-family: inherit; }
 .ra-timeline-bar {
   position: absolute;
   top: 0;
+  z-index: 2;
   height: 34px;
   border: 0;
   border-radius: 7px;
@@ -2518,26 +2546,9 @@ input, select, textarea { font-family: inherit; }
   width: 2px;
   background: #60a5fa;
   box-shadow: 0 0 0 3px rgba(99, 102, 241, .14);
-  z-index: 1;
+  z-index: 3;
 }
 
-.ra-no-future {
-  position: absolute;
-  top: 0;
-  height: 34px;
-  border: 1px dashed rgba(170, 193, 224, .55);
-  border-radius: 7px;
-  color: #aebed4;
-  padding: 8px 12px;
-  font-size: 11px;
-  text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  background: rgba(15, 23, 42, .26);
-}
-
-:root[data-theme="light"] .ra-no-future,
 :root[data-theme="light"] .ra-empty-timeline {
   border-color: rgba(100, 116, 139, .42);
   color: #64748b;
@@ -2548,6 +2559,8 @@ input, select, textarea { font-family: inherit; }
   min-height: 34px;
   display: grid;
   place-items: center;
+  position: relative;
+  z-index: 2;
   border: 1px dashed rgba(170, 193, 224, .42);
   border-radius: 7px;
   color: #aebed4;
@@ -2638,7 +2651,7 @@ input, select, textarea { font-family: inherit; }
 }
 
 .ra-calendar-grid b,
-.ra-calendar-grid span {
+.ra-calendar-grid button {
   display: grid;
   place-items: center;
   min-height: 28px;
@@ -2654,27 +2667,39 @@ input, select, textarea { font-family: inherit; }
   color: var(--text-secondary);
 }
 
-.ra-calendar-grid span {
+.ra-calendar-grid button {
+  border: 0;
   background: rgba(30, 55, 88, .82);
   color: #eaf2ff;
+  cursor: pointer;
+  transition: transform .16s ease, background .16s ease, color .16s ease, box-shadow .16s ease;
 }
 
-:root[data-theme="light"] .ra-calendar-grid span {
+:root[data-theme="light"] .ra-calendar-grid button {
   background: #eef4ff;
   color: #334155;
 }
 
-.ra-calendar-grid span.muted {
+.ra-calendar-grid button:hover,
+.ra-calendar-grid button:focus-visible {
+  transform: translateY(-1px);
+  background: rgba(37, 99, 235, .86);
+  color: #fff;
+  outline: none;
+  box-shadow: 0 6px 16px rgba(37, 99, 235, .22);
+}
+
+.ra-calendar-grid button.muted {
   color: #8798af;
   background: rgba(18, 34, 57, .72);
 }
 
-:root[data-theme="light"] .ra-calendar-grid span.muted {
+:root[data-theme="light"] .ra-calendar-grid button.muted {
   color: #94a3b8;
   background: #f4f7fb;
 }
 
-.ra-calendar-grid span.active {
+.ra-calendar-grid button.active {
   background: #2563eb;
   color: #fff;
 }

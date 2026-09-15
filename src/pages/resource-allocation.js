@@ -24,6 +24,12 @@ function isoDate(value) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+function alertMonthsFromState(ui = {}) {
+  if (Number.isFinite(Number(ui.alertMonths)) && Number(ui.alertMonths) > 0) return Number(ui.alertMonths);
+  if (Number.isFinite(Number(ui.alertDays)) && Number(ui.alertDays) > 0) return Math.max(1, Math.round(Number(ui.alertDays) / 30));
+  return 1;
+}
+
 function addDays(value, days) {
   const date = parseLocalDate(value) || new Date();
   date.setDate(date.getDate() + days);
@@ -116,7 +122,7 @@ async function stateFromData() {
     tab: ui.tab || 'professional',
     zoom: ui.zoom || 'month',
     viewDate: ui.viewDate || isoDate(new Date()),
-    alertDays: Number(ui.alertDays || 30),
+    alertMonths: alertMonthsFromState(ui),
     filters: ui.filters || {},
     projects: Array.isArray(source.projects) && source.projects.length ? source.projects : projects,
     allocations: Array.isArray(source.allocations) ? source.allocations : [],
@@ -176,7 +182,7 @@ function filteredContext(state, users) {
     if (state.filters.end && item.startDate > state.filters.end) return false;
     return true;
   });
-  const allSummary = summarizeResources(users, projects, allocations, new Date(), state.alertDays);
+  const allSummary = summarizeResources(users, projects, allocations, new Date(), state.alertMonths);
   const filteredUsers = users.filter(user => {
     if (state.filters.userId && user.id !== state.filters.userId) return false;
     if (!state.filters.availability) return true;
@@ -254,19 +260,9 @@ function renderProfessionalView(summary, state) {
 }
 
 function renderScaleHeader(range, zoom) {
-  const labels = [];
-  const days = Math.max(1, Math.round((range.end - range.start) / 86400000) + 1);
-  const cursor = new Date(range.start.getFullYear(), range.start.getMonth(), 1);
-  if (cursor < range.start) cursor.setMonth(cursor.getMonth() + 1);
-  for (; cursor <= range.end; cursor.setMonth(cursor.getMonth() + 1)) {
-    const left = Math.max(0, Math.min(100, ((cursor - range.start) / 86400000) / days * 100));
-    labels.push(`<span style="left:${left.toFixed(4)}%">${cursor.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}</span>`);
-  }
-  if (!labels.length || zoom === 'week') {
-    const left = Math.max(0, Math.min(100, ((range.start - range.start) / 86400000) / days * 100));
-    labels.unshift(`<span style="left:${left.toFixed(4)}%">${range.start.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}</span>`);
-  }
-  return labels.join('');
+  const labels = monthSegments(range).map(segment => `<span class="ra-month-label" style="left:${segment.left.toFixed(4)}%;width:${segment.width.toFixed(4)}%">${segment.date.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}</span>`);
+  if (!labels.length || zoom === 'week') labels.unshift(`<span class="ra-month-label" style="left:0%;width:100%">${range.start.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}</span>`);
+  return `${renderMonthGrid(range)}${labels.join('')}`;
 }
 
 function todayMarkerStyle(left) {
@@ -295,13 +291,35 @@ function renderAllocationCalendar(viewDate) {
     const day = addDays(start, index);
     const inMonth = day.getMonth() === reference.getMonth();
     const dayIso = isoDate(day);
-    cells.push(`<span class="${inMonth ? '' : 'muted'} ${dayIso === todayIso || dayIso === selectedIso ? 'active' : ''}">${day.getDate()}</span>`);
+    const label = day.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
+    cells.push(`<button type="button" class="${inMonth ? '' : 'muted'} ${dayIso === todayIso || dayIso === selectedIso ? 'active' : ''}" data-calendar-date="${dayIso}" title="Ir para ${sanitizeTitle(label)}">${day.getDate()}</button>`);
   }
   return `<div class="ra-calendar-grid"><b>D</b><b>S</b><b>T</b><b>Q</b><b>Q</b><b>S</b><b>S</b>${cells.join('')}</div>`;
 }
 
 function daySpan(start, end) {
   return Math.max(1, Math.round((end - start) / 86400000) + 1);
+}
+
+function monthSegments(range) {
+  const days = daySpan(range.start, range.end);
+  const segments = [];
+  const cursor = new Date(range.start.getFullYear(), range.start.getMonth(), 1);
+  for (; cursor <= range.end; cursor.setMonth(cursor.getMonth() + 1)) {
+    const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+    const visibleStart = monthStart < range.start ? range.start : monthStart;
+    const visibleEnd = monthEnd > range.end ? range.end : monthEnd;
+    if (visibleEnd < range.start || visibleStart > range.end) continue;
+    const left = ((visibleStart - range.start) / 86400000) / days * 100;
+    const width = daySpan(visibleStart, visibleEnd) / days * 100;
+    segments.push({ date: new Date(monthStart), left: Math.max(0, left), width: Math.min(width, 100 - Math.max(0, left)) });
+  }
+  return segments;
+}
+
+function renderMonthGrid(range) {
+  return `<div class="ra-month-grid" aria-hidden="true">${monthSegments(range).map(segment => `<i style="left:${segment.left.toFixed(4)}%;width:${segment.width.toFixed(4)}%"></i>`).join('')}</div>`;
 }
 
 function visibleAllocationSegment(allocation, range) {
@@ -328,26 +346,6 @@ function visibleAllocationSegment(allocation, range) {
 function peakVisibleLoad(allocations, userId, range) {
   return allocationLoadByDay(allocations, userId, range.start, range.end)
     .reduce((peak, day) => Math.max(peak, day.total), 0);
-}
-
-function availabilitySegmentForRow(row, range) {
-  const lastEnd = row.allocations.reduce((max, item) => {
-    const end = parseLocalDate(item.endDate);
-    return end && (!max || end > max) ? end : max;
-  }, null);
-  if (!lastEnd || lastEnd >= range.end) return null;
-  const start = addDays(lastEnd, 1);
-  const visibleStart = start < range.start ? range.start : start;
-  if (visibleStart > range.end) return null;
-  const days = daySpan(range.start, range.end);
-  const left = ((visibleStart - range.start) / 86400000) / days * 100;
-  const width = daySpan(visibleStart, range.end) / days * 100;
-  return {
-    left: Math.max(0, left),
-    width: Math.min(width, 100 - Math.max(0, left)),
-    label: '100% disponível',
-    title: `Disponível a partir de ${formatDate(start)}`,
-  };
 }
 
 function timelineStatus(row) {
@@ -396,7 +394,7 @@ function renderTimelineView(summary, state) {
       <div><h3>Timeline de Alocação</h3><p>Visão temporal dos profissionais, capacidade e lacunas de alocação.</p></div>
       <div class="ra-timeline-actions">
         <label>Agrupar por <select id="ra-group-filter"><option value="role" ${state.filters.groupBy === 'role' ? 'selected' : ''}>Função</option><option value="project" ${state.filters.groupBy === 'project' ? 'selected' : ''}>Projeto</option><option value="client" ${state.filters.groupBy === 'client' ? 'selected' : ''}>Cliente</option></select></label>
-        <label>Sem futuro após <select id="ra-alert-months"><option value="1" ${state.alertDays === 30 ? 'selected' : ''}>1 mês</option><option value="2" ${state.alertDays === 60 ? 'selected' : ''}>2 meses</option><option value="3" ${state.alertDays === 90 ? 'selected' : ''}>3 meses</option><option value="6" ${state.alertDays === 180 ? 'selected' : ''}>6 meses</option></select></label>
+        <label>Sem alocação após <select id="ra-alert-months"><option value="1" ${state.alertMonths === 1 ? 'selected' : ''}>1 mês</option><option value="2" ${state.alertMonths === 2 ? 'selected' : ''}>2 meses</option><option value="3" ${state.alertMonths === 3 ? 'selected' : ''}>3 meses</option><option value="6" ${state.alertMonths === 6 ? 'selected' : ''}>6 meses</option></select></label>
         <button type="button" class="btn btn-secondary" id="ra-zoom-out">−</button>
         <button type="button" class="btn btn-secondary" id="ra-fit-timeline">⌕</button>
         <button type="button" class="btn btn-secondary" id="ra-zoom-in">+</button>
@@ -414,18 +412,17 @@ function renderTimelineView(summary, state) {
             .sort((a, b) => a.segment.visibleStart - b.segment.visibleStart || String(a.item.projectId).localeCompare(String(b.item.projectId)));
           const peakLoad = peakVisibleLoad(state.allocations, row.user.id, range);
           const status = peakLoad > 100 ? 'overallocated' : timelineStatus(row);
-          const availability = availabilitySegmentForRow(row, range);
           return `<article class="ra-timeline-row ${status}" data-user-id="${sanitize(row.user.id)}">
             <div class="ra-sticky-person"><span class="ra-dot ${status}"></span><strong>${sanitize(row.user.displayName)}</strong><small>${row.coveredUntil ? `Coberto até ${formatDate(row.coveredUntil)}` : 'Sem alocação futura'}</small></div>
             <div class="ra-load-badge ${peakLoad > 100 ? 'danger' : peakLoad >= 100 ? 'success' : peakLoad > 0 ? 'warning' : ''}">${peakLoad}%</div>
-            <div class="ra-timeline-track">${todayLeft !== null ? `<span class="ra-today-line" style="left:${todayLeft}%"></span>` : ''}${visibleAllocations.map(({ item, segment }) => {
+            <div class="ra-timeline-track">${renderMonthGrid(range)}${todayLeft !== null ? `<span class="ra-today-line" style="left:${todayLeft}%"></span>` : ''}${visibleAllocations.map(({ item, segment }) => {
               const project = state.projects.find(project => project.id === item.projectId);
               const title = `${project?.name || item.projectId} · ${item.percent}% · ${formatDate(item.startDate)} a ${formatDate(item.endDate)}${item.role ? ` · ${item.role}` : ''}`;
               return `<div class="ra-timeline-subrow">
                 <span class="ra-subrow-percent ${Number(item.percent || 0) > 100 ? 'danger' : Number(item.percent || 0) >= 100 ? 'success' : 'warning'}">${sanitize(item.percent)}%</span>
                 <button type="button" class="ra-timeline-bar ${segment.clippedStart ? 'is-clipped-start' : ''} ${segment.clippedEnd ? 'is-clipped-end' : ''}" data-edit-allocation="${sanitize(item.id)}" style="${timelineBarStyle({ ...segment, projectId: item.projectId })}" title="${sanitizeTitle(title)}"><span>${sanitize(project?.name || item.projectId)}</span><small>${formatDate(item.startDate)} → ${formatDate(item.endDate)}</small></button>
               </div>`;
-            }).join('')}${availability ? `<div class="ra-timeline-subrow ra-availability-subrow"><span class="ra-no-future" style="left:${availability.left.toFixed(4)}%;width:${Math.max(1.2, availability.width).toFixed(4)}%" title="${sanitizeTitle(availability.title)}">${sanitize(availability.label)}</span></div>` : visibleAllocations.length ? '' : '<div class="ra-empty-timeline">Sem alocação neste período</div>'}</div>
+            }).join('')}${visibleAllocations.length ? '' : '<div class="ra-empty-timeline">Sem alocação neste período</div>'}</div>
           </article>`;
         }).join('')}</details>`).join('') || '<p class="muted">Nenhum profissional encontrado para os filtros atuais.</p>'}
       </div>
@@ -615,7 +612,7 @@ export async function renderResourceAllocation() {
   const editingProject = state.filters.editProjectId ? state.projects.find(project => project.id === state.filters.editProjectId) : null;
   const editingAllocation = state.filters.editAllocationId ? state.allocations.find(allocation => allocation.id === state.filters.editAllocationId) : null;
   const ctx = filteredContext(state, users);
-  const summary = summarizeResources(ctx.users, ctx.projects, ctx.allocations, new Date(), state.alertDays);
+  const summary = summarizeResources(ctx.users, ctx.projects, ctx.allocations, new Date(), state.alertMonths);
   const clients = [...new Set(state.projects.map(project => project.client).filter(Boolean))].sort();
   const roles = [...new Set(state.allocations.map(item => item.role).filter(Boolean))].sort();
   const isTimeline = state.tab === 'timeline';
@@ -631,8 +628,8 @@ export async function renderResourceAllocation() {
       <label>Profissional<select id="ra-user-filter"><option value="">Todos</option>${optionRows(users, state.filters.userId, 'displayName')}</select></label>
       <label>Função<select id="ra-role-filter"><option value="">Todas</option>${roles.map(role => `<option ${state.filters.role === role ? 'selected' : ''}>${sanitize(role)}</option>`).join('')}</select></label>
       <label>Status<select id="ra-status-filter"><option value="">Todos</option>${STATUSES.map(status => `<option ${state.filters.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select></label>
-      <label>Disponibilidade<select id="ra-availability-filter"><option value="">Todas</option><option value="available" ${state.filters.availability === 'available' ? 'selected' : ''}>Disponíveis</option><option value="partial" ${state.filters.availability === 'partial' ? 'selected' : ''}>Parciais</option><option value="full" ${state.filters.availability === 'full' ? 'selected' : ''}>100%</option><option value="overallocated" ${state.filters.availability === 'overallocated' ? 'selected' : ''}>Sobrealocados</option><option value="noFuture" ${state.filters.availability === 'noFuture' ? 'selected' : ''}>Sem futuro</option></select></label>
-      <label>Sem futuro após<select id="ra-alert-days"><option value="30" ${state.alertDays === 30 ? 'selected' : ''}>1 mês</option><option value="60" ${state.alertDays === 60 ? 'selected' : ''}>2 meses</option><option value="90" ${state.alertDays === 90 ? 'selected' : ''}>3 meses</option><option value="180" ${state.alertDays === 180 ? 'selected' : ''}>6 meses</option></select></label>
+      <label>Disponibilidade<select id="ra-availability-filter"><option value="">Todas</option><option value="available" ${state.filters.availability === 'available' ? 'selected' : ''}>Disponíveis</option><option value="partial" ${state.filters.availability === 'partial' ? 'selected' : ''}>Parciais</option><option value="full" ${state.filters.availability === 'full' ? 'selected' : ''}>100%</option><option value="overallocated" ${state.filters.availability === 'overallocated' ? 'selected' : ''}>Sobrealocados</option><option value="noFuture" ${state.filters.availability === 'noFuture' ? 'selected' : ''}>Sem alocação futura</option></select></label>
+      <label>Sem alocação após<select id="ra-alert-days"><option value="1" ${state.alertMonths === 1 ? 'selected' : ''}>1 mês</option><option value="2" ${state.alertMonths === 2 ? 'selected' : ''}>2 meses</option><option value="3" ${state.alertMonths === 3 ? 'selected' : ''}>3 meses</option><option value="6" ${state.alertMonths === 6 ? 'selected' : ''}>6 meses</option></select></label>
       <label>Período inicial<input id="ra-start-filter" type="date" value="${sanitize(state.filters.start || '')}"></label>
       <label>Período final<input id="ra-end-filter" type="date" value="${sanitize(state.filters.end || '')}"></label>
       <label>Zoom<select id="ra-zoom">${Object.entries(ZOOMS).map(([id, label]) => `<option value="${id}" ${state.zoom === id ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
@@ -659,16 +656,20 @@ export async function renderResourceAllocation() {
       start: document.getElementById('ra-start-filter')?.value || '',
       end: document.getElementById('ra-end-filter')?.value || '',
       groupBy: document.getElementById('ra-group-filter')?.value || state.filters.groupBy || 'role',
-    }, zoom: document.getElementById('ra-zoom')?.value || state.zoom, alertDays: Number(document.getElementById('ra-alert-days')?.value || state.alertDays) });
+    }, zoom: document.getElementById('ra-zoom')?.value || state.zoom, alertMonths: Number(document.getElementById('ra-alert-days')?.value || state.alertMonths) });
     renderResourceAllocation();
   };
   document.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click', () => { persist({ tab: button.dataset.tab }); renderResourceAllocation(); }));
   ['ra-project-filter', 'ra-client-filter', 'ra-user-filter', 'ra-role-filter', 'ra-status-filter', 'ra-availability-filter', 'ra-start-filter', 'ra-end-filter', 'ra-zoom', 'ra-group-filter', 'ra-alert-days'].forEach(id => document.getElementById(id)?.addEventListener('change', applyFilters));
   document.getElementById('ra-alert-months')?.addEventListener('change', event => {
     const months = Number(event.target.value || 1);
-    persist({ alertDays: months * 30 });
+    persist({ alertMonths: months });
     renderResourceAllocation();
   });
+  document.querySelectorAll('[data-calendar-date]').forEach(button => button.addEventListener('click', () => {
+    persist({ viewDate: button.dataset.calendarDate });
+    renderResourceAllocation();
+  }));
   document.querySelectorAll('[data-resource-kpi]').forEach(button => button.addEventListener('click', () => showResourceKpiModal(summary, button.dataset.resourceKpi)));
   document.getElementById('ra-search')?.addEventListener('input', applyFilters);
   document.getElementById('ra-clear')?.addEventListener('click', () => { persist({ filters: {} }); renderResourceAllocation(); });

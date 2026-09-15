@@ -15,19 +15,21 @@ test('resource allocation permits overallocations but reports the conflict befor
   assert.equal(result.peak, 120);
 });
 
-test('resource summary calculates covered until, no future allocation and executive totals', () => {
-  const users = [{ id: 'u1', displayName: 'Gustavo' }, { id: 'u2', displayName: 'Danilo' }];
+test('resource summary calculates covered until, monthly no future allocation and executive totals', () => {
+  const users = [{ id: 'u1', displayName: 'Gustavo' }, { id: 'u2', displayName: 'Danilo' }, { id: 'u3', displayName: 'Alan' }];
   const projects = [{ id: 'p1', name: 'SDDS' }];
   const allocations = [
     { id: 'a1', userId: 'u1', projectId: 'p1', startDate: '2026-09-01', endDate: '2026-10-31', percent: 100 },
     { id: 'a2', userId: 'u2', projectId: 'p1', startDate: '2026-09-01', endDate: '2026-09-18', percent: 100 },
+    { id: 'a3', userId: 'u3', projectId: 'p1', startDate: '2026-09-01', endDate: '2027-03-31', percent: 100 },
   ];
-  const summary = summarizeResources(users, projects, allocations, '2026-09-10', 30);
-  assert.equal(summary.totals.professionals, 2);
-  assert.equal(summary.totals.full, 2);
-  assert.equal(summary.totals.noFuture, 2);
+  const summary = summarizeResources(users, projects, allocations, '2026-09-10', 1);
+  assert.equal(summary.totals.professionals, 3);
+  assert.equal(summary.totals.full, 3);
+  assert.equal(summary.totals.noFuture, 1);
   assert.equal(summary.totals.availableSoon, 1);
   assert.equal(summary.rows.find(row => row.user.id === 'u2').nextAvailability.toISOString().slice(0, 10), '2026-09-19');
+  assert.equal(summary.rows.find(row => row.user.id === 'u3').noFuture, false);
 });
 
 test('resource allocation backend normalizes and rejects unsafe operational records', () => {

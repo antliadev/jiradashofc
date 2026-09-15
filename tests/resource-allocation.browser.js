@@ -82,7 +82,7 @@ try {
   assert.match(await page.locator('.ra-project-allocation').first().getAttribute('title'), /Também alocado em/);
   await page.evaluate(async () => {
     document.documentElement.dataset.theme = 'light';
-    localStorage.setItem('rja.resourceAllocation.ui.v1', JSON.stringify({ tab: 'timeline', zoom: 'semester', viewDate: '2026-09-01', filters: {}, alertDays: 60 }));
+    localStorage.setItem('rja.resourceAllocation.ui.v1', JSON.stringify({ tab: 'timeline', zoom: 'semester', viewDate: '2026-09-01', filters: {}, alertMonths: 2 }));
     await (await import('/src/pages/resource-allocation.js')).renderResourceAllocation();
   });
   assert.match(await page.locator('.ra-timeline-view').innerText(), /Timeline de Alocação/);
@@ -91,6 +91,11 @@ try {
   await page.click('[data-close-modal]');
   assert.equal(await page.locator('#ra-alert-months').inputValue(), '2');
   assert.equal(await page.locator('.ra-subrow-percent.available').count(), 0);
+  assert.equal(await page.locator('.ra-no-future').count(), 0);
+  assert.ok(await page.locator('[data-calendar-date="2026-09-15"]').count() > 0);
+  await page.click('[data-calendar-date="2026-09-15"]');
+  const persistedUi = await page.evaluate(() => JSON.parse(localStorage.getItem('rja.resourceAllocation.ui.v1')));
+  assert.equal(persistedUi.viewDate, '2026-09-15');
   const lightTimelineColors = await page.locator('.ra-timeline-table').evaluate(el => {
     const table = getComputedStyle(el);
     const head = getComputedStyle(document.querySelector('.ra-timeline-head'));
@@ -105,6 +110,7 @@ try {
   assert.match(await page.locator('.ra-timeline-row[data-user-id="u1"]').innerText(), /120%/);
   const scaleText = await page.locator('.ra-scale').innerText();
   ['set.', 'out.', 'nov.', 'dez.', 'jan.', 'fev.', 'mar.'].forEach(month => assert.match(scaleText, new RegExp(month.replace('.', '\\.'), 'i')));
+  assert.ok(await page.locator('.ra-month-grid i').count() >= 7);
   assert.equal(await page.locator('.ra-timeline-row[data-user-id="u1"]').evaluate(el => el.classList.contains('overallocated')), true);
   const firstBar = page.locator('.ra-timeline-row[data-user-id="u1"] .ra-timeline-bar').first();
   const firstBarBox = await firstBar.boundingBox();

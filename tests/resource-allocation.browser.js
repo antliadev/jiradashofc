@@ -30,6 +30,14 @@ try {
       history.unshift({ id: crypto.randomUUID(), action: 'allocation.created', at: new Date().toISOString(), after: body.allocation });
       return route.fulfill({ json: { allocation: body.allocation } });
     }
+    if (path.includes('/projects/') && route.request().method() === 'DELETE') {
+      const id = path.split('/').pop();
+      const removed = allocations.filter(item => item.projectId === id);
+      for (let index = allocations.length - 1; index >= 0; index--) {
+        if (allocations[index].projectId === id) allocations.splice(index, 1);
+      }
+      return route.fulfill({ json: { project: { id }, allocations: removed } });
+    }
     return route.fulfill({ status: 404, json: { error: 'unexpected route' } });
   });
   await page.goto('http://127.0.0.1:5173/ra-fixture');
@@ -70,12 +78,19 @@ try {
   assert.equal(await page.locator('.ra-project-allocation [data-edit-allocation], .ra-project-allocation [data-delete-allocation]').count(), 0);
   assert.equal(await page.locator('.ra-project-allocation .ra-user-avatar img').count(), 2);
   assert.match(await page.locator('.ra-project-allocation').first().innerText(), /Ana Maria Colaboradora de Teste/);
+  assert.equal(await page.locator('[data-delete-project]').count(), 2);
+  assert.match(await page.locator('.ra-project-allocation').first().getAttribute('title'), /Também alocado em/);
   await page.evaluate(async () => {
     document.documentElement.dataset.theme = 'light';
-    localStorage.setItem('rja.resourceAllocation.ui.v1', JSON.stringify({ tab: 'timeline', zoom: 'semester', viewDate: '2026-09-01', filters: {} }));
+    localStorage.setItem('rja.resourceAllocation.ui.v1', JSON.stringify({ tab: 'timeline', zoom: 'semester', viewDate: '2026-09-01', filters: {}, alertDays: 60 }));
     await (await import('/src/pages/resource-allocation.js')).renderResourceAllocation();
   });
   assert.match(await page.locator('.ra-timeline-view').innerText(), /Timeline de Alocação/);
+  await page.click('[data-resource-kpi="overallocated"]');
+  assert.match(await page.locator('.ra-kpi-modal').innerText(), /Sobrealocados/);
+  await page.click('[data-close-modal]');
+  assert.equal(await page.locator('#ra-alert-months').inputValue(), '2');
+  assert.equal(await page.locator('.ra-subrow-percent.available').count(), 0);
   const lightTimelineColors = await page.locator('.ra-timeline-table').evaluate(el => {
     const table = getComputedStyle(el);
     const head = getComputedStyle(document.querySelector('.ra-timeline-head'));

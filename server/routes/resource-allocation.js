@@ -1,7 +1,7 @@
 import express from 'express';
 import { requireAppAuth } from '../auth.js';
 import { canAccessPermission } from '../../lib/appPermissions.js';
-import { deleteResourceAllocation, listResourceAllocationState, upsertResourceAllocation, upsertResourceProject } from '../../lib/resourceAllocationStore.js';
+import { deleteResourceAllocation, deleteResourceProject, listResourceAllocationState, upsertResourceAllocation, upsertResourceProject } from '../../lib/resourceAllocationStore.js';
 
 const router = express.Router();
 
@@ -35,6 +35,11 @@ router.post('/projects', handle(async (req, res) => {
 router.post('/allocations', handle(async (req, res) => {
   const allocation = await upsertResourceAllocation({ allocation: req.body?.allocation || {}, actor: req.session.user.id });
   res.status(201).json({ allocation });
+}));
+
+router.delete('/projects/:id', handle(async (req, res) => {
+  const removed = await deleteResourceProject({ id: req.params.id, actor: req.session.user.id });
+  res.json(removed);
 }));
 
 router.delete('/allocations/:id', handle(async (req, res) => {

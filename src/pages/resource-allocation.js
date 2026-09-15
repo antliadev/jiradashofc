@@ -74,6 +74,13 @@ async function deleteRemoteAllocation(id) {
   return payload.allocation;
 }
 
+async function deleteRemoteProject(id) {
+  const response = await fetch(`/api/jira/resource-allocation/projects/${encodeURIComponent(id)}`, { method: 'DELETE', credentials: 'include' });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'Não foi possível remover o projeto.');
+  return payload;
+}
+
 function normalizeName(value = '') {
   return String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 }
@@ -143,6 +150,13 @@ function removeSavedAllocation(state, id) {
   return state.allocations.filter(item => item.id !== id);
 }
 
+function removeSavedProject(state, id) {
+  return {
+    projects: state.projects.filter(project => project.id !== id),
+    allocations: state.allocations.filter(allocation => allocation.projectId !== id),
+  };
+}
+
 function filteredContext(state, users) {
   const text = String(state.filters.search || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const projects = state.projects.filter(project => {
@@ -207,15 +221,15 @@ function renderAllocationForm(state, users, allocation = {}) {
 
 function renderKpis(summary, { compact = false } = {}) {
   const items = [
-    ['Total de profissionais', summary.totals.professionals],
-    ['Totalmente alocados', summary.totals.full],
-    ['Parcialmente alocados', summary.totals.partial],
-    ['Disponíveis', summary.totals.available],
-    ['Sobrealocados', summary.totals.overallocated],
-    ['Sem alocação futura', summary.totals.noFuture],
+    ['total', 'Total de profissionais', summary.totals.professionals],
+    ['full', 'Totalmente alocados', summary.totals.full],
+    ['partial', 'Parcialmente alocados', summary.totals.partial],
+    ['available', 'Disponíveis', summary.totals.available],
+    ['overallocated', 'Sobrealocados', summary.totals.overallocated],
+    ['noFuture', 'Sem alocação futura', summary.totals.noFuture],
   ];
-  if (!compact) items.push(['Disponíveis nos próximos 30 dias', summary.totals.availableSoon]);
-  return `<div class="kpi-grid ra-kpi-grid">${items.map(([label, value]) => `<div class="kpi-card"><div class="kpi-value">${value}</div><div class="kpi-label">${sanitize(label)}</div></div>`).join('')}</div>`;
+  if (!compact) items.push(['availableSoon', 'Disponíveis na janela configurada', summary.totals.availableSoon]);
+  return `<div class="kpi-grid ra-kpi-grid">${items.map(([id, label, value]) => `<button type="button" class="kpi-card ra-kpi-card" data-resource-kpi="${sanitize(id)}"><div class="kpi-value">${value}</div><div class="kpi-label">${sanitize(label)}</div></button>`).join('')}</div>`;
 }
 
 function renderProfessionalView(summary, state) {
@@ -382,6 +396,7 @@ function renderTimelineView(summary, state) {
       <div><h3>Timeline de Alocação</h3><p>Visão temporal dos profissionais, capacidade e lacunas de alocação.</p></div>
       <div class="ra-timeline-actions">
         <label>Agrupar por <select id="ra-group-filter"><option value="role" ${state.filters.groupBy === 'role' ? 'selected' : ''}>Função</option><option value="project" ${state.filters.groupBy === 'project' ? 'selected' : ''}>Projeto</option><option value="client" ${state.filters.groupBy === 'client' ? 'selected' : ''}>Cliente</option></select></label>
+        <label>Sem futuro após <select id="ra-alert-months"><option value="1" ${state.alertDays === 30 ? 'selected' : ''}>1 mês</option><option value="2" ${state.alertDays === 60 ? 'selected' : ''}>2 meses</option><option value="3" ${state.alertDays === 90 ? 'selected' : ''}>3 meses</option><option value="6" ${state.alertDays === 180 ? 'selected' : ''}>6 meses</option></select></label>
         <button type="button" class="btn btn-secondary" id="ra-zoom-out">−</button>
         <button type="button" class="btn btn-secondary" id="ra-fit-timeline">⌕</button>
         <button type="button" class="btn btn-secondary" id="ra-zoom-in">+</button>
@@ -410,7 +425,7 @@ function renderTimelineView(summary, state) {
                 <span class="ra-subrow-percent ${Number(item.percent || 0) > 100 ? 'danger' : Number(item.percent || 0) >= 100 ? 'success' : 'warning'}">${sanitize(item.percent)}%</span>
                 <button type="button" class="ra-timeline-bar ${segment.clippedStart ? 'is-clipped-start' : ''} ${segment.clippedEnd ? 'is-clipped-end' : ''}" data-edit-allocation="${sanitize(item.id)}" style="${timelineBarStyle({ ...segment, projectId: item.projectId })}" title="${sanitizeTitle(title)}"><span>${sanitize(project?.name || item.projectId)}</span><small>${formatDate(item.startDate)} → ${formatDate(item.endDate)}</small></button>
               </div>`;
-            }).join('')}${availability ? `<div class="ra-timeline-subrow ra-availability-subrow"><span class="ra-subrow-percent available">0%</span><span class="ra-no-future" style="left:${availability.left.toFixed(4)}%;width:${Math.max(1.2, availability.width).toFixed(4)}%" title="${sanitizeTitle(availability.title)}">${sanitize(availability.label)}</span></div>` : visibleAllocations.length ? '' : '<div class="ra-empty-timeline">Sem alocação neste período</div>'}</div>
+            }).join('')}${availability ? `<div class="ra-timeline-subrow ra-availability-subrow"><span class="ra-no-future" style="left:${availability.left.toFixed(4)}%;width:${Math.max(1.2, availability.width).toFixed(4)}%" title="${sanitizeTitle(availability.title)}">${sanitize(availability.label)}</span></div>` : visibleAllocations.length ? '' : '<div class="ra-empty-timeline">Sem alocação neste período</div>'}</div>
           </article>`;
         }).join('')}</details>`).join('') || '<p class="muted">Nenhum profissional encontrado para os filtros atuais.</p>'}
       </div>
@@ -498,6 +513,7 @@ function renderProjectView(projects, allocations, users) {
         <div class="ra-project-actions">
           <span class="ra-project-status ${statusClass}">${sanitize(project.status || 'Planejado')}</span>
           <button class="btn btn-secondary btn-compact" type="button" data-edit-project="${sanitize(project.id)}">Editar projeto</button>
+          <button class="btn btn-secondary btn-compact danger" type="button" data-delete-project="${sanitize(project.id)}">Excluir projeto</button>
         </div>
       </header>
       <div class="ra-project-metrics">
@@ -513,7 +529,14 @@ function renderProjectView(projects, allocations, users) {
       const user = users.find(user => user.id === item.userId);
       const displayName = user?.displayName || item.userName || item.userId || 'Profissional';
       const allocationStatus = temporalAllocationStatus(item);
-      return `<div class="ra-project-allocation ${allocationStatus.id}">
+      const otherAllocations = allocations
+        .filter(other => other.id !== item.id && other.userId === item.userId && temporalAllocationStatus(other).id !== 'finished')
+        .map(other => {
+          const otherProject = projects.find(project => project.id === other.projectId);
+          return `${otherProject?.name || other.projectId}: ${other.percent}%`;
+        });
+      const otherTitle = Number(item.percent || 0) < 100 && otherAllocations.length ? `Também alocado em: ${otherAllocations.join(' · ')}` : '';
+      return `<div class="ra-project-allocation ${allocationStatus.id}" ${otherTitle ? `title="${sanitizeTitle(otherTitle)}"` : ''}>
           <div class="ra-user-avatar">${user?.avatarUrl ? `<img src="${sanitizeTitle(user.avatarUrl)}" alt="${sanitizeTitle(displayName)}" onerror="const parent=this.parentElement;this.remove();parent.textContent='${sanitizeTitle(initials(displayName))}'">` : sanitize(initials(displayName))}</div>
           <div class="ra-allocation-main">
             <strong>${sanitize(displayName)}</strong>
@@ -525,6 +548,51 @@ function renderProjectView(projects, allocations, users) {
     }).join('') : '<div class="ra-project-empty"><strong>Sem profissionais alocados</strong><span>Use o cadastro acima para vincular profissionais a este projeto.</span></div>'}</div>
     </article>`;
   }).join('')}</div></section>`;
+}
+
+function resourceKpiRows(summary, kpi) {
+  const filters = {
+    total: row => row,
+    full: row => row.status === 'full',
+    partial: row => row.status === 'partial',
+    available: row => row.status === 'available',
+    overallocated: row => row.status === 'overallocated',
+    noFuture: row => row.noFuture,
+    availableSoon: row => row.availableSoon,
+  };
+  return summary.rows.filter(filters[kpi] || filters.total);
+}
+
+function showResourceKpiModal(summary, kpi) {
+  const labels = {
+    total: 'Total de profissionais',
+    full: 'Totalmente alocados',
+    partial: 'Parcialmente alocados',
+    available: 'Disponíveis',
+    overallocated: 'Sobrealocados',
+    noFuture: 'Sem alocação futura',
+    availableSoon: 'Disponíveis na janela configurada',
+  };
+  const rows = resourceKpiRows(summary, kpi);
+  const previous = document.querySelector('.ui-modal-backdrop[data-ra-kpi-modal]');
+  previous?.remove();
+  const modal = document.createElement('div');
+  modal.className = 'ui-modal-backdrop';
+  modal.dataset.raKpiModal = 'true';
+  modal.innerHTML = `<div class="ui-modal ra-kpi-modal" role="dialog" aria-modal="true" aria-labelledby="ra-kpi-modal-title">
+    <div class="ui-modal-icon">i</div>
+    <div class="ui-modal-body">
+      <h2 id="ra-kpi-modal-title">${sanitize(labels[kpi] || 'Profissionais')}</h2>
+      <p>${rows.length} profissional(is) neste status.</p>
+      <div class="ra-kpi-modal-list">${rows.map(row => `<article><strong>${sanitize(row.user.displayName)}</strong><span>${sanitize(statusLabel(row.status))} · ${row.currentLoad}%${row.coveredUntil ? ` · coberto até ${formatDate(row.coveredUntil)}` : ''}</span></article>`).join('') || '<article><strong>Nenhum profissional encontrado</strong><span>Altere os filtros ou a janela de disponibilidade.</span></article>'}</div>
+    </div>
+    <div class="ui-modal-actions"><button type="button" class="btn btn-primary" data-close-modal>Fechar</button></div>
+  </div>`;
+  modal.addEventListener('click', event => {
+    if (event.target === modal || event.target.closest('[data-close-modal]')) modal.remove();
+  });
+  document.body.appendChild(modal);
+  modal.querySelector('[data-close-modal]')?.focus();
 }
 
 function renderHistory(state, users) {
@@ -564,6 +632,7 @@ export async function renderResourceAllocation() {
       <label>Função<select id="ra-role-filter"><option value="">Todas</option>${roles.map(role => `<option ${state.filters.role === role ? 'selected' : ''}>${sanitize(role)}</option>`).join('')}</select></label>
       <label>Status<select id="ra-status-filter"><option value="">Todos</option>${STATUSES.map(status => `<option ${state.filters.status === status ? 'selected' : ''}>${status}</option>`).join('')}</select></label>
       <label>Disponibilidade<select id="ra-availability-filter"><option value="">Todas</option><option value="available" ${state.filters.availability === 'available' ? 'selected' : ''}>Disponíveis</option><option value="partial" ${state.filters.availability === 'partial' ? 'selected' : ''}>Parciais</option><option value="full" ${state.filters.availability === 'full' ? 'selected' : ''}>100%</option><option value="overallocated" ${state.filters.availability === 'overallocated' ? 'selected' : ''}>Sobrealocados</option><option value="noFuture" ${state.filters.availability === 'noFuture' ? 'selected' : ''}>Sem futuro</option></select></label>
+      <label>Sem futuro após<select id="ra-alert-days"><option value="30" ${state.alertDays === 30 ? 'selected' : ''}>1 mês</option><option value="60" ${state.alertDays === 60 ? 'selected' : ''}>2 meses</option><option value="90" ${state.alertDays === 90 ? 'selected' : ''}>3 meses</option><option value="180" ${state.alertDays === 180 ? 'selected' : ''}>6 meses</option></select></label>
       <label>Período inicial<input id="ra-start-filter" type="date" value="${sanitize(state.filters.start || '')}"></label>
       <label>Período final<input id="ra-end-filter" type="date" value="${sanitize(state.filters.end || '')}"></label>
       <label>Zoom<select id="ra-zoom">${Object.entries(ZOOMS).map(([id, label]) => `<option value="${id}" ${state.zoom === id ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
@@ -590,11 +659,17 @@ export async function renderResourceAllocation() {
       start: document.getElementById('ra-start-filter')?.value || '',
       end: document.getElementById('ra-end-filter')?.value || '',
       groupBy: document.getElementById('ra-group-filter')?.value || state.filters.groupBy || 'role',
-    }, zoom: document.getElementById('ra-zoom')?.value || state.zoom });
+    }, zoom: document.getElementById('ra-zoom')?.value || state.zoom, alertDays: Number(document.getElementById('ra-alert-days')?.value || state.alertDays) });
     renderResourceAllocation();
   };
   document.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click', () => { persist({ tab: button.dataset.tab }); renderResourceAllocation(); }));
-  ['ra-project-filter', 'ra-client-filter', 'ra-user-filter', 'ra-role-filter', 'ra-status-filter', 'ra-availability-filter', 'ra-start-filter', 'ra-end-filter', 'ra-zoom', 'ra-group-filter'].forEach(id => document.getElementById(id)?.addEventListener('change', applyFilters));
+  ['ra-project-filter', 'ra-client-filter', 'ra-user-filter', 'ra-role-filter', 'ra-status-filter', 'ra-availability-filter', 'ra-start-filter', 'ra-end-filter', 'ra-zoom', 'ra-group-filter', 'ra-alert-days'].forEach(id => document.getElementById(id)?.addEventListener('change', applyFilters));
+  document.getElementById('ra-alert-months')?.addEventListener('change', event => {
+    const months = Number(event.target.value || 1);
+    persist({ alertDays: months * 30 });
+    renderResourceAllocation();
+  });
+  document.querySelectorAll('[data-resource-kpi]').forEach(button => button.addEventListener('click', () => showResourceKpiModal(summary, button.dataset.resourceKpi)));
   document.getElementById('ra-search')?.addEventListener('input', applyFilters);
   document.getElementById('ra-clear')?.addEventListener('click', () => { persist({ filters: {} }); renderResourceAllocation(); });
   document.getElementById('ra-prev')?.addEventListener('click', () => { persist({ viewDate: isoDate(addDays(state.viewDate, -(ZOOM_DAYS[state.zoom] || ZOOM_DAYS.month))) }); renderResourceAllocation(); });
@@ -617,6 +692,21 @@ export async function renderResourceAllocation() {
   document.getElementById('ra-cancel-project-edit')?.addEventListener('click', () => { persist({ filters: { ...state.filters, editProjectId: '' } }); renderResourceAllocation(); });
   document.getElementById('ra-cancel-allocation-edit')?.addEventListener('click', () => { persist({ filters: { ...state.filters, editAllocationId: '' } }); renderResourceAllocation(); });
   document.querySelectorAll('[data-edit-project]').forEach(button => button.addEventListener('click', () => { persist({ filters: { ...state.filters, editProjectId: button.dataset.editProject } }); renderResourceAllocation(); }));
+  document.querySelectorAll('[data-delete-project]').forEach(button => button.addEventListener('click', async () => {
+    const id = button.dataset.deleteProject;
+    const project = state.projects.find(item => item.id === id);
+    const linked = state.allocations.filter(item => item.projectId === id);
+    if (!confirm(`Excluir o projeto "${project?.name || id}" e remover ${linked.length} alocação(ões) vinculada(s)?`)) return;
+    try {
+      if (state.persistence === 'supabase') await deleteRemoteProject(id);
+      const next = removeSavedProject(state, id);
+      persistLocalData(state, { ...next, history: [...state.history, { id: crypto.randomUUID(), action: 'project.deleted', at: new Date().toISOString(), before: project ? { ...project, allocations: linked } : null, after: null }] });
+      persist({ filters: { ...state.filters, editProjectId: '', editAllocationId: '', projectId: state.filters.projectId === id ? '' : state.filters.projectId } });
+      renderResourceAllocation();
+    } catch (error) {
+      alert(error.message);
+    }
+  }));
   document.querySelectorAll('[data-edit-allocation]').forEach(button => button.addEventListener('click', () => { persist({ filters: { ...state.filters, editAllocationId: button.dataset.editAllocation } }); renderResourceAllocation(); }));
   document.querySelectorAll('[data-delete-allocation]').forEach(button => button.addEventListener('click', async () => {
     const id = button.dataset.deleteAllocation;

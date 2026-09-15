@@ -479,8 +479,9 @@ function setupTimelineDrag(table) {
   let startScroll = 0;
   let moved = false;
   const canScrollHorizontally = () => table.scrollWidth > table.clientWidth + 1;
+  const isTimelineScrollTarget = target => Boolean(target.closest('.ra-scale, .ra-timeline-track, .ra-timeline-bar, .ra-empty-timeline'));
   table.addEventListener('pointerdown', event => {
-    if (event.button !== 0 || !canScrollHorizontally() || event.target.closest('button, select, input, summary')) return;
+    if (event.button !== 0 || !canScrollHorizontally() || !isTimelineScrollTarget(event.target) || event.target.closest('button, select, input, summary')) return;
     dragging = true;
     moved = false;
     startX = event.clientX;
@@ -496,7 +497,7 @@ function setupTimelineDrag(table) {
     event.preventDefault();
   });
   table.addEventListener('wheel', event => {
-    if (!canScrollHorizontally() || event.target.closest('button, select, input, summary')) return;
+    if (!canScrollHorizontally() || !isTimelineScrollTarget(event.target) || event.target.closest('button, select, input, summary')) return;
     const delta = Math.abs(event.deltaX) >= Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
     if (!delta) return;
     const before = table.scrollLeft;

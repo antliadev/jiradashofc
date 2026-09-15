@@ -8,6 +8,7 @@ const STATUSES = ['Planejado', 'Em andamento', 'Concluído', 'Suspenso', 'Cancel
 const ZOOMS = { week: 'Semana', month: 'Mês', quarter: 'Trimestre', semester: 'Semestre', year: 'Ano' };
 const ZOOM_DAYS = { week: 14, month: 45, quarter: 120, semester: 210, year: 420 };
 const HIDDEN_RESOURCE_PROFESSIONALS = ['bruno', 'bruna', 'leandro', 'pedro', 'lucas', 'suellen'];
+let resourceAllocationStateCache = null;
 
 function parseLocalDate(value) {
   if (!value) return null;
@@ -112,17 +113,23 @@ function resourceUsers(users = []) {
     .sort((a, b) => String(a.displayName || a.name || '').localeCompare(String(b.displayName || b.name || ''), 'pt-BR', { sensitivity: 'base' }));
 }
 
-async function stateFromData() {
+async function stateFromData({ skipRemote = false } = {}) {
   const saved = loadState();
   let remote = null;
   let persistence = 'supabase';
   let warning = '';
-  try {
-    remote = await fetchRemoteState();
-    saveState(remote);
-  } catch (error) {
-    persistence = 'local';
-    warning = `${error.message} Usando fallback local somente para desenvolvimento/validação offline.`;
+  if (skipRemote) {
+    remote = resourceAllocationStateCache || saved;
+    persistence = resourceAllocationStateCache ? 'supabase' : 'local';
+  } else {
+    try {
+      remote = await fetchRemoteState();
+      resourceAllocationStateCache = remote;
+      saveState(remote);
+    } catch (error) {
+      persistence = 'local';
+      warning = `${error.message} Usando fallback local somente para desenvolvimento/validação offline.`;
+    }
   }
   const ui = loadUiState();
   const source = remote || saved;
@@ -147,6 +154,10 @@ function optionRows(rows, selected = '', label = 'name') {
 
 function persist(partial) {
   saveUiState({ ...loadUiState(), ...partial });
+}
+
+function rerenderResourceAllocationFast() {
+  return renderResourceAllocation({ skipRemote: true });
 }
 
 function persistLocalData(state, partial) {
@@ -271,7 +282,17 @@ function renderProfessionalView(summary, state) {
 function renderScaleHeader(range, zoom) {
   const labels = monthSegments(range).map(segment => `<span class="ra-month-label" style="left:${segment.left.toFixed(4)}%;width:${segment.width.toFixed(4)}%">${segment.date.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}</span>`);
   if (!labels.length || zoom === 'week') labels.unshift(`<span class="ra-month-label" style="left:0%;width:100%">${range.start.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}</span>`);
-  return `${renderMonthGrid(range)}${labels.join('')}`;
+  const dayStep = zoom === 'week' ? 1 : zoom === 'month' ? 7 : zoom === 'quarter' ? 15 : zoom === 'semester' ? 30 : 60;
+  const days = daySpan(range.start, range.end);
+  const ticks = [];
+  for (let date = new Date(range.start); date <= range.end; date = addDays(date, dayStep)) {
+    const left = ((date - range.start) / 86400000) / days * 100;
+    const label = zoom === 'week' || zoom === 'month'
+      ? String(date.getDate()).padStart(2, '0')
+      : date.toLocaleDateString('pt-BR', { month: 'short' });
+    ticks.push(`<span class="ra-day-label" style="left:${Math.max(0, Math.min(100, left)).toFixed(4)}%">${sanitize(label)}</span>`);
+  }
+  return `${renderMonthGrid(range)}${labels.join('')}<div class="ra-day-scale">${ticks.join('')}</div>`;
 }
 
 function todayMarkerStyle(left) {
@@ -408,6 +429,11 @@ function renderTimelineView(summary, state) {
     <div class="section-header">
       <div><h3>Timeline de Alocação</h3><p>Visão temporal dos profissionais, capacidade e lacunas de alocação.</p></div>
       <div class="ra-timeline-actions">
+        <div class="ra-gantt-nav" aria-label="Navegação da timeline">
+          <button type="button" class="btn btn-secondary" data-timeline-shift="-1" title="Voltar período">‹</button>
+          <button type="button" class="btn btn-secondary" data-timeline-today>Hoje</button>
+          <button type="button" class="btn btn-secondary" data-timeline-shift="1" title="Avançar período">›</button>
+        </div>
         <label>Agrupar por <select id="ra-group-filter"><option value="role" ${state.filters.groupBy === 'role' ? 'selected' : ''}>Função</option><option value="project" ${state.filters.groupBy === 'project' ? 'selected' : ''}>Projeto</option><option value="client" ${state.filters.groupBy === 'client' ? 'selected' : ''}>Cliente</option></select></label>
         <label>Sem alocação após <select id="ra-alert-months"><option value="1" ${state.alertMonths === 1 ? 'selected' : ''}>1 mês</option><option value="2" ${state.alertMonths === 2 ? 'selected' : ''}>2 meses</option><option value="3" ${state.alertMonths === 3 ? 'selected' : ''}>3 meses</option><option value="6" ${state.alertMonths === 6 ? 'selected' : ''}>6 meses</option></select></label>
         <button type="button" class="btn btn-secondary" id="ra-zoom-out">−</button>
@@ -653,12 +679,12 @@ function renderHistory(state, users) {
   }).join('') || '<tr><td colspan="5">Nenhuma alteração registrada.</td></tr>'}</tbody></table></div></section>`;
 }
 
-export async function renderResourceAllocation() {
+export async function renderResourceAllocation({ skipRemote = false } = {}) {
   const header = document.getElementById('page-header');
   const content = document.getElementById('page-content');
   header.innerHTML = '<h2>Alocação de Recursos</h2><div class="subtitle">Planejamento e acompanhamento de capacidade por profissional e projeto</div>';
-  content.innerHTML = '<div class="empty-state"><h3>Carregando Alocação de Recursos</h3><p>Consultando projetos, alocações e histórico.</p></div>';
-  const state = await stateFromData();
+  if (!skipRemote) content.innerHTML = '<div class="empty-state"><h3>Carregando Alocação de Recursos</h3><p>Consultando projetos, alocações e histórico.</p></div>';
+  const state = await stateFromData({ skipRemote });
   const users = resourceUsers(dataService.getUsersForSelection());
   const editingProject = state.filters.editProjectId ? state.projects.find(project => project.id === state.filters.editProjectId) : null;
   const editingAllocation = state.filters.editAllocationId ? state.allocations.find(allocation => allocation.id === state.filters.editAllocationId) : null;
@@ -711,22 +737,22 @@ export async function renderResourceAllocation() {
       end: endFilter,
       groupBy: document.getElementById('ra-group-filter')?.value || state.filters.groupBy || 'role',
     }, zoom: document.getElementById('ra-zoom')?.value || state.zoom, alertMonths: Number(document.getElementById('ra-alert-days')?.value || state.alertMonths), viewDate: nextViewDate });
-    renderResourceAllocation();
+    rerenderResourceAllocationFast();
   };
-  document.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click', () => { persist({ tab: button.dataset.tab }); renderResourceAllocation(); }));
+  document.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click', () => { persist({ tab: button.dataset.tab }); rerenderResourceAllocationFast(); }));
   ['ra-project-filter', 'ra-client-filter', 'ra-user-filter', 'ra-role-filter', 'ra-status-filter', 'ra-availability-filter', 'ra-start-filter', 'ra-end-filter', 'ra-zoom', 'ra-group-filter', 'ra-alert-days'].forEach(id => document.getElementById(id)?.addEventListener('change', applyFilters));
   document.getElementById('ra-alert-months')?.addEventListener('change', event => {
     const months = Number(event.target.value || 1);
     persist({ alertMonths: months });
-    renderResourceAllocation();
+    rerenderResourceAllocationFast();
   });
   document.querySelectorAll('[data-calendar-date]').forEach(button => button.addEventListener('click', () => {
     persist({ viewDate: button.dataset.calendarDate });
-    renderResourceAllocation();
+    rerenderResourceAllocationFast();
   }));
   document.querySelectorAll('[data-calendar-shift]').forEach(button => button.addEventListener('click', () => {
     persist({ viewDate: isoDate(addMonths(state.viewDate, Number(button.dataset.calendarShift || 0))) });
-    renderResourceAllocation();
+    rerenderResourceAllocationFast();
   }));
   const applyCalendarMonthYear = () => {
     const month = Number(document.getElementById('ra-calendar-month')?.value ?? parseLocalDate(state.viewDate).getMonth());
@@ -734,30 +760,38 @@ export async function renderResourceAllocation() {
     const current = parseLocalDate(state.viewDate);
     const next = new Date(year, month, Math.min(current.getDate(), new Date(year, month + 1, 0).getDate()));
     persist({ viewDate: isoDate(next) });
-    renderResourceAllocation();
+    rerenderResourceAllocationFast();
   };
   document.getElementById('ra-calendar-month')?.addEventListener('change', applyCalendarMonthYear);
   document.getElementById('ra-calendar-year')?.addEventListener('change', applyCalendarMonthYear);
   setupTimelineDrag(document.querySelector('.ra-timeline-table'));
   document.querySelectorAll('[data-resource-kpi]').forEach(button => button.addEventListener('click', () => showResourceKpiModal(summary, button.dataset.resourceKpi)));
   document.getElementById('ra-search')?.addEventListener('input', applyFilters);
-  document.getElementById('ra-clear')?.addEventListener('click', () => { persist({ filters: {} }); renderResourceAllocation(); });
-  document.getElementById('ra-prev')?.addEventListener('click', () => { persist({ viewDate: isoDate(addDays(state.viewDate, -(ZOOM_DAYS[state.zoom] || ZOOM_DAYS.month))) }); renderResourceAllocation(); });
-  document.getElementById('ra-today')?.addEventListener('click', () => { persist({ viewDate: isoDate(new Date()) }); renderResourceAllocation(); });
-  document.getElementById('ra-next')?.addEventListener('click', () => { persist({ viewDate: isoDate(addDays(state.viewDate, ZOOM_DAYS[state.zoom] || ZOOM_DAYS.month)) }); renderResourceAllocation(); });
+  document.getElementById('ra-clear')?.addEventListener('click', () => { persist({ filters: {} }); rerenderResourceAllocationFast(); });
+  document.getElementById('ra-prev')?.addEventListener('click', () => { persist({ viewDate: isoDate(addDays(state.viewDate, -(ZOOM_DAYS[state.zoom] || ZOOM_DAYS.month))) }); rerenderResourceAllocationFast(); });
+  document.getElementById('ra-today')?.addEventListener('click', () => { persist({ viewDate: isoDate(new Date()) }); rerenderResourceAllocationFast(); });
+  document.getElementById('ra-next')?.addEventListener('click', () => { persist({ viewDate: isoDate(addDays(state.viewDate, ZOOM_DAYS[state.zoom] || ZOOM_DAYS.month)) }); rerenderResourceAllocationFast(); });
+  document.querySelectorAll('[data-timeline-shift]').forEach(button => button.addEventListener('click', () => {
+    persist({ viewDate: isoDate(addDays(state.viewDate, Number(button.dataset.timelineShift || 0) * (ZOOM_DAYS[state.zoom] || ZOOM_DAYS.month))) });
+    rerenderResourceAllocationFast();
+  }));
+  document.querySelector('[data-timeline-today]')?.addEventListener('click', () => {
+    persist({ viewDate: isoDate(new Date()) });
+    rerenderResourceAllocationFast();
+  });
   document.getElementById('ra-zoom-out')?.addEventListener('click', () => {
     const order = Object.keys(ZOOMS);
     persist({ zoom: order[Math.max(0, order.indexOf(state.zoom) - 1)] || state.zoom });
-    renderResourceAllocation();
+    rerenderResourceAllocationFast();
   });
   document.getElementById('ra-zoom-in')?.addEventListener('click', () => {
     const order = Object.keys(ZOOMS);
     persist({ zoom: order[Math.min(order.length - 1, order.indexOf(state.zoom) + 1)] || state.zoom });
-    renderResourceAllocation();
+    rerenderResourceAllocationFast();
   });
   document.getElementById('ra-fit-timeline')?.addEventListener('click', () => {
     persist({ filters: { ...state.filters, start: '', end: '' }, zoom: 'month', viewDate: isoDate(new Date()) });
-    renderResourceAllocation();
+    rerenderResourceAllocationFast();
   });
   document.getElementById('ra-cancel-project-edit')?.addEventListener('click', () => { persist({ filters: { ...state.filters, editProjectId: '' } }); renderResourceAllocation(); });
   document.getElementById('ra-cancel-allocation-edit')?.addEventListener('click', () => { persist({ filters: { ...state.filters, editAllocationId: '' } }); renderResourceAllocation(); });

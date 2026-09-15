@@ -2231,7 +2231,7 @@ input, select, textarea { font-family: inherit; }
 
 .ra-timeline-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 260px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 320px);
   gap: 14px;
   align-items: start;
   padding: 12px;
@@ -2241,6 +2241,10 @@ input, select, textarea { font-family: inherit; }
 }
 
 .ra-timeline-table {
+  --ra-left-col: 260px;
+  --ra-load-col: 110px;
+  --ra-sticky-left-bg: rgba(12, 30, 54, .98);
+  --ra-sticky-load-bg: rgba(10, 25, 46, .98);
   overflow: auto;
   border: 1px solid var(--ra-line, var(--border));
   border-radius: 10px;
@@ -2260,6 +2264,8 @@ input, select, textarea { font-family: inherit; }
 }
 
 :root[data-theme="light"] .ra-timeline-table {
+  --ra-sticky-left-bg: #f8fbff;
+  --ra-sticky-load-bg: #ffffff;
   background: #ffffff;
 }
 
@@ -2267,7 +2273,7 @@ input, select, textarea { font-family: inherit; }
 .ra-timeline-row {
   min-width: 980px;
   display: grid;
-  grid-template-columns: 260px 110px minmax(720px, 1fr);
+  grid-template-columns: var(--ra-left-col) var(--ra-load-col) minmax(720px, 1fr);
   align-items: stretch;
 }
 
@@ -2295,9 +2301,34 @@ input, select, textarea { font-family: inherit; }
   padding: 14px 12px;
 }
 
+.ra-timeline-head > span:first-child,
+.ra-timeline-head > span:nth-child(2) {
+  position: sticky;
+  z-index: 9;
+  display: flex;
+  align-items: center;
+  background: rgba(18, 39, 68, .98);
+  box-shadow: 1px 0 0 var(--ra-line, var(--border));
+}
+
+.ra-timeline-head > span:first-child {
+  left: 0;
+}
+
+.ra-timeline-head > span:nth-child(2) {
+  left: var(--ra-left-col);
+  justify-content: center;
+  text-align: center;
+}
+
+:root[data-theme="light"] .ra-timeline-head > span:first-child,
+:root[data-theme="light"] .ra-timeline-head > span:nth-child(2) {
+  background: #edf4ff;
+}
+
 .ra-scale {
   position: relative;
-  min-height: 58px;
+  min-height: 64px;
   overflow: hidden;
 }
 
@@ -2337,7 +2368,7 @@ input, select, textarea { font-family: inherit; }
 
 .ra-scale .ra-month-label {
   position: absolute;
-  top: 30px;
+  top: 32px;
   z-index: 1;
   white-space: nowrap;
   max-width: none;
@@ -2346,6 +2377,29 @@ input, select, textarea { font-family: inherit; }
   text-align: center;
   font-size: 10px;
   padding: 0 4px;
+}
+
+.ra-day-scale {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.ra-day-label {
+  position: absolute;
+  top: 9px;
+  transform: translateX(-50%);
+  max-width: 58px;
+  color: #dbeafe;
+  font-size: 9px;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: .82;
+}
+
+:root[data-theme="light"] .ra-day-label {
+  color: #64748b;
 }
 
 .ra-scale i {
@@ -2373,7 +2427,7 @@ input, select, textarea { font-family: inherit; }
 .ra-group summary {
   position: sticky;
   left: 0;
-  z-index: 3;
+  z-index: 6;
   display: flex;
   gap: 8px;
   align-items: center;
@@ -2407,13 +2461,13 @@ input, select, textarea { font-family: inherit; }
 .ra-sticky-person {
   position: sticky;
   left: 0;
-  z-index: 2;
+  z-index: 5;
   display: grid;
   grid-template-columns: 12px 1fr;
   gap: 4px 8px;
   align-items: center;
   padding: 9px 12px;
-  background: rgba(12, 30, 54, .96);
+  background: var(--ra-sticky-left-bg);
   border-right: 1px solid var(--ra-line, var(--border));
   color: #eaf2ff;
   min-height: inherit;
@@ -2435,14 +2489,23 @@ input, select, textarea { font-family: inherit; }
 }
 
 .ra-load-badge {
+  position: sticky;
+  left: var(--ra-left-col);
+  z-index: 5;
   align-self: center;
   justify-self: center;
+  min-width: 54px;
   border-radius: 999px;
   background: rgba(71, 95, 126, .45);
   color: #eaf2ff;
   padding: 5px 10px;
   font-weight: 900;
   font-size: 12px;
+}
+
+.ra-timeline-row > .ra-load-badge {
+  box-shadow: 0 0 0 999px var(--ra-sticky-load-bg);
+  clip-path: inset(-999px 0 -999px 0);
 }
 
 :root[data-theme="light"] .ra-load-badge {
@@ -2610,8 +2673,8 @@ input, select, textarea { font-family: inherit; }
 
 .ra-calendar-controls {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1.1fr) minmax(0, .85fr) 32px;
-  gap: 6px;
+  grid-template-columns: 34px minmax(126px, 1fr) minmax(82px, .72fr) 34px;
+  gap: 8px;
   align-items: end;
   margin-top: 12px;
 }
@@ -2633,6 +2696,7 @@ input, select, textarea { font-family: inherit; }
 }
 
 .ra-calendar-controls select {
+  width: 100%;
   min-width: 0;
   min-height: 32px;
   padding: 6px 8px;
@@ -2641,6 +2705,34 @@ input, select, textarea { font-family: inherit; }
   background: rgba(30, 55, 88, .82);
   color: #eaf2ff;
   font-weight: 800;
+}
+
+.ra-calendar-controls .select-list,
+.ra-calendar-controls .select-list-trigger {
+  width: 100%;
+  min-width: 0;
+}
+
+.ra-calendar-controls .select-list-trigger {
+  min-height: 34px;
+  padding: 7px 9px;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.1;
+}
+
+.ra-calendar-controls label:first-of-type .select-list-trigger {
+  font-size: 10.5px;
+}
+
+.ra-calendar-controls .select-list-menu {
+  min-width: 148px;
+  z-index: 80;
+}
+
+.ra-calendar-controls label:first-of-type .select-list-menu {
+  min-width: 176px;
 }
 
 :root[data-theme="light"] .ra-calendar-controls select {

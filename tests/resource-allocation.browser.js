@@ -12,6 +12,7 @@ try {
   const avatarSvg = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="#6366f1"/><text x="20" y="25" text-anchor="middle" fill="white" font-size="14">AM</text></svg>')}`;
   const allocations = [];
   const history = [];
+  let stateRequests = 0;
   page.on('pageerror', error => errors.push(error.message));
   page.on('dialog', async dialog => {
     dialogs.push(dialog.message());
@@ -20,10 +21,13 @@ try {
   await page.route('**/ra-fixture', route => route.fulfill({ contentType: 'text/html', body: '<html><head><link rel="stylesheet" href="/src/styles/main.css"></head><body><div id="page-header"></div><main id="page-content"></main></body></html>' }));
   await page.route('**/api/jira/resource-allocation/**', async route => {
     const path = new URL(route.request().url()).pathname;
-    if (path.endsWith('/state')) return route.fulfill({ json: { projects: [
-      { id: projectId, name: 'Payment Integration', client: 'RJA', startDate: '2026-01-01', endDate: '2026-12-31', status: 'Em andamento', note: '' },
-      { id: secondProjectId, name: 'Dengo', client: 'RJA', startDate: '2026-09-14', endDate: '2027-03-31', status: 'Em andamento', note: '' },
-    ], allocations, history } });
+    if (path.endsWith('/state')) {
+      stateRequests += 1;
+      return route.fulfill({ json: { projects: [
+        { id: projectId, name: 'Payment Integration', client: 'RJA', startDate: '2026-01-01', endDate: '2026-12-31', status: 'Em andamento', note: '' },
+        { id: secondProjectId, name: 'Dengo', client: 'RJA', startDate: '2026-09-14', endDate: '2027-03-31', status: 'Em andamento', note: '' },
+      ], allocations, history } });
+    }
     if (path.endsWith('/allocations')) {
       const body = route.request().postDataJSON();
       allocations.push(body.allocation);
@@ -92,6 +96,7 @@ try {
   assert.equal(await page.locator('#ra-alert-months').inputValue(), '2');
   assert.equal(await page.locator('.ra-subrow-percent.available').count(), 0);
   assert.equal(await page.locator('.ra-no-future').count(), 0);
+  const stateRequestsBeforeTimelineControls = stateRequests;
   assert.ok(await page.locator('[data-calendar-date="2026-09-15"]').count() > 0);
   await page.click('[data-calendar-date="2026-09-15"]');
   const persistedUi = await page.evaluate(() => JSON.parse(localStorage.getItem('rja.resourceAllocation.ui.v1')));
@@ -105,6 +110,14 @@ try {
   await page.click('[data-calendar-shift="-1"]');
   const shiftedUi = await page.evaluate(() => JSON.parse(localStorage.getItem('rja.resourceAllocation.ui.v1')));
   assert.equal(shiftedUi.viewDate, '2027-11-15');
+  await page.click('[data-timeline-shift="-1"]');
+  await page.click('[data-timeline-today]');
+  await page.click('#ra-zoom-in');
+  assert.equal(stateRequests, stateRequestsBeforeTimelineControls, 'controles da timeline nao devem recarregar o estado remoto a cada clique');
+  const calendarMonthWidth = await page.locator('#ra-calendar-month').boundingBox();
+  const calendarYearWidth = await page.locator('#ra-calendar-year').boundingBox();
+  assert.ok(calendarMonthWidth.width >= 100, 'seletor de mes do calendario precisa ser legivel');
+  assert.ok(calendarYearWidth.width >= 70, 'seletor de ano do calendario precisa ser legivel');
   await page.evaluate(async () => {
     const ui = JSON.parse(localStorage.getItem('rja.resourceAllocation.ui.v1'));
     localStorage.setItem('rja.resourceAllocation.ui.v1', JSON.stringify({ ...ui, viewDate: '2026-09-01', filters: {} }));
@@ -142,11 +155,17 @@ try {
   const tableBox = await page.locator('.ra-timeline-table').boundingBox();
   const canDrag = await page.locator('.ra-timeline-table').evaluate(el => el.scrollWidth > el.clientWidth);
   assert.equal(canDrag, true);
+  const stickyBefore = await page.locator('.ra-timeline-head > span').nth(0).boundingBox();
+  const stickyLoadBefore = await page.locator('.ra-timeline-head > span').nth(1).boundingBox();
   await page.mouse.move(tableBox.x + tableBox.width - 40, tableBox.y + 28);
   await page.mouse.down();
   await page.mouse.move(tableBox.x + 120, tableBox.y + 28, { steps: 8 });
   await page.mouse.up();
   assert.ok(await page.locator('.ra-timeline-table').evaluate(el => el.scrollLeft > 0), 'timeline deve navegar horizontalmente ao arrastar');
+  const stickyAfter = await page.locator('.ra-timeline-head > span').nth(0).boundingBox();
+  const stickyLoadAfter = await page.locator('.ra-timeline-head > span').nth(1).boundingBox();
+  assert.ok(Math.abs(stickyAfter.x - stickyBefore.x) < 2, 'coluna Profissional deve permanecer fixa ao rolar a timeline');
+  assert.ok(Math.abs(stickyLoadAfter.x - stickyLoadBefore.x) < 2, 'coluna % alocacao deve permanecer fixa ao rolar a timeline');
   await page.screenshot({ path: '/tmp/resource-allocation.png', fullPage: true });
   assert.deepEqual(errors, []);
   console.log('Browser passed: resource allocation opens, saves allocation, confirms overcapacity, filters and project tab.');

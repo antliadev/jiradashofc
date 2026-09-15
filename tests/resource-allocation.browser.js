@@ -149,8 +149,12 @@ try {
   assert.equal(await page.locator('.ra-timeline-row[data-user-id="u1"] .ra-timeline-subrow .ra-timeline-bar').count(), 2);
   assert.match(await page.locator('.ra-timeline-row[data-user-id="u1"]').innerText(), /120%/);
   const scaleText = await page.locator('.ra-scale').innerText();
-  ['set.', 'out.', 'nov.', 'dez.', 'jan.', 'fev.', 'mar.'].forEach(month => assert.match(scaleText, new RegExp(month.replace('.', '\\.'), 'i')));
+  ['setembro 2026', 'outubro 2026', 'novembro 2026', 'dezembro 2026', 'janeiro 2027', 'fevereiro 2027', 'março 2027'].forEach(month => assert.match(scaleText, new RegExp(month, 'i')));
+  ['set 26', 'out 26', 'nov 26', 'dez 26'].forEach(month => assert.match(scaleText, new RegExp(month, 'i')));
+  assert.doesNotMatch(scaleText, /\b15\b|\b22\b|\b29\b|Hoje/);
   assert.ok(await page.locator('.ra-month-grid i').count() >= 7);
+  assert.ok(await page.locator('.ra-month-label strong').count() >= 7);
+  assert.ok(await page.locator('.ra-month-label small').count() >= 7);
   assert.equal(await page.locator('.ra-timeline-row[data-user-id="u1"]').evaluate(el => el.classList.contains('overallocated')), true);
   const firstBar = page.locator('.ra-timeline-row[data-user-id="u1"] .ra-timeline-bar').first();
   const firstBarBox = await firstBar.boundingBox();
@@ -163,7 +167,7 @@ try {
   await page.locator('#ra-start-filter').dispatchEvent('change');
   const filteredUi = await page.evaluate(() => JSON.parse(localStorage.getItem('rja.resourceAllocation.ui.v1')));
   assert.equal(filteredUi.viewDate, '2027-01-05');
-  assert.match(await page.locator('.ra-scale').innerText(), /jan\./i);
+  assert.match(await page.locator('.ra-scale').innerText(), /janeiro 2027/i);
   await page.setViewportSize({ width: 880, height: 900 });
   const tableBox = await page.locator('.ra-timeline-table').boundingBox();
   const canDrag = await page.locator('.ra-timeline-table').evaluate(el => el.scrollWidth > el.clientWidth);

@@ -283,24 +283,17 @@ function renderProfessionalView(summary, state) {
 }
 
 function renderScaleHeader(range, zoom) {
-  const labels = monthSegments(range).map(segment => `<span class="ra-month-label" style="left:${segment.left.toFixed(4)}%;width:${segment.width.toFixed(4)}%">${segment.date.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}</span>`);
-  if (!labels.length || zoom === 'week') labels.unshift(`<span class="ra-month-label" style="left:0%;width:100%">${range.start.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })}</span>`);
-  const dayStep = zoom === 'week' ? 1 : zoom === 'month' ? 7 : zoom === 'quarter' ? 15 : zoom === 'semester' ? 30 : 60;
-  const days = daySpan(range.start, range.end);
-  const ticks = [];
-  for (let date = new Date(range.start); date <= range.end; date = addDays(date, dayStep)) {
-    const left = ((date - range.start) / 86400000) / days * 100;
-    const label = zoom === 'week' || zoom === 'month'
-      ? String(date.getDate()).padStart(2, '0')
-      : date.toLocaleDateString('pt-BR', { month: 'short' });
-    ticks.push(`<span class="ra-day-label" style="left:${Math.max(0, Math.min(100, left)).toFixed(4)}%">${sanitize(label)}</span>`);
+  const labels = monthSegments(range).map(segment => {
+    const full = segment.date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).replace(/\s+de\s+/i, ' ');
+    const short = segment.date.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }).replace(/\./g, '').replace(/\s+de\s+/i, ' ');
+    return `<span class="ra-month-label" style="left:${segment.left.toFixed(4)}%;width:${segment.width.toFixed(4)}%"><strong>${sanitize(full)}</strong><small>${sanitize(short)}</small></span>`;
+  });
+  if (!labels.length || zoom === 'week') {
+    const full = range.start.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).replace(/\s+de\s+/i, ' ');
+    const short = range.start.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }).replace(/\./g, '').replace(/\s+de\s+/i, ' ');
+    labels.unshift(`<span class="ra-month-label" style="left:0%;width:100%"><strong>${sanitize(full)}</strong><small>${sanitize(short)}</small></span>`);
   }
-  return `${renderMonthGrid(range)}${labels.join('')}<div class="ra-day-scale">${ticks.join('')}</div>`;
-}
-
-function todayMarkerStyle(left) {
-  const bounded = Math.max(0, Math.min(100, Number(left || 0)));
-  return `--today-left:${bounded.toFixed(4)}%;`;
+  return `${renderMonthGrid(range)}${labels.join('')}`;
 }
 
 function timelineBarStyle(segment) {
@@ -447,7 +440,7 @@ function renderTimelineView(summary, state) {
     <div class="ra-timeline-shell">
       <div class="ra-timeline-table zoom-${sanitize(state.zoom)}">
         <div class="ra-timeline-head">
-          <span>Profissional</span><span>% alocação</span><div class="ra-scale">${renderScaleHeader(range, state.zoom)}${todayLeft !== null ? `<i style="${todayMarkerStyle(todayLeft)}">Hoje</i>` : ''}</div>
+          <span>Profissional</span><span>% alocação</span><div class="ra-scale">${renderScaleHeader(range, state.zoom)}</div>
         </div>
         ${groups.map(group => `<details class="ra-group" open><summary>${sanitize(group.title)} <small>${sanitize(group.subtitle)}</small></summary>${group.rows.map(row => {
           const visibleAllocations = row.allocations

@@ -2356,7 +2356,7 @@ input, select, textarea { font-family: inherit; }
 
 .ra-scale {
   position: relative;
-  min-height: 64px;
+  min-height: 68px;
   overflow: hidden;
 }
 
@@ -2375,9 +2375,9 @@ input, select, textarea { font-family: inherit; }
   position: absolute;
   top: 0;
   bottom: 0;
-  border-left: 1px solid rgba(95, 132, 183, .28);
-  border-right: 1px solid rgba(95, 132, 183, .12);
-  background: rgba(95, 132, 183, .045);
+  border-left: 1px solid rgba(95, 132, 183, .38);
+  border-right: 1px solid rgba(95, 132, 183, .16);
+  background: rgba(95, 132, 183, .035);
 }
 
 .ra-month-grid i:nth-child(even) {
@@ -2396,55 +2396,54 @@ input, select, textarea { font-family: inherit; }
 
 .ra-scale .ra-month-label {
   position: absolute;
-  top: 32px;
+  inset-block: 0;
   z-index: 1;
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  align-items: center;
   white-space: nowrap;
   max-width: none;
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: center;
+  padding: 8px 10px;
+  border-left: 1px solid rgba(95, 132, 183, .42);
+  border-right: 1px solid rgba(95, 132, 183, .18);
+}
+
+.ra-month-label strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #eaf2ff;
+  font-size: 11px;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  letter-spacing: .055em;
+}
+
+.ra-month-label small {
+  min-width: 0;
+  overflow: hidden;
+  color: #8fb2e5;
   font-size: 10px;
-  padding: 0 4px;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  letter-spacing: .04em;
 }
 
-.ra-day-scale {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
+:root[data-theme="light"] .ra-scale .ra-month-label {
+  border-left-color: rgba(148, 163, 184, .42);
+  border-right-color: rgba(148, 163, 184, .2);
 }
 
-.ra-day-label {
-  position: absolute;
-  top: 9px;
-  transform: translateX(-50%);
-  max-width: 58px;
-  color: #dbeafe;
-  font-size: 9px;
-  line-height: 1;
-  white-space: nowrap;
-  opacity: .82;
+:root[data-theme="light"] .ra-month-label strong {
+  color: #1e293b;
 }
 
-:root[data-theme="light"] .ra-day-label {
+:root[data-theme="light"] .ra-month-label small {
   color: #64748b;
-}
-
-.ra-scale i {
-  position: absolute;
-  top: 6px;
-  left: clamp(28px, var(--today-left, 50%), calc(100% - 28px));
-  transform: translateX(-50%);
-  border-radius: 999px;
-  background: var(--accent-primary);
-  color: #fff;
-  padding: 3px 8px;
-  font-size: 10px;
-  font-style: normal;
-  text-transform: none;
-  line-height: 1;
-  z-index: 2;
-  box-shadow: 0 6px 16px rgba(37, 99, 235, .28);
 }
 
 .ra-group {

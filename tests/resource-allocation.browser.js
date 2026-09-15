@@ -85,6 +85,30 @@ try {
   assert.match(await page.locator('.ra-project-allocation').first().innerText(), /Ana Maria Colaboradora de Teste/);
   assert.equal(await page.locator('[data-delete-project]').count(), 2);
   assert.match(await page.locator('.ra-project-allocation').first().getAttribute('title'), /Também alocado em/);
+  await page.click('[data-tab="professional"]');
+  await page.selectOption('#ra-project-filter', projectId);
+  await page.waitForFunction(() => document.querySelectorAll('.ra-row').length >= 1);
+  await page.selectOption('#ra-client-filter', 'RJA');
+  assert.ok(await page.locator('.ra-row').count() >= 1);
+  await page.click('#ra-clear');
+  await page.selectOption('#ra-role-filter', 'Frontend');
+  assert.match(await page.locator('.ra-row[data-user-id="u1"]').innerText(), /60%/);
+  await page.click('#ra-clear');
+  await page.selectOption('#ra-status-filter', 'Em andamento');
+  assert.ok(await page.locator('.ra-row').count() >= 1);
+  await page.click('#ra-clear');
+  await page.selectOption('#ra-availability-filter', 'overallocated');
+  assert.match(await page.locator('.ra-row[data-user-id="u1"]').innerText(), /120%/);
+  await page.fill('#ra-search', 'zzzz-sem-resultado');
+  await page.waitForTimeout(50);
+  assert.equal(await page.locator('.ra-row').count(), 0);
+  await page.click('#ra-clear');
+  await page.waitForFunction(() => document.querySelectorAll('.ra-row').length >= 1);
+  await page.click('[data-tab="project"]');
+  await page.selectOption('#ra-project-filter', secondProjectId);
+  assert.match(await page.locator('.ra-project').first().innerText(), /Dengo/);
+  await page.click('#ra-clear');
+  await page.waitForFunction(() => document.querySelectorAll('.ra-project').length >= 1);
   await page.evaluate(async () => {
     document.documentElement.dataset.theme = 'light';
     localStorage.setItem('rja.resourceAllocation.ui.v1', JSON.stringify({ tab: 'timeline', zoom: 'semester', viewDate: '2026-09-01', filters: {}, alertMonths: 2 }));
@@ -168,6 +192,23 @@ try {
   const filteredUi = await page.evaluate(() => JSON.parse(localStorage.getItem('rja.resourceAllocation.ui.v1')));
   assert.equal(filteredUi.viewDate, '2027-01-05');
   assert.match(await page.locator('.ra-scale').innerText(), /janeiro 2027/i);
+  await page.fill('#ra-start-filter', '2027-06-01');
+  await page.fill('#ra-end-filter', '2027-01-01');
+  await page.locator('#ra-end-filter').dispatchEvent('change');
+  assert.match(await page.locator('.ra-scale').innerText(), /janeiro 2027/i);
+  await page.click('#ra-clear');
+  for (const zoom of ['week', 'month', 'quarter', 'semester', 'year']) {
+    await page.selectOption('#ra-zoom', zoom);
+    assert.ok(await page.locator('.ra-month-label strong').count() >= 1, `zoom ${zoom} deve manter cabecalho mensal legivel`);
+  }
+  for (const groupBy of ['role', 'project', 'client']) {
+    await page.selectOption('#ra-group-filter', groupBy);
+    assert.ok(await page.locator('.ra-group').count() >= 1, `agrupamento ${groupBy} deve renderizar grupos`);
+  }
+  for (const months of ['1', '2', '3', '6']) {
+    await page.selectOption('#ra-alert-months', months);
+    assert.equal(await page.locator('#ra-alert-months').inputValue(), months);
+  }
   await page.setViewportSize({ width: 880, height: 900 });
   const tableBox = await page.locator('.ra-timeline-table').boundingBox();
   const canDrag = await page.locator('.ra-timeline-table').evaluate(el => el.scrollWidth > el.clientWidth);
@@ -191,6 +232,15 @@ try {
   await page.mouse.move(firstTrackBox.x + 40, firstTrackBox.y + 20);
   await page.mouse.wheel(0, 420);
   assert.ok(await page.locator('.ra-timeline-table').evaluate(el => el.scrollLeft > 0), 'timeline deve navegar horizontalmente com a rolagem do mouse');
+  await page.locator('.ra-timeline-table').evaluate(el => { el.scrollLeft = 0; });
+  const barBox = await page.locator('.ra-timeline-bar').first().boundingBox();
+  await page.mouse.move(barBox.x + Math.min(24, barBox.width / 2), barBox.y + Math.min(10, barBox.height / 2));
+  await page.mouse.down();
+  await page.mouse.move(barBox.x - 180, barBox.y + Math.min(10, barBox.height / 2), { steps: 8 });
+  await page.mouse.up();
+  assert.ok(await page.locator('.ra-timeline-table').evaluate(el => el.scrollLeft > 0), 'timeline deve navegar ao arrastar sobre uma barra do gantt');
+  const afterBarDragUi = await page.evaluate(() => JSON.parse(localStorage.getItem('rja.resourceAllocation.ui.v1')));
+  assert.equal(afterBarDragUi.filters?.editAllocationId || '', '', 'arrastar uma barra nao deve abrir edicao acidentalmente');
   const stickyAfter = await page.locator('.ra-timeline-head > span').nth(0).boundingBox();
   const stickyLoadAfter = await page.locator('.ra-timeline-head > span').nth(1).boundingBox();
   assert.ok(Math.abs(stickyAfter.x - stickyBefore.x) < 2, 'coluna Profissional deve permanecer fixa ao rolar a timeline');

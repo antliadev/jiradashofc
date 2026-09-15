@@ -264,7 +264,7 @@ function renderKpis(summary, { compact = false } = {}) {
 function renderProfessionalView(summary, state) {
   const visibleEnd = addDays(state.viewDate, ZOOM_DAYS[state.zoom] || ZOOM_DAYS.month);
   const range = state.filters.start || state.filters.end
-    ? { start: parseLocalDate(state.filters.start || state.viewDate), end: parseLocalDate(state.filters.end || visibleEnd) }
+    ? normalizeTimelineRange(state.filters.start || state.viewDate, state.filters.end || visibleEnd, state.viewDate)
     : timelineRange(state.allocations, state.viewDate);
   if (!state.filters.start && !state.filters.end) range.end = visibleEnd > range.end ? visibleEnd : range.end;
   const days = Math.max(1, Math.round((range.end - range.start) / 86400000) + 1);
@@ -331,6 +331,14 @@ function renderAllocationCalendar(viewDate) {
 
 function daySpan(start, end) {
   return Math.max(1, Math.round((end - start) / 86400000) + 1);
+}
+
+function normalizeTimelineRange(start, end, fallbackStart = new Date()) {
+  const safeStart = parseLocalDate(start) || parseLocalDate(fallbackStart) || new Date();
+  const safeEnd = parseLocalDate(end) || safeStart;
+  return safeStart <= safeEnd
+    ? { start: safeStart, end: safeEnd }
+    : { start: safeEnd, end: safeStart };
 }
 
 function monthSegments(range) {
@@ -415,8 +423,8 @@ function groupRows(rows, state) {
 function renderTimelineView(summary, state) {
   const visibleEnd = addDays(state.viewDate, TIMELINE_ZOOM_DAYS[state.zoom] || TIMELINE_ZOOM_DAYS.month);
   const range = state.filters.start || state.filters.end
-    ? { start: parseLocalDate(state.filters.start || state.viewDate), end: parseLocalDate(state.filters.end || visibleEnd) }
-    : { start: parseLocalDate(state.viewDate), end: visibleEnd };
+    ? normalizeTimelineRange(state.filters.start || state.viewDate, state.filters.end || visibleEnd, state.viewDate)
+    : normalizeTimelineRange(state.viewDate, visibleEnd, state.viewDate);
   const days = daySpan(range.start, range.end);
   const today = parseLocalDate(new Date());
   const todayLeft = today >= range.start && today <= range.end ? Math.round(((today - range.start) / 86400000) / days * 100) : null;
@@ -478,10 +486,13 @@ function setupTimelineDrag(table) {
   let startX = 0;
   let startScroll = 0;
   let moved = false;
+  let suppressClick = false;
   const canScrollHorizontally = () => table.scrollWidth > table.clientWidth + 1;
   const isTimelineScrollTarget = target => Boolean(target.closest('.ra-scale, .ra-timeline-track, .ra-timeline-bar, .ra-empty-timeline'));
+  const isInteractiveTimelineBar = target => Boolean(target.closest('.ra-timeline-bar'));
+  const isBlockedInteractive = target => Boolean(target.closest('select, input, summary') || (target.closest('button') && !isInteractiveTimelineBar(target)));
   table.addEventListener('pointerdown', event => {
-    if (event.button !== 0 || !canScrollHorizontally() || !isTimelineScrollTarget(event.target) || event.target.closest('button, select, input, summary')) return;
+    if (event.button !== 0 || !canScrollHorizontally() || !isTimelineScrollTarget(event.target) || isBlockedInteractive(event.target)) return;
     dragging = true;
     moved = false;
     startX = event.clientX;
@@ -497,7 +508,7 @@ function setupTimelineDrag(table) {
     event.preventDefault();
   });
   table.addEventListener('wheel', event => {
-    if (!canScrollHorizontally() || !isTimelineScrollTarget(event.target) || event.target.closest('button, select, input, summary')) return;
+    if (!canScrollHorizontally() || !isTimelineScrollTarget(event.target) || isBlockedInteractive(event.target)) return;
     const delta = Math.abs(event.deltaX) >= Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
     if (!delta) return;
     const before = table.scrollLeft;
@@ -509,8 +520,18 @@ function setupTimelineDrag(table) {
     dragging = false;
     table.classList.remove('is-dragging');
     table.releasePointerCapture?.(event.pointerId);
-    if (moved) event.preventDefault();
+    if (moved) {
+      suppressClick = true;
+      window.setTimeout(() => { suppressClick = false; }, 0);
+      event.preventDefault();
+    }
   };
+  table.addEventListener('click', event => {
+    if (!suppressClick) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+  }, true);
   table.addEventListener('pointerup', stop);
   table.addEventListener('pointercancel', stop);
   table.addEventListener('mouseleave', () => {

@@ -96,6 +96,20 @@ try {
   await page.click('[data-calendar-date="2026-09-15"]');
   const persistedUi = await page.evaluate(() => JSON.parse(localStorage.getItem('rja.resourceAllocation.ui.v1')));
   assert.equal(persistedUi.viewDate, '2026-09-15');
+  await page.selectOption('#ra-calendar-month', '11');
+  const decemberUi = await page.evaluate(() => JSON.parse(localStorage.getItem('rja.resourceAllocation.ui.v1')));
+  assert.equal(decemberUi.viewDate, '2026-12-15');
+  await page.selectOption('#ra-calendar-year', '2027');
+  const yearUi = await page.evaluate(() => JSON.parse(localStorage.getItem('rja.resourceAllocation.ui.v1')));
+  assert.equal(yearUi.viewDate, '2027-12-15');
+  await page.click('[data-calendar-shift="-1"]');
+  const shiftedUi = await page.evaluate(() => JSON.parse(localStorage.getItem('rja.resourceAllocation.ui.v1')));
+  assert.equal(shiftedUi.viewDate, '2027-11-15');
+  await page.evaluate(async () => {
+    const ui = JSON.parse(localStorage.getItem('rja.resourceAllocation.ui.v1'));
+    localStorage.setItem('rja.resourceAllocation.ui.v1', JSON.stringify({ ...ui, viewDate: '2026-09-01', filters: {} }));
+    await (await import('/src/pages/resource-allocation.js')).renderResourceAllocation();
+  });
   const lightTimelineColors = await page.locator('.ra-timeline-table').evaluate(el => {
     const table = getComputedStyle(el);
     const head = getComputedStyle(document.querySelector('.ra-timeline-head'));
@@ -119,6 +133,20 @@ try {
   const trackBox = await page.locator('.ra-timeline-row[data-user-id="u1"] .ra-timeline-track').boundingBox();
   assert.ok(firstBarBox.x <= trackBox.x + 72, 'barra iniciada antes da janela deve respeitar somente o respiro visual do percentual');
   assert.ok(firstBarBox.x + firstBarBox.width < trackBox.x + trackBox.width - 80, 'barra com fim em 31/12/2026 nao deve se estender ate o fim da timeline');
+  await page.fill('#ra-start-filter', '2027-01-05');
+  await page.locator('#ra-start-filter').dispatchEvent('change');
+  const filteredUi = await page.evaluate(() => JSON.parse(localStorage.getItem('rja.resourceAllocation.ui.v1')));
+  assert.equal(filteredUi.viewDate, '2027-01-05');
+  assert.match(await page.locator('.ra-scale').innerText(), /jan\./i);
+  await page.setViewportSize({ width: 880, height: 900 });
+  const tableBox = await page.locator('.ra-timeline-table').boundingBox();
+  const canDrag = await page.locator('.ra-timeline-table').evaluate(el => el.scrollWidth > el.clientWidth);
+  assert.equal(canDrag, true);
+  await page.mouse.move(tableBox.x + tableBox.width - 40, tableBox.y + 28);
+  await page.mouse.down();
+  await page.mouse.move(tableBox.x + 120, tableBox.y + 28, { steps: 8 });
+  await page.mouse.up();
+  assert.ok(await page.locator('.ra-timeline-table').evaluate(el => el.scrollLeft > 0), 'timeline deve navegar horizontalmente ao arrastar');
   await page.screenshot({ path: '/tmp/resource-allocation.png', fullPage: true });
   assert.deepEqual(errors, []);
   console.log('Browser passed: resource allocation opens, saves allocation, confirms overcapacity, filters and project tab.');

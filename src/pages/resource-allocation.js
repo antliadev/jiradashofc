@@ -36,6 +36,15 @@ function addDays(value, days) {
   return date;
 }
 
+function addMonths(value, months) {
+  const date = parseLocalDate(value) || new Date();
+  const day = date.getDate();
+  date.setDate(1);
+  date.setMonth(date.getMonth() + months);
+  date.setDate(Math.min(day, new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate()));
+  return date;
+}
+
 function loadState() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; }
 }
@@ -286,6 +295,7 @@ function renderAllocationCalendar(viewDate) {
   start.setDate(first.getDate() - first.getDay());
   const todayIso = isoDate(new Date());
   const selectedIso = isoDate(reference);
+  const years = Array.from({ length: 9 }, (_, index) => reference.getFullYear() - 4 + index);
   const cells = [];
   for (let index = 0; index < 42; index++) {
     const day = addDays(start, index);
@@ -294,7 +304,12 @@ function renderAllocationCalendar(viewDate) {
     const label = day.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
     cells.push(`<button type="button" class="${inMonth ? '' : 'muted'} ${dayIso === todayIso || dayIso === selectedIso ? 'active' : ''}" data-calendar-date="${dayIso}" title="Ir para ${sanitizeTitle(label)}">${day.getDate()}</button>`);
   }
-  return `<div class="ra-calendar-grid"><b>D</b><b>S</b><b>T</b><b>Q</b><b>Q</b><b>S</b><b>S</b>${cells.join('')}</div>`;
+  return `<div class="ra-calendar-controls">
+    <button type="button" class="btn btn-secondary" data-calendar-shift="-1" title="Mês anterior">‹</button>
+    <label>Mês<select id="ra-calendar-month">${Array.from({ length: 12 }, (_, index) => `<option value="${index}" ${reference.getMonth() === index ? 'selected' : ''}>${sanitize(new Date(reference.getFullYear(), index, 1).toLocaleDateString('pt-BR', { month: 'long' }))}</option>`).join('')}</select></label>
+    <label>Ano<select id="ra-calendar-year">${years.map(year => `<option value="${year}" ${reference.getFullYear() === year ? 'selected' : ''}>${year}</option>`).join('')}</select></label>
+    <button type="button" class="btn btn-secondary" data-calendar-shift="1" title="Próximo mês">›</button>
+  </div><div class="ra-calendar-grid"><b>D</b><b>S</b><b>T</b><b>Q</b><b>Q</b><b>S</b><b>S</b>${cells.join('')}</div>`;
 }
 
 function daySpan(start, end) {
@@ -433,6 +448,42 @@ function renderTimelineView(summary, state) {
       </aside>
     </div>
   </section>`;
+}
+
+function setupTimelineDrag(table) {
+  if (!table) return;
+  let dragging = false;
+  let startX = 0;
+  let startScroll = 0;
+  let moved = false;
+  table.addEventListener('pointerdown', event => {
+    if (event.button !== 0 || event.target.closest('button, select, input, summary')) return;
+    dragging = true;
+    moved = false;
+    startX = event.clientX;
+    startScroll = table.scrollLeft;
+    table.classList.add('is-dragging');
+    table.setPointerCapture?.(event.pointerId);
+  });
+  table.addEventListener('pointermove', event => {
+    if (!dragging) return;
+    const delta = event.clientX - startX;
+    if (Math.abs(delta) > 4) moved = true;
+    table.scrollLeft = startScroll - delta;
+  });
+  const stop = event => {
+    if (!dragging) return;
+    dragging = false;
+    table.classList.remove('is-dragging');
+    table.releasePointerCapture?.(event.pointerId);
+    if (moved) event.preventDefault();
+  };
+  table.addEventListener('pointerup', stop);
+  table.addEventListener('pointercancel', stop);
+  table.addEventListener('mouseleave', () => {
+    dragging = false;
+    table.classList.remove('is-dragging');
+  });
 }
 
 function statusLabel(status) {
@@ -645,6 +696,9 @@ export async function renderResourceAllocation() {
   </div>`;
 
   const applyFilters = () => {
+    const startFilter = document.getElementById('ra-start-filter')?.value || '';
+    const endFilter = document.getElementById('ra-end-filter')?.value || '';
+    const nextViewDate = startFilter || endFilter || state.viewDate;
     persist({ filters: {
       search: document.getElementById('ra-search')?.value || '',
       projectId: document.getElementById('ra-project-filter')?.value || '',
@@ -653,10 +707,10 @@ export async function renderResourceAllocation() {
       role: document.getElementById('ra-role-filter')?.value || '',
       status: document.getElementById('ra-status-filter')?.value || '',
       availability: document.getElementById('ra-availability-filter')?.value || '',
-      start: document.getElementById('ra-start-filter')?.value || '',
-      end: document.getElementById('ra-end-filter')?.value || '',
+      start: startFilter,
+      end: endFilter,
       groupBy: document.getElementById('ra-group-filter')?.value || state.filters.groupBy || 'role',
-    }, zoom: document.getElementById('ra-zoom')?.value || state.zoom, alertMonths: Number(document.getElementById('ra-alert-days')?.value || state.alertMonths) });
+    }, zoom: document.getElementById('ra-zoom')?.value || state.zoom, alertMonths: Number(document.getElementById('ra-alert-days')?.value || state.alertMonths), viewDate: nextViewDate });
     renderResourceAllocation();
   };
   document.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click', () => { persist({ tab: button.dataset.tab }); renderResourceAllocation(); }));
@@ -670,6 +724,21 @@ export async function renderResourceAllocation() {
     persist({ viewDate: button.dataset.calendarDate });
     renderResourceAllocation();
   }));
+  document.querySelectorAll('[data-calendar-shift]').forEach(button => button.addEventListener('click', () => {
+    persist({ viewDate: isoDate(addMonths(state.viewDate, Number(button.dataset.calendarShift || 0))) });
+    renderResourceAllocation();
+  }));
+  const applyCalendarMonthYear = () => {
+    const month = Number(document.getElementById('ra-calendar-month')?.value ?? parseLocalDate(state.viewDate).getMonth());
+    const year = Number(document.getElementById('ra-calendar-year')?.value ?? parseLocalDate(state.viewDate).getFullYear());
+    const current = parseLocalDate(state.viewDate);
+    const next = new Date(year, month, Math.min(current.getDate(), new Date(year, month + 1, 0).getDate()));
+    persist({ viewDate: isoDate(next) });
+    renderResourceAllocation();
+  };
+  document.getElementById('ra-calendar-month')?.addEventListener('change', applyCalendarMonthYear);
+  document.getElementById('ra-calendar-year')?.addEventListener('change', applyCalendarMonthYear);
+  setupTimelineDrag(document.querySelector('.ra-timeline-table'));
   document.querySelectorAll('[data-resource-kpi]').forEach(button => button.addEventListener('click', () => showResourceKpiModal(summary, button.dataset.resourceKpi)));
   document.getElementById('ra-search')?.addEventListener('input', applyFilters);
   document.getElementById('ra-clear')?.addEventListener('click', () => { persist({ filters: {} }); renderResourceAllocation(); });

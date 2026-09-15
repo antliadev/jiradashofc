@@ -2245,6 +2245,18 @@ input, select, textarea { font-family: inherit; }
   border: 1px solid var(--ra-line, var(--border));
   border-radius: 10px;
   background: rgba(7, 19, 36, .68);
+  cursor: grab;
+  scrollbar-width: thin;
+}
+
+.ra-timeline-table.is-dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.ra-timeline-table button,
+.ra-timeline-table summary {
+  cursor: pointer;
 }
 
 :root[data-theme="light"] .ra-timeline-table {
@@ -2594,6 +2606,54 @@ input, select, textarea { font-family: inherit; }
 .ra-legend h4,
 .ra-period-summary h4 {
   margin-bottom: 8px;
+}
+
+.ra-calendar-controls {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1.1fr) minmax(0, .85fr) 32px;
+  gap: 6px;
+  align-items: end;
+  margin-top: 12px;
+}
+
+.ra-calendar-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  color: #91a4bd;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+
+:root[data-theme="light"] .ra-calendar-controls label {
+  color: var(--text-secondary);
+}
+
+.ra-calendar-controls select {
+  min-width: 0;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 1px solid var(--ra-line, var(--border));
+  border-radius: 8px;
+  background: rgba(30, 55, 88, .82);
+  color: #eaf2ff;
+  font-weight: 800;
+}
+
+:root[data-theme="light"] .ra-calendar-controls select {
+  background: #eef4ff;
+  color: #334155;
+  border-color: #c9d8f0;
+}
+
+.ra-calendar-controls .btn {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  justify-content: center;
 }
 
 .ra-legend {

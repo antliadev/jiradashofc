@@ -7,6 +7,7 @@ const UI_KEY = 'rja.resourceAllocation.ui.v1';
 const STATUSES = ['Planejado', 'Em andamento', 'Concluído', 'Suspenso', 'Cancelado'];
 const ZOOMS = { week: 'Semana', month: 'Mês', quarter: 'Trimestre', semester: 'Semestre', year: 'Ano' };
 const ZOOM_DAYS = { week: 14, month: 45, quarter: 120, semester: 210, year: 420 };
+const TIMELINE_ZOOM_DAYS = { week: 45, month: 210, quarter: 365, semester: 540, year: 730 };
 const HIDDEN_RESOURCE_PROFESSIONALS = ['bruno', 'bruna', 'leandro', 'pedro', 'lucas', 'suellen'];
 let resourceAllocationStateCache = null;
 
@@ -134,10 +135,12 @@ async function stateFromData({ skipRemote = false } = {}) {
   const ui = loadUiState();
   const source = remote || saved;
   const projects = Array.isArray(saved.projects) && saved.projects.length ? saved.projects : [];
+  const tab = ui.tab || 'professional';
+  const viewDate = tab === 'timeline' && !ui.timelineDatePinned ? isoDate(new Date()) : ui.viewDate || isoDate(new Date());
   return {
-    tab: ui.tab || 'professional',
+    tab,
     zoom: ui.zoom || 'month',
-    viewDate: ui.viewDate || isoDate(new Date()),
+    viewDate,
     alertMonths: alertMonthsFromState(ui),
     filters: ui.filters || {},
     projects: Array.isArray(source.projects) && source.projects.length ? source.projects : projects,
@@ -417,7 +420,7 @@ function groupRows(rows, state) {
 }
 
 function renderTimelineView(summary, state) {
-  const visibleEnd = addDays(state.viewDate, ZOOM_DAYS[state.zoom] || ZOOM_DAYS.month);
+  const visibleEnd = addDays(state.viewDate, TIMELINE_ZOOM_DAYS[state.zoom] || TIMELINE_ZOOM_DAYS.month);
   const range = state.filters.start || state.filters.end
     ? { start: parseLocalDate(state.filters.start || state.viewDate), end: parseLocalDate(state.filters.end || visibleEnd) }
     : { start: parseLocalDate(state.viewDate), end: visibleEnd };
@@ -442,7 +445,7 @@ function renderTimelineView(summary, state) {
       </div>
     </div>
     <div class="ra-timeline-shell">
-      <div class="ra-timeline-table">
+      <div class="ra-timeline-table zoom-${sanitize(state.zoom)}">
         <div class="ra-timeline-head">
           <span>Profissional</span><span>% alocação</span><div class="ra-scale">${renderScaleHeader(range, state.zoom)}${todayLeft !== null ? `<i style="${todayMarkerStyle(todayLeft)}">Hoje</i>` : ''}</div>
         </div>
@@ -482,8 +485,9 @@ function setupTimelineDrag(table) {
   let startX = 0;
   let startScroll = 0;
   let moved = false;
+  const canScrollHorizontally = () => table.scrollWidth > table.clientWidth + 1;
   table.addEventListener('pointerdown', event => {
-    if (event.button !== 0 || event.target.closest('button, select, input, summary')) return;
+    if (event.button !== 0 || !canScrollHorizontally() || event.target.closest('button, select, input, summary')) return;
     dragging = true;
     moved = false;
     startX = event.clientX;
@@ -496,7 +500,16 @@ function setupTimelineDrag(table) {
     const delta = event.clientX - startX;
     if (Math.abs(delta) > 4) moved = true;
     table.scrollLeft = startScroll - delta;
+    event.preventDefault();
   });
+  table.addEventListener('wheel', event => {
+    if (!canScrollHorizontally() || event.target.closest('button, select, input, summary')) return;
+    const delta = Math.abs(event.deltaX) >= Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+    if (!delta) return;
+    const before = table.scrollLeft;
+    table.scrollLeft += delta;
+    if (table.scrollLeft !== before) event.preventDefault();
+  }, { passive: false });
   const stop = event => {
     if (!dragging) return;
     dragging = false;
@@ -736,10 +749,13 @@ export async function renderResourceAllocation({ skipRemote = false } = {}) {
       start: startFilter,
       end: endFilter,
       groupBy: document.getElementById('ra-group-filter')?.value || state.filters.groupBy || 'role',
-    }, zoom: document.getElementById('ra-zoom')?.value || state.zoom, alertMonths: Number(document.getElementById('ra-alert-days')?.value || state.alertMonths), viewDate: nextViewDate });
+    }, zoom: document.getElementById('ra-zoom')?.value || state.zoom, alertMonths: Number(document.getElementById('ra-alert-days')?.value || state.alertMonths), viewDate: nextViewDate, timelineDatePinned: Boolean(startFilter || endFilter) });
     rerenderResourceAllocationFast();
   };
-  document.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click', () => { persist({ tab: button.dataset.tab }); rerenderResourceAllocationFast(); }));
+  document.querySelectorAll('[data-tab]').forEach(button => button.addEventListener('click', () => {
+    persist({ tab: button.dataset.tab, ...(button.dataset.tab === 'timeline' ? { viewDate: isoDate(new Date()), timelineDatePinned: false } : {}) });
+    rerenderResourceAllocationFast();
+  }));
   ['ra-project-filter', 'ra-client-filter', 'ra-user-filter', 'ra-role-filter', 'ra-status-filter', 'ra-availability-filter', 'ra-start-filter', 'ra-end-filter', 'ra-zoom', 'ra-group-filter', 'ra-alert-days'].forEach(id => document.getElementById(id)?.addEventListener('change', applyFilters));
   document.getElementById('ra-alert-months')?.addEventListener('change', event => {
     const months = Number(event.target.value || 1);
@@ -747,11 +763,11 @@ export async function renderResourceAllocation({ skipRemote = false } = {}) {
     rerenderResourceAllocationFast();
   });
   document.querySelectorAll('[data-calendar-date]').forEach(button => button.addEventListener('click', () => {
-    persist({ viewDate: button.dataset.calendarDate });
+    persist({ viewDate: button.dataset.calendarDate, timelineDatePinned: true });
     rerenderResourceAllocationFast();
   }));
   document.querySelectorAll('[data-calendar-shift]').forEach(button => button.addEventListener('click', () => {
-    persist({ viewDate: isoDate(addMonths(state.viewDate, Number(button.dataset.calendarShift || 0))) });
+    persist({ viewDate: isoDate(addMonths(state.viewDate, Number(button.dataset.calendarShift || 0))), timelineDatePinned: true });
     rerenderResourceAllocationFast();
   }));
   const applyCalendarMonthYear = () => {
@@ -759,7 +775,7 @@ export async function renderResourceAllocation({ skipRemote = false } = {}) {
     const year = Number(document.getElementById('ra-calendar-year')?.value ?? parseLocalDate(state.viewDate).getFullYear());
     const current = parseLocalDate(state.viewDate);
     const next = new Date(year, month, Math.min(current.getDate(), new Date(year, month + 1, 0).getDate()));
-    persist({ viewDate: isoDate(next) });
+    persist({ viewDate: isoDate(next), timelineDatePinned: true });
     rerenderResourceAllocationFast();
   };
   document.getElementById('ra-calendar-month')?.addEventListener('change', applyCalendarMonthYear);
@@ -768,15 +784,15 @@ export async function renderResourceAllocation({ skipRemote = false } = {}) {
   document.querySelectorAll('[data-resource-kpi]').forEach(button => button.addEventListener('click', () => showResourceKpiModal(summary, button.dataset.resourceKpi)));
   document.getElementById('ra-search')?.addEventListener('input', applyFilters);
   document.getElementById('ra-clear')?.addEventListener('click', () => { persist({ filters: {} }); rerenderResourceAllocationFast(); });
-  document.getElementById('ra-prev')?.addEventListener('click', () => { persist({ viewDate: isoDate(addDays(state.viewDate, -(ZOOM_DAYS[state.zoom] || ZOOM_DAYS.month))) }); rerenderResourceAllocationFast(); });
-  document.getElementById('ra-today')?.addEventListener('click', () => { persist({ viewDate: isoDate(new Date()) }); rerenderResourceAllocationFast(); });
-  document.getElementById('ra-next')?.addEventListener('click', () => { persist({ viewDate: isoDate(addDays(state.viewDate, ZOOM_DAYS[state.zoom] || ZOOM_DAYS.month)) }); rerenderResourceAllocationFast(); });
+  document.getElementById('ra-prev')?.addEventListener('click', () => { persist({ viewDate: isoDate(addDays(state.viewDate, -(TIMELINE_ZOOM_DAYS[state.zoom] || TIMELINE_ZOOM_DAYS.month))), timelineDatePinned: true }); rerenderResourceAllocationFast(); });
+  document.getElementById('ra-today')?.addEventListener('click', () => { persist({ viewDate: isoDate(new Date()), timelineDatePinned: false }); rerenderResourceAllocationFast(); });
+  document.getElementById('ra-next')?.addEventListener('click', () => { persist({ viewDate: isoDate(addDays(state.viewDate, TIMELINE_ZOOM_DAYS[state.zoom] || TIMELINE_ZOOM_DAYS.month)), timelineDatePinned: true }); rerenderResourceAllocationFast(); });
   document.querySelectorAll('[data-timeline-shift]').forEach(button => button.addEventListener('click', () => {
-    persist({ viewDate: isoDate(addDays(state.viewDate, Number(button.dataset.timelineShift || 0) * (ZOOM_DAYS[state.zoom] || ZOOM_DAYS.month))) });
+    persist({ viewDate: isoDate(addDays(state.viewDate, Number(button.dataset.timelineShift || 0) * (TIMELINE_ZOOM_DAYS[state.zoom] || TIMELINE_ZOOM_DAYS.month))), timelineDatePinned: true });
     rerenderResourceAllocationFast();
   }));
   document.querySelector('[data-timeline-today]')?.addEventListener('click', () => {
-    persist({ viewDate: isoDate(new Date()) });
+    persist({ viewDate: isoDate(new Date()), timelineDatePinned: false });
     rerenderResourceAllocationFast();
   });
   document.getElementById('ra-zoom-out')?.addEventListener('click', () => {
@@ -790,7 +806,7 @@ export async function renderResourceAllocation({ skipRemote = false } = {}) {
     rerenderResourceAllocationFast();
   });
   document.getElementById('ra-fit-timeline')?.addEventListener('click', () => {
-    persist({ filters: { ...state.filters, start: '', end: '' }, zoom: 'month', viewDate: isoDate(new Date()) });
+    persist({ filters: { ...state.filters, start: '', end: '' }, zoom: 'month', viewDate: isoDate(new Date()), timelineDatePinned: false });
     rerenderResourceAllocationFast();
   });
   document.getElementById('ra-cancel-project-edit')?.addEventListener('click', () => { persist({ filters: { ...state.filters, editProjectId: '' } }); renderResourceAllocation(); });

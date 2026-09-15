@@ -66,6 +66,7 @@ try {
   await page.fill('#ra-allocation-form input[name="percent"]', '60');
   await page.fill('#ra-allocation-form input[name="role"]', 'Frontend');
   await page.click('#ra-allocation-form button[type="submit"]');
+  await page.waitForFunction(() => document.querySelector('.ra-row[data-user-id="u1"]')?.innerText.includes('60%'));
   assert.match(await page.locator('.ra-row[data-user-id="u1"]').innerText(), /60%/);
   await page.selectOption('#ra-allocation-form select[name="userId"]', 'u1');
   await page.selectOption('#ra-allocation-form select[name="projectId"]', secondProjectId);
@@ -90,6 +91,9 @@ try {
     await (await import('/src/pages/resource-allocation.js')).renderResourceAllocation();
   });
   assert.match(await page.locator('.ra-timeline-view').innerText(), /Timeline de Alocação/);
+  const defaultTimelineUi = await page.evaluate(() => JSON.parse(localStorage.getItem('rja.resourceAllocation.ui.v1')));
+  assert.equal(defaultTimelineUi.timelineDatePinned, undefined);
+  assert.match(await page.locator('.ra-calendar-card > strong').innerText(), /setembro de 2026/i);
   await page.click('[data-resource-kpi="overallocated"]');
   assert.match(await page.locator('.ra-kpi-modal').innerText(), /Sobrealocados/);
   await page.click('[data-close-modal]');
@@ -132,6 +136,15 @@ try {
   assert.doesNotMatch(lightTimelineColors.table, /rgb\(7, 19, 36\)|rgb\(8, 23, 42\)/);
   assert.doesNotMatch(lightTimelineColors.head, /rgb\(18, 39, 68\)/);
   assert.doesNotMatch(lightTimelineColors.person, /rgb\(12, 30, 54\)/);
+  const allocationHeader = page.locator('.ra-timeline-head > span').nth(1);
+  assert.match(await allocationHeader.innerText(), /% alocação/i);
+  const allocationHeaderBox = await allocationHeader.boundingBox();
+  const allocationHeaderStyles = await allocationHeader.evaluate(el => {
+    const styles = getComputedStyle(el);
+    return { color: styles.color, background: styles.backgroundColor };
+  });
+  assert.ok(allocationHeaderBox.width >= 100, 'coluna % alocacao precisa ter largura visivel');
+  assert.notEqual(allocationHeaderStyles.color, allocationHeaderStyles.background, 'texto da coluna % alocacao nao pode sumir no fundo');
   assert.equal(await page.locator('.ra-timeline-row[data-user-id="u1"]').count(), 1);
   assert.equal(await page.locator('.ra-timeline-row[data-user-id="u1"] .ra-timeline-subrow .ra-timeline-bar').count(), 2);
   assert.match(await page.locator('.ra-timeline-row[data-user-id="u1"]').innerText(), /120%/);
@@ -162,6 +175,9 @@ try {
   await page.mouse.move(tableBox.x + 120, tableBox.y + 28, { steps: 8 });
   await page.mouse.up();
   assert.ok(await page.locator('.ra-timeline-table').evaluate(el => el.scrollLeft > 0), 'timeline deve navegar horizontalmente ao arrastar');
+  await page.locator('.ra-timeline-table').evaluate(el => { el.scrollLeft = 0; });
+  await page.mouse.wheel(0, 420);
+  assert.ok(await page.locator('.ra-timeline-table').evaluate(el => el.scrollLeft > 0), 'timeline deve navegar horizontalmente com a rolagem do mouse');
   const stickyAfter = await page.locator('.ra-timeline-head > span').nth(0).boundingBox();
   const stickyLoadAfter = await page.locator('.ra-timeline-head > span').nth(1).boundingBox();
   assert.ok(Math.abs(stickyAfter.x - stickyBefore.x) < 2, 'coluna Profissional deve permanecer fixa ao rolar a timeline');

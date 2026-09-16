@@ -21,6 +21,7 @@ import {
   fetchIssuesFromDatabase,
   fetchIssuesPageFromDatabase,
   fetchDashboardDataFromDatabase,
+  buildDashboardData,
   clearJiraDashboardCache
 } from '../../lib/jiraService.js';
 import {
@@ -29,6 +30,7 @@ import {
 } from '../../lib/projectMetadataService.js';
 import { createSyncJob, createSyncJobFromEnv, createScopedSyncJobFromEnv, getSyncJobStatus, runSyncJob, executeAutoSync, ensureRecentAutoSync } from '../../lib/syncJobService.js';
 import { fetchHoursDashboard } from '../../lib/hoursDashboardService.js';
+import { hasPartialSelfScope } from '../../lib/appPermissions.js';
 
 const router = express.Router();
 router.use('/sprint-review', sprintReviewRoutes);
@@ -45,6 +47,45 @@ function triggerSelfHealingSync(req, source = 'app-read') {
   } else if (process.env.VERCEL !== '1') {
     setImmediate(task);
   }
+}
+
+function analystEmailsForSession(req) {
+  return [
+    req.session?.user?.email,
+    req.session?.user?.login,
+    req.session?.email,
+  ].map(value => String(value || '').trim().toLowerCase()).filter(Boolean);
+}
+
+function scopeDashboardForUser(data, req, permission = 'analysts.general') {
+  const user = req.session?.user;
+  if (!hasPartialSelfScope(user?.role, permission)) return data;
+
+  const emails = new Set(analystEmailsForSession(req));
+  if (!emails.size) return buildDashboardData([]);
+
+  const analystIds = new Set((data.analysts || [])
+    .filter(analyst => emails.has(String(analyst.email || '').trim().toLowerCase()))
+    .map(analyst => analyst.id)
+    .filter(Boolean));
+
+  const ownIssues = (data.issues || []).filter(issue => (
+    analystIds.has(issue.assignee_id)
+    || emails.has(String(issue.assignee_email || '').trim().toLowerCase())
+  ));
+  const scoped = buildDashboardData(ownIssues);
+  return {
+    ...scoped,
+    lastSyncedAt: data.lastSyncedAt,
+  };
+}
+
+function scopeIssuesForUser(issues, req, permission = 'analysts.general') {
+  const user = req.session?.user;
+  if (!hasPartialSelfScope(user?.role, permission)) return issues;
+  const emails = new Set(analystEmailsForSession(req));
+  if (!emails.size) return [];
+  return (issues || []).filter(issue => emails.has(String(issue.assignee_email || '').trim().toLowerCase()));
 }
 
 router.get('/system/status', async (req, res) => {
@@ -403,7 +444,11 @@ router.get('/dashboard', async (req, res) => {
   try {
     triggerSelfHealingSync(req, 'dashboard-read');
     const latestJob = await getSyncJobStatus().catch(() => null);
-    const data = await fetchDashboardDataFromDatabase({ force: req.query.force === 'true' || req.query.force === '1' });
+    const data = scopeDashboardForUser(
+      await fetchDashboardDataFromDatabase({ force: req.query.force === 'true' || req.query.force === '1' }),
+      req,
+      'analysts.general'
+    );
     const total = data.totalIssues || 0;
 
     if (total === 0) {
@@ -492,7 +537,7 @@ router.get('/issues', async (req, res) => {
     const filters = { project, status, assignee, priority, type };
 
     if (req.query.all === 'true') {
-      const issues = await fetchIssuesFromDatabase(filters);
+      const issues = scopeIssuesForUser(await fetchIssuesFromDatabase(filters), req);
       return res.json({
         total: issues.length,
         limit: issues.length,
@@ -504,12 +549,13 @@ router.get('/issues', async (req, res) => {
     const limit  = Math.min(parseInt(req.query.limit)  || 100, 500);
     const offset = parseInt(req.query.offset) || 0;
     const page = await fetchIssuesPageFromDatabase(filters, { limit, offset });
+    const scopedIssues = scopeIssuesForUser(page.issues, req);
 
     return res.json({
-      total: page.total,
+      total: scopedIssues.length,
       limit: page.limit,
       offset: page.offset,
-      issues: page.issues
+      issues: scopedIssues
     });
   } catch (error) {
     console.error('[issues] Erro:', error.message);
@@ -522,7 +568,7 @@ router.get('/issues', async (req, res) => {
 // ─────────────────────────────────────────────
 router.get('/projects', async (req, res) => {
   try {
-    const data = await fetchDashboardDataFromDatabase();
+    const data = scopeDashboardForUser(await fetchDashboardDataFromDatabase(), req, 'analysts.general');
     return res.json(data.projects);
   } catch (error) {
     console.error('[projects] Erro:', error.message);
@@ -535,7 +581,7 @@ router.get('/projects', async (req, res) => {
 // ─────────────────────────────────────────────
 router.get('/analysts', async (req, res) => {
   try {
-    const data = await fetchDashboardDataFromDatabase();
+    const data = scopeDashboardForUser(await fetchDashboardDataFromDatabase(), req, 'analysts.general');
     return res.json(data.analysts);
   } catch (error) {
     console.error('[analysts] Erro:', error.message);
@@ -548,7 +594,7 @@ router.get('/analysts', async (req, res) => {
 // ─────────────────────────────────────────────
 router.get('/statuses', async (req, res) => {
   try {
-    const data = await fetchDashboardDataFromDatabase();
+    const data = scopeDashboardForUser(await fetchDashboardDataFromDatabase(), req, 'analysts.general');
     return res.json(data.statuses);
   } catch (error) {
     console.error('[statuses] Erro:', error.message);
@@ -561,7 +607,7 @@ router.get('/statuses', async (req, res) => {
 // ─────────────────────────────────────────────
 router.get('/metrics', async (req, res) => {
   try {
-    const data = await fetchDashboardDataFromDatabase();
+    const data = scopeDashboardForUser(await fetchDashboardDataFromDatabase(), req, 'analysts.general');
     return res.json(data.metrics);
   } catch (error) {
     console.error('[metrics] Erro:', error.message);
@@ -574,7 +620,7 @@ router.get('/metrics', async (req, res) => {
 // ─────────────────────────────────────────────
 router.get('/board', async (req, res) => {
   try {
-    const data = await fetchDashboardDataFromDatabase();
+    const data = scopeDashboardForUser(await fetchDashboardDataFromDatabase(), req, 'analysts.general');
     return res.json(data.board);
   } catch (error) {
     console.error('[board] Erro:', error.message);

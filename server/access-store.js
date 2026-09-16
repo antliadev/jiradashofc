@@ -7,7 +7,15 @@ import path from 'path';
 import { isConfigured as supabaseConfigured, supabase } from '../lib/supabaseServer.js';
 import { authConfig, assertAllowedEmail } from '../lib/authConfig.js';
 import { requirePrivilegedSupabase } from '../lib/appAuthService.js';
-import { MENU_PERMISSIONS, canManageAccess } from '../lib/appPermissions.js';
+import {
+  ACCESS_MODULES,
+  ACCESS_PROFILE_CODES,
+  ACCESS_PROFILES,
+  MENU_PERMISSIONS,
+  canManageAccess,
+  normalizeAccessProfile,
+  permissionsForProfile,
+} from '../lib/appPermissions.js';
 
 const DATA_DIR = path.resolve(process.cwd(), '.local-data');
 const USERS_FILE = path.join(DATA_DIR, 'access-users.json');
@@ -18,8 +26,7 @@ const ITERATIONS = 120000;
 const KEY_LENGTH = 32;
 const DIGEST = 'sha256';
 
-const ROLE_CODES = ['full', 'master', 'visualizacao', 'personalizado'];
-const LEGACY_ROLE_MAP = { custom: 'personalizado' };
+const ROLE_CODES = [...ACCESS_PROFILE_CODES, 'full', 'master', 'visualizacao', 'personalizado'];
 
 function ensureDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -48,9 +55,9 @@ function defaultAdmin() {
     name: 'Administrador',
     login,
     passwordHash: hashPassword(password),
-    role: 'full',
+    role: 'diretoria',
     status: 'active',
-    permissions: [...MENU_PERMISSIONS],
+    permissions: permissionsForProfile('diretoria'),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
@@ -159,8 +166,9 @@ function safeUser(user) {
 }
 
 function normalizeRole(role) {
-  const normalized = LEGACY_ROLE_MAP[role] || role;
-  return ROLE_CODES.includes(normalized) ? normalized : 'personalizado';
+  const normalized = normalizeAccessProfile(role);
+  if (ROLE_CODES.includes(normalized)) return normalized;
+  return /^[a-z0-9_.-]{2,60}$/.test(normalized) ? normalized : 'desenvolvedor_ba';
 }
 
 function normalizeStatus(status) {
@@ -168,21 +176,22 @@ function normalizeStatus(status) {
 }
 
 function normalizePermissions(role, permissions = []) {
-  if (role === 'full' || role === 'master') return [...MENU_PERMISSIONS];
-  if (role === 'visualizacao') {
-    return MENU_PERMISSIONS.filter(permission => permission !== 'data');
-  }
+  const profilePermissions = permissionsForProfile(role);
+  if (profilePermissions.length) return profilePermissions;
   return [...new Set(permissions.filter(permission => MENU_PERMISSIONS.includes(permission)))];
 }
 
 function dbProfileToUser(row, permissions = []) {
   const role = normalizeRole(row.primary_role);
+  const name = row.display_name || '';
   return {
     id: row.user_id,
-    name: row.display_name || row.email,
+    name: name || row.email,
     login: row.email,
     email: row.email,
     role,
+    profileCode: role,
+    profileName: ACCESS_PROFILES.find(profile => profile.code === role)?.name || role,
     status: normalizeStatus(row.status),
     permissions: normalizePermissions(role, permissions),
     createdAt: row.created_at,
@@ -192,12 +201,15 @@ function dbProfileToUser(row, permissions = []) {
 
 function dbGrantToUser(row) {
   const role = normalizeRole(row.primary_role);
+  const displayName = String(row.display_name || '').trim();
   return {
     id: `grant:${row.email}`,
-    name: row.display_name || row.email,
+    name: displayName || row.email,
     login: row.email,
     email: row.email,
     role,
+    profileCode: role,
+    profileName: ACCESS_PROFILES.find(profile => profile.code === role)?.name || role,
     status: normalizeStatus(row.status),
     permissions: normalizePermissions(role, row.permissions || []),
     createdAt: row.created_at,
@@ -254,11 +266,125 @@ async function listAccessGrants() {
   return (data || []).map(dbGrantToUser);
 }
 
+async function listAccessProfiles() {
+  if (authConfig.provider !== 'supabase') {
+    return ACCESS_PROFILES.map(profile => profileSummary(profile, []));
+  }
+
+  requirePrivilegedSupabase();
+  const [users, grants, roleRows, rolePermissionRows] = await Promise.all([
+    listUsersFromSupabaseAuth().catch(() => []),
+    listAccessGrants().catch(() => []),
+    supabase.from('roles').select('id,code,name,description,created_at').order('created_at', { ascending: true }).then(({ data, error }) => {
+      if (error) throw error;
+      return data || [];
+    }),
+    supabase.from('role_permissions').select('role_id, permissions:permission_id(code,name,module)').then(({ data, error }) => {
+      if (error) throw error;
+      return data || [];
+    }),
+  ]);
+  const linkedUsers = [...users, ...grants];
+  const rolePermissions = new Map();
+  rolePermissionRows.forEach(row => {
+    if (!rolePermissions.has(row.role_id)) rolePermissions.set(row.role_id, new Set());
+    if (row.permissions?.code) rolePermissions.get(row.role_id).add(row.permissions.code);
+  });
+  const rows = roleRows.length ? roleRows : ACCESS_PROFILES;
+  return rows.map(row => profileSummary({
+    code: row.code,
+    name: row.name,
+    description: row.description || '',
+    permissionCodes: [...(rolePermissions.get(row.id) || [])],
+  }, linkedUsers));
+}
+
+function profileSummary(profile, linkedUsers = []) {
+  const usersForProfile = linkedUsers.filter(user => normalizeRole(user.role) === profile.code);
+  const selectedCodes = new Set(profile.permissionCodes || []);
+  const hasExplicitPermissions = Array.isArray(profile.permissionCodes);
+  const permissions = ACCESS_MODULES.map(item => ({
+    code: item.code,
+    module: item.module,
+    submodule: item.submodule,
+    label: item.label,
+    level: hasExplicitPermissions
+      ? (selectedCodes.has(item.code) ? (item.levels?.[profile.code] === 'partial' ? 'partial' : 'allow') : 'deny')
+      : (item.levels?.[profile.code] || 'deny'),
+    scope: item.scope || null,
+  }));
+  return {
+    ...profile,
+    userCount: usersForProfile.length,
+    permissions,
+    allowedModules: permissions.filter(item => item.level === 'allow' || item.level === 'partial'),
+    blockedModules: permissions.filter(item => item.level === 'deny'),
+  };
+}
+
+function profileCodeFromName(name = '') {
+  return String(name || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 60) || `perfil_${Date.now()}`;
+}
+
+async function upsertAccessProfile(input = {}) {
+  requirePrivilegedSupabase();
+  const name = String(input.name || '').trim();
+  if (!name) {
+    const error = new Error('Nome do perfil e obrigatorio.');
+    error.status = 400;
+    throw error;
+  }
+  const code = normalizeRole(input.code || profileCodeFromName(name));
+  const description = String(input.description || '').trim();
+  const selectedPermissions = [...new Set((input.permissions || []).filter(permission => MENU_PERMISSIONS.includes(permission)))];
+
+  const { data: role, error: roleError } = await supabase
+    .from('roles')
+    .upsert({ code, name, description }, { onConflict: 'code' })
+    .select('id,code,name,description')
+    .single();
+  if (roleError) throw roleError;
+
+  const { error: deleteError } = await supabase
+    .from('role_permissions')
+    .delete()
+    .eq('role_id', role.id);
+  if (deleteError) throw deleteError;
+
+  if (selectedPermissions.length) {
+    const { data: permissionRows, error: permissionError } = await supabase
+      .from('permissions')
+      .select('id,code')
+      .in('code', selectedPermissions);
+    if (permissionError) throw permissionError;
+
+    const rows = (permissionRows || []).map(permission => ({
+      role_id: role.id,
+      permission_id: permission.id,
+    }));
+    if (rows.length) {
+      const { error: insertError } = await supabase
+        .from('role_permissions')
+        .insert(rows);
+      if (insertError) throw insertError;
+    }
+  }
+
+  await auditAccessChange(input.actorUserId, 'role.upsert', code, { code, name, permissions: selectedPermissions });
+  return profileSummary({ ...role, permissionCodes: selectedPermissions }, await listUsers());
+}
+
 async function upsertAccessGrant(input = {}) {
   requirePrivilegedSupabase();
   const email = assertAllowedEmail(input.login || input.email);
   const role = normalizeRole(input.role);
-  const displayName = String(input.name || email).trim();
+  const displayName = String(input.name || '').trim();
   const status = normalizeStatus(input.status);
   const permissions = normalizePermissions(role, input.permissions);
   const grant = {
@@ -285,7 +411,7 @@ async function upsertAccessGrant(input = {}) {
     const { error: profileError } = await supabase
       .from('profiles')
       .update({
-        display_name: displayName,
+        ...(displayName ? { display_name: displayName } : {}),
         status,
         primary_role: role,
       })
@@ -469,17 +595,14 @@ async function updateUser(id, input = {}) {
     const name = String(input.name || '').trim();
     const password = String(input.password || '');
     const role = normalizeRole(input.role);
-    if (!name || !login) {
-      const error = new Error('Nome e email sao obrigatorios.');
+    if (!login) {
+      const error = new Error('Email e obrigatorio.');
       error.status = 400;
       throw error;
     }
 
-    const authChanges = {
-      email: login,
-      email_confirm: true,
-      user_metadata: { name },
-    };
+    const authChanges = { email: login, email_confirm: true };
+    if (name) authChanges.user_metadata = { name };
     if (password) authChanges.password = password;
 
     const { error: authError } = await supabase.auth.admin.updateUserById(id, authChanges);
@@ -489,7 +612,7 @@ async function updateUser(id, input = {}) {
       .from('profiles')
       .update({
         email: login,
-        display_name: name,
+        ...(name ? { display_name: name } : {}),
         status: normalizeStatus(input.status),
         primary_role: role,
       })
@@ -512,8 +635,8 @@ async function updateUser(id, input = {}) {
   const login = String(input.login || '').trim();
   const name = String(input.name || '').trim();
   const role = normalizeRole(input.role);
-  if (!name || !login) {
-    const error = new Error('Nome e login sao obrigatorios.');
+  if (!login) {
+    const error = new Error('Login e obrigatorio.');
     error.status = 400;
     throw error;
   }
@@ -525,7 +648,7 @@ async function updateUser(id, input = {}) {
 
   users[index] = {
     ...users[index],
-    name,
+    name: name || login,
     login,
     role,
     status: normalizeStatus(input.status),
@@ -601,6 +724,8 @@ export {
   createUser,
   findUserById,
   listUsers,
+  listAccessProfiles,
+  upsertAccessProfile,
   revokeUser,
   safeUser,
   updateUser,

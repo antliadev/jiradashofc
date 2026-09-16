@@ -3019,6 +3019,12 @@ input, select, textarea { font-family: inherit; }
   gap: 12px;
 }
 
+.access-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .access-list,
 .access-editor {
   background: var(--bg-card);
@@ -3139,6 +3145,63 @@ input, select, textarea { font-family: inherit; }
   border-radius: var(--radius-sm);
 }
 
+.access-user-summary {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.access-user-summary strong,
+.access-user-summary span,
+.access-user-summary em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.access-user-summary span {
+  color: var(--text-muted);
+}
+
+.access-user-summary em {
+  color: var(--text-secondary);
+  font-style: normal;
+  font-weight: 700;
+}
+
+.access-profile-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.access-profile-stats article {
+  padding: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.access-profile-stats strong {
+  display: block;
+  font-size: 22px;
+}
+
+.access-profile-stats span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
 .access-permissions-head span {
   color: var(--text-muted);
   font-size: 12px;
@@ -3171,6 +3234,71 @@ input, select, textarea { font-family: inherit; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.access-permission-table {
+  display: grid;
+  gap: 6px;
+}
+
+.access-permission-row {
+  display: grid;
+  grid-template-columns: minmax(140px, .9fr) minmax(180px, 1.2fr) 44px;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.access-permission-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.access-permission-check {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.access-permission-check span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.access-permission-row strong {
+  justify-self: end;
+  min-width: 34px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  text-align: center;
+  background: var(--bg-input);
+}
+
+.access-permission-row.allow strong {
+  color: var(--success);
+  background: rgba(16, 185, 129, .14);
+}
+
+.access-permission-row.partial strong {
+  color: var(--warning);
+  background: rgba(245, 158, 11, .15);
+}
+
+.access-permission-row.deny strong {
+  color: var(--danger);
+  background: rgba(239, 68, 68, .12);
 }
 
 .access-actions {
@@ -3677,6 +3805,10 @@ button.issue-summary-item:hover { border-color: var(--accent); }
   .long-cell { max-width: 220px; }
   .access-layout,
   .access-form { grid-template-columns: 1fr; }
+  .access-user-summary,
+  .access-profile-stats,
+  .access-permission-row { grid-template-columns: 1fr; }
+  .access-permission-row strong { justify-self: start; }
   .page-actions { flex-wrap: wrap; }
   .page-actions .btn { min-width: 0; }
   .ui-toast { right: 16px; bottom: 16px; }

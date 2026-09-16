@@ -9,7 +9,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import jiraRoutes from './routes/jira.js';
 import * as auth from './auth.js';
-import { canManageAccess, createUser, listUsers, revokeUser, updateUser } from './access-store.js';
+import { canManageAccess, createUser, listAccessProfiles, listUsers, revokeUser, updateUser, upsertAccessProfile } from './access-store.js';
 import { authConfig } from '../lib/authConfig.js';
 import { canAccessPermission, permissionForJiraRequest } from '../lib/appPermissions.js';
 
@@ -54,7 +54,7 @@ app.get('/api/auth/check', auth.handleCheckSession);
 function requireFullAccess(req, res, next) {
   auth.requireAppAuth(req, res, () => {
     if (!canManageAccess(req.session?.user)) {
-      return res.status(403).json({ error: 'Acesso restrito ao perfil Full.' });
+      return res.status(403).json({ error: 'Acesso restrito ao perfil Diretoria.' });
     }
     next();
   });
@@ -62,6 +62,26 @@ function requireFullAccess(req, res, next) {
 
 app.get('/api/access/users', requireFullAccess, async (req, res) => {
   res.json({ users: await listUsers() });
+});
+
+app.get('/api/access/profiles', requireFullAccess, async (req, res) => {
+  res.json({ profiles: await listAccessProfiles() });
+});
+
+app.post('/api/access/profiles', requireFullAccess, async (req, res) => {
+  try {
+    res.status(201).json({ profile: await upsertAccessProfile({ ...(req.body || {}), actorUserId: req.session?.user?.id }) });
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message });
+  }
+});
+
+app.put('/api/access/profiles/:code', requireFullAccess, async (req, res) => {
+  try {
+    res.json({ profile: await upsertAccessProfile({ ...(req.body || {}), code: req.params.code, actorUserId: req.session?.user?.id }) });
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message });
+  }
 });
 
 app.post('/api/access/users', requireFullAccess, async (req, res) => {

@@ -92,10 +92,6 @@ function renderUserList() {
 function renderForm(user) {
   const isNew = !user;
   const role = normalizeAccessProfile(user?.role || selectedProfileCode || 'dev_qa');
-  const inheritedPermissions = ACCESS_MODULES.map(item => ({
-    ...item,
-    level: item.levels?.[role] || 'deny',
-  }));
   return `
     <section class="access-editor">
       <div class="access-editor-head">
@@ -126,22 +122,6 @@ function renderForm(user) {
           </div>
         ` : ''}
 
-        <div class="access-permissions inherited" id="access-permissions">
-          <div class="access-permissions-head">
-            <strong>Permissões herdadas do perfil</strong>
-            <span>Consulta apenas. Para alterar, edite o perfil em Perfis.</span>
-          </div>
-          <div class="access-permission-table">
-            ${inheritedPermissions.map(item => `
-              <div class="access-permission-row ${sanitize(item.level)}">
-                <span>${sanitize(item.module)}</span>
-                <span>${sanitize(item.submodule)}</span>
-                <strong>${sanitize(accessLevelSymbol(item.level))}</strong>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-
         <div class="access-actions">
           <button class="btn btn-primary" type="submit">Salvar acesso</button>
           <button class="btn btn-secondary" type="button" id="cancel-access-edit">Cancelar</button>
@@ -156,13 +136,11 @@ function renderForm(user) {
 
 function renderProfiles() {
   const selectedProfile = creatingProfile ? null : (profiles.find(profile => profile.code === selectedProfileCode) || profiles[0]);
-  const permissions = selectedProfile?.permissions?.length
-    ? selectedProfile.permissions
-    : ACCESS_MODULES.map(item => ({
-      ...item,
-      level: creatingProfile ? 'deny' : (item.levels?.[selectedProfile?.code || 'dev_qa'] || 'deny'),
-    }));
-  const selectedPermissionCodes = new Set(permissions.filter(item => item.level === 'allow' || item.level === 'partial').map(item => item.code));
+  const profileCode = selectedProfile?.code || 'dev_qa';
+  const permissions = ACCESS_MODULES.map(item => ({
+    ...item,
+    level: item.levels?.[profileCode] || 'deny',
+  }));
   return `
     <section class="access-list">
       <div class="access-list-head">
@@ -197,22 +175,22 @@ function renderProfiles() {
       </div>
       <div class="access-permissions">
         <div class="access-permissions-head">
-          <strong>Matriz de permissões</strong>
-          <span>S = acesso · P = parcial · — = sem acesso</span>
+          <strong>Permissões do perfil</strong>
+          <span>Lista baseada na matriz oficial de acessos.</span>
         </div>
-        <div class="access-permission-table">
-          ${ACCESS_MODULES.map(item => {
-            const current = permissions.find(permission => permission.code === item.code);
-            const level = current?.level || 'deny';
+        <div class="access-permission-grid">
+          ${permissions.map(item => {
+            const level = item.level || 'deny';
+            const checked = level === 'allow' || level === 'partial';
             return `
-            <div class="access-permission-row ${sanitize(level)}">
-              <label class="access-permission-check">
-                <input type="checkbox" value="${sanitize(item.code)}" ${selectedPermissionCodes.has(item.code) ? 'checked' : ''}>
-                <span>${sanitize(item.module)}</span>
+              <label class="access-permission-option ${sanitize(level)}" title="${sanitize(item.module)}${item.submodule !== '—' ? ` / ${item.submodule}` : ''}">
+                <input type="checkbox" value="${sanitize(item.code)}" ${checked ? 'checked' : ''} disabled>
+                <span>
+                  <strong>${sanitize(item.module)}${item.submodule !== '—' ? ` · ${sanitize(item.submodule)}` : ''}</strong>
+                  <small>${level === 'partial' ? 'Acesso parcial aos próprios dados' : checked ? 'Com acesso' : 'Sem acesso'}</small>
+                </span>
+                <em>${sanitize(accessLevelSymbol(level))}</em>
               </label>
-              <span>${sanitize(item.submodule)}</span>
-              <strong>${sanitize(accessLevelSymbol(level))}</strong>
-            </div>
           `; }).join('')}
         </div>
       </div>
@@ -220,7 +198,7 @@ function renderProfiles() {
         <button class="btn btn-primary" type="button" id="save-access-profile">Salvar perfil</button>
       </div>
       <div class="report-alert info">
-        Alterar uma permissão do perfil atualiza automaticamente todos os usuários vinculados a ele, sem edição individual por pessoa.
+        As permissões seguem a matriz oficial enviada. Alterações de acesso devem ser feitas na matriz central, não por usuário.
       </div>
     </section>
   `;

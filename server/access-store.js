@@ -322,16 +322,12 @@ async function listAccessProfiles() {
 
 function profileSummary(profile, linkedUsers = []) {
   const usersForProfile = linkedUsers.filter(user => normalizeRole(user.role) === profile.code);
-  const selectedCodes = new Set(profile.permissionCodes || []);
-  const hasExplicitPermissions = Array.isArray(profile.permissionCodes);
   const permissions = ACCESS_MODULES.map(item => ({
     code: item.code,
     module: item.module,
     submodule: item.submodule,
     label: item.label,
-    level: hasExplicitPermissions
-      ? (selectedCodes.has(item.code) ? (item.levels?.[profile.code] === 'partial' ? 'partial' : 'allow') : 'deny')
-      : (item.levels?.[profile.code] || 'deny'),
+    level: item.levels?.[profile.code] || 'deny',
     scope: item.scope || null,
   }));
   return {
@@ -369,7 +365,7 @@ async function upsertAccessProfile(input = {}) {
   }
   const storageCode = await roleCodeForStorage(code);
   const description = String(input.description || '').trim();
-  const selectedPermissions = [...new Set((input.permissions || []).filter(permission => MENU_PERMISSIONS.includes(permission)))];
+  const selectedPermissions = permissionsForProfile(code);
 
   const { data: role, error: roleError } = await supabase
     .from('roles')

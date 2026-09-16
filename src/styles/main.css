@@ -3213,9 +3213,10 @@ input, select, textarea { font-family: inherit; }
   gap: 8px;
 }
 
-.access-permission-grid label {
+.access-permission-grid label,
+.access-permission-option {
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
+  grid-template-columns: 16px minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
   min-height: 34px;
@@ -3227,6 +3228,58 @@ input, select, textarea { font-family: inherit; }
   text-transform: none;
   letter-spacing: 0;
   font-size: 12px;
+}
+
+.access-permission-option input {
+  accent-color: var(--accent);
+}
+
+.access-permission-option span {
+  display: grid;
+  gap: 2px;
+}
+
+.access-permission-option strong,
+.access-permission-option small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.access-permission-option strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.access-permission-option small {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.access-permission-option em {
+  min-width: 28px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-style: normal;
+  text-align: center;
+  font-weight: 900;
+}
+
+.access-permission-option.allow em {
+  color: var(--success);
+  background: rgba(16, 185, 129, .14);
+}
+
+.access-permission-option.partial em {
+  color: var(--warning);
+  background: rgba(245, 158, 11, .15);
+}
+
+.access-permission-option.deny em {
+  color: var(--danger);
+  background: rgba(239, 68, 68, .12);
 }
 
 .access-permission-grid span {

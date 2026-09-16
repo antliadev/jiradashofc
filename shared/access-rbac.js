@@ -6,8 +6,8 @@ export const ACCESS_LEVEL = Object.freeze({
 
 export const ACCESS_PROFILES = Object.freeze([
   {
-    code: 'desenvolvedor_ba',
-    name: 'Desenvolvedor / BA',
+    code: 'dev_qa',
+    name: 'Dev/QA',
     description: 'Acesso operacional com restrição aos próprios dados nas visões de Analistas.',
   },
   {
@@ -23,40 +23,41 @@ export const ACCESS_PROFILES = Object.freeze([
 ]);
 
 export const LEGACY_PROFILE_ALIASES = Object.freeze({
-  custom: 'desenvolvedor_ba',
-  personalizado: 'desenvolvedor_ba',
-  visualizacao: 'desenvolvedor_ba',
+  custom: 'dev_qa',
+  desenvolvedor_ba: 'dev_qa',
+  personalizado: 'dev_qa',
+  visualizacao: 'dev_qa',
   master: 'gestao',
   full: 'diretoria',
 });
 
 export const ACCESS_MODULES = Object.freeze([
-  { code: 'dashboard', module: 'Dashboard', submodule: '—', label: 'Dashboard', route: '/', levels: { desenvolvedor_ba: ACCESS_LEVEL.ALLOW, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
-  { code: 'executive', module: 'Home', submodule: '—', label: 'Home', route: '/home', levels: { desenvolvedor_ba: ACCESS_LEVEL.ALLOW, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
-  { code: 'contracts.crawford', module: 'Contratos Consumo Horas', submodule: 'Crawford', label: 'Contratos / Crawford', route: '/contracts/crawford', levels: { desenvolvedor_ba: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
-  { code: 'contracts.docwise', module: 'Contratos Consumo Horas', submodule: 'Docwise', label: 'Contratos / Docwise', route: '/contracts/docwise', levels: { desenvolvedor_ba: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
-  { code: 'monitoring.overdue', module: 'Monitoramento de Cards', submodule: 'Cards com Data em Atraso', label: 'Monitoramento / Cards em Atraso', route: '/monitoring/overdue', levels: { desenvolvedor_ba: ACCESS_LEVEL.ALLOW, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
-  { code: 'monitoring.blocked', module: 'Monitoramento de Cards', submodule: 'Cards Bloqueados', label: 'Monitoramento / Cards Bloqueados', route: '/monitoring/blocked', levels: { desenvolvedor_ba: ACCESS_LEVEL.ALLOW, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
-  { code: 'gantt', module: 'Gantt', submodule: '—', label: 'Gantt', route: '/gantt', levels: { desenvolvedor_ba: ACCESS_LEVEL.ALLOW, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
-  { code: 'projects.sprint-plan', module: 'Sprint', submodule: 'Sprint Plan', label: 'Sprint / Sprint Plan', route: '/projects/sprint-plan', levels: { desenvolvedor_ba: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
-  { code: 'projects.sprint-review', module: 'Sprint', submodule: 'Sprint Review', label: 'Sprint / Sprint Review', route: '/projects/sprint-review', levels: { desenvolvedor_ba: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
-  { code: 'projects.kanban', module: 'Projetos', submodule: 'Issues - Kanban', label: 'Projetos / Issues - Kanban', route: '/projects', levels: { desenvolvedor_ba: ACCESS_LEVEL.ALLOW, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
-  { code: 'projects.health', module: 'Projetos', submodule: 'Saúde / Detalhamento Cards Projetos', label: 'Projetos / Saúde dos Cards', route: '/projects/health', levels: { desenvolvedor_ba: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
-  { code: 'projects.resource-allocation', module: 'Projetos', submodule: 'Alocação de Recursos', label: 'Projetos / Alocação de Recursos', route: '/projects/resource-allocation', levels: { desenvolvedor_ba: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
-  { code: 'analysts.general', module: 'Analistas', submodule: 'Geral', label: 'Analistas / Geral', route: '/analysts/general', levels: { desenvolvedor_ba: ACCESS_LEVEL.PARTIAL, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW }, scope: 'self' },
-  { code: 'analysts.evolution', module: 'Analistas', submodule: 'Evolução', label: 'Analistas / Evolução', route: '/analysts/evolution', levels: { desenvolvedor_ba: ACCESS_LEVEL.PARTIAL, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW }, scope: 'self' },
-  { code: 'analysts.comparative', module: 'Analistas', submodule: 'Comparativo', label: 'Analistas / Comparativo', route: '/analysts/comparative', levels: { desenvolvedor_ba: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
-  { code: 'data', module: 'Configuração', submodule: 'Dados', label: 'Configuração / Dados', route: '/data', levels: { desenvolvedor_ba: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.DENY, diretoria: ACCESS_LEVEL.ALLOW } },
-  { code: 'access.users', module: 'Gestão de Usuários', submodule: 'Usuários', label: 'Gestão de Usuários / Usuários', route: '/access', levels: { desenvolvedor_ba: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.DENY, diretoria: ACCESS_LEVEL.ALLOW } },
-  { code: 'access.profiles', module: 'Gestão de Usuários', submodule: 'Grupos de Acesso', label: 'Gestão de Usuários / Grupos de Acesso', route: '/access?tab=profiles', levels: { desenvolvedor_ba: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.DENY, diretoria: ACCESS_LEVEL.ALLOW } },
-  { code: 'access.permissions', module: 'Gestão de Usuários', submodule: 'Permissões', label: 'Gestão de Usuários / Permissões', route: '/access?tab=profiles', levels: { desenvolvedor_ba: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.DENY, diretoria: ACCESS_LEVEL.ALLOW } },
+  { code: 'dashboard', module: 'Dashboard', submodule: '—', label: 'Dashboard', route: '/', levels: { dev_qa: ACCESS_LEVEL.ALLOW, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
+  { code: 'executive', module: 'Home', submodule: '—', label: 'Home', route: '/home', levels: { dev_qa: ACCESS_LEVEL.ALLOW, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
+  { code: 'contracts.crawford', module: 'Contratos Consumo Horas', submodule: 'Crawford', label: 'Contratos / Crawford', route: '/contracts/crawford', levels: { dev_qa: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
+  { code: 'contracts.docwise', module: 'Contratos Consumo Horas', submodule: 'Docwise', label: 'Contratos / Docwise', route: '/contracts/docwise', levels: { dev_qa: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
+  { code: 'monitoring.overdue', module: 'Monitoramento de Cards', submodule: 'Cards com Data em Atraso', label: 'Monitoramento / Cards em Atraso', route: '/monitoring/overdue', levels: { dev_qa: ACCESS_LEVEL.ALLOW, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
+  { code: 'monitoring.blocked', module: 'Monitoramento de Cards', submodule: 'Cards Bloqueados', label: 'Monitoramento / Cards Bloqueados', route: '/monitoring/blocked', levels: { dev_qa: ACCESS_LEVEL.ALLOW, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
+  { code: 'gantt', module: 'Gantt', submodule: '—', label: 'Gantt', route: '/gantt', levels: { dev_qa: ACCESS_LEVEL.ALLOW, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
+  { code: 'projects.sprint-plan', module: 'Sprint', submodule: 'Sprint Plan', label: 'Sprint / Sprint Plan', route: '/projects/sprint-plan', levels: { dev_qa: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
+  { code: 'projects.sprint-review', module: 'Sprint', submodule: 'Sprint Review', label: 'Sprint / Sprint Review', route: '/projects/sprint-review', levels: { dev_qa: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
+  { code: 'projects.kanban', module: 'Projetos', submodule: 'Issues - Kanban', label: 'Projetos / Issues - Kanban', route: '/projects', levels: { dev_qa: ACCESS_LEVEL.ALLOW, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
+  { code: 'projects.health', module: 'Projetos', submodule: 'Saúde / Detalhamento Cards Projetos', label: 'Projetos / Saúde dos Cards', route: '/projects/health', levels: { dev_qa: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
+  { code: 'projects.resource-allocation', module: 'Projetos', submodule: 'Alocação de Recursos', label: 'Projetos / Alocação de Recursos', route: '/projects/resource-allocation', levels: { dev_qa: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
+  { code: 'analysts.general', module: 'Analistas', submodule: 'Geral', label: 'Analistas / Geral', route: '/analysts/general', levels: { dev_qa: ACCESS_LEVEL.PARTIAL, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW }, scope: 'self' },
+  { code: 'analysts.evolution', module: 'Analistas', submodule: 'Evolução', label: 'Analistas / Evolução', route: '/analysts/evolution', levels: { dev_qa: ACCESS_LEVEL.PARTIAL, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW }, scope: 'self' },
+  { code: 'analysts.comparative', module: 'Analistas', submodule: 'Comparativo', label: 'Analistas / Comparativo', route: '/analysts/comparative', levels: { dev_qa: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.ALLOW, diretoria: ACCESS_LEVEL.ALLOW } },
+  { code: 'data', module: 'Configuração', submodule: 'Dados', label: 'Configuração / Dados', route: '/data', levels: { dev_qa: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.DENY, diretoria: ACCESS_LEVEL.ALLOW } },
+  { code: 'access.users', module: 'Gestão de Usuários', submodule: 'Usuários', label: 'Gestão de Usuários / Usuários', route: '/access', levels: { dev_qa: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.DENY, diretoria: ACCESS_LEVEL.ALLOW } },
+  { code: 'access.profiles', module: 'Gestão de Usuários', submodule: 'Grupos de Acesso', label: 'Gestão de Usuários / Grupos de Acesso', route: '/access?tab=profiles', levels: { dev_qa: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.DENY, diretoria: ACCESS_LEVEL.ALLOW } },
+  { code: 'access.permissions', module: 'Gestão de Usuários', submodule: 'Permissões', label: 'Gestão de Usuários / Permissões', route: '/access?tab=profiles', levels: { dev_qa: ACCESS_LEVEL.DENY, gestao: ACCESS_LEVEL.DENY, diretoria: ACCESS_LEVEL.ALLOW } },
 ]);
 
 export const ACCESS_MANAGE_PERMISSION = 'access.manage';
 
 export function normalizeAccessProfile(role) {
   const code = String(role || '').trim();
-  return LEGACY_PROFILE_ALIASES[code] || code || 'desenvolvedor_ba';
+  return LEGACY_PROFILE_ALIASES[code] || code || 'dev_qa';
 }
 
 export function profileByCode(role) {

@@ -18,9 +18,9 @@ test('usuario inativo nao libera menus mesmo que possua permissoes', () => {
   assert.equal(firstAllowedRoute(user), '/login');
 });
 
-test('login direciona perfil desenvolvedor ba para Home e respeita bloqueios da matriz', () => {
+test('login direciona perfil dev qa para Home e respeita bloqueios da matriz', () => {
   const user = {
-    role: 'desenvolvedor_ba',
+    role: 'dev_qa',
     status: 'active',
     permissions: [],
   };

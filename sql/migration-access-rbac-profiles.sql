@@ -1,7 +1,7 @@
 -- ============================================================
 -- JiraDash - RBAC por Perfis de Acesso
 -- Substitui a matriz operacional antiga por perfis centralizados:
--- Desenvolvedor / BA, Gestão e Diretoria.
+-- Dev/QA, Gestão e Diretoria.
 -- ============================================================
 
 ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
@@ -20,7 +20,7 @@ ALTER TABLE public.roles
   CHECK (code ~ '^[a-z0-9_.-]{2,60}$');
 
 INSERT INTO public.roles (code, name, description) VALUES
-  ('desenvolvedor_ba', 'Desenvolvedor / BA', 'Acesso operacional com restrição aos próprios dados nas visões de Analistas.'),
+  ('dev_qa', 'Dev/QA', 'Acesso operacional com restrição aos próprios dados nas visões de Analistas.'),
   ('gestao', 'Gestão', 'Acesso gerencial aos módulos operacionais e executivos, sem administração de usuários.'),
   ('diretoria', 'Diretoria', 'Acesso completo, incluindo configuração e Gestão de Acessos.')
 ON CONFLICT (code) DO UPDATE SET
@@ -54,7 +54,7 @@ ON CONFLICT (code) DO UPDATE SET
 
 DELETE FROM public.role_permissions
 WHERE role_id IN (
-  SELECT id FROM public.roles WHERE code IN ('desenvolvedor_ba', 'gestao', 'diretoria')
+  SELECT id FROM public.roles WHERE code IN ('dev_qa', 'gestao', 'diretoria')
 );
 
 INSERT INTO public.role_permissions (role_id, permission_id)
@@ -70,7 +70,7 @@ JOIN public.permissions p ON p.code IN (
   'analysts.general',
   'analysts.evolution'
 )
-WHERE r.code = 'desenvolvedor_ba'
+WHERE r.code = 'dev_qa'
 ON CONFLICT DO NOTHING;
 
 INSERT INTO public.role_permissions (role_id, permission_id)
@@ -107,30 +107,32 @@ UPDATE public.profiles
 SET primary_role = CASE primary_role
   WHEN 'full' THEN 'diretoria'
   WHEN 'master' THEN 'gestao'
-  WHEN 'visualizacao' THEN 'desenvolvedor_ba'
-  WHEN 'personalizado' THEN 'desenvolvedor_ba'
+  WHEN 'visualizacao' THEN 'dev_qa'
+  WHEN 'personalizado' THEN 'dev_qa'
+  WHEN 'desenvolvedor_ba' THEN 'dev_qa'
   ELSE primary_role
 END
-WHERE primary_role IN ('full', 'master', 'visualizacao', 'personalizado');
+WHERE primary_role IN ('full', 'master', 'visualizacao', 'personalizado', 'desenvolvedor_ba');
 
 UPDATE public.access_grants
 SET primary_role = CASE primary_role
   WHEN 'full' THEN 'diretoria'
   WHEN 'master' THEN 'gestao'
-  WHEN 'visualizacao' THEN 'desenvolvedor_ba'
-  WHEN 'personalizado' THEN 'desenvolvedor_ba'
+  WHEN 'visualizacao' THEN 'dev_qa'
+  WHEN 'personalizado' THEN 'dev_qa'
+  WHEN 'desenvolvedor_ba' THEN 'dev_qa'
   ELSE primary_role
 END
-WHERE primary_role IN ('full', 'master', 'visualizacao', 'personalizado');
+WHERE primary_role IN ('full', 'master', 'visualizacao', 'personalizado', 'desenvolvedor_ba');
 
 DELETE FROM public.user_roles ur
 USING public.profiles p
 WHERE ur.user_id = p.user_id
-  AND p.primary_role IN ('desenvolvedor_ba', 'gestao', 'diretoria');
+  AND p.primary_role IN ('dev_qa', 'gestao', 'diretoria');
 
 INSERT INTO public.user_roles (user_id, role_id)
 SELECT p.user_id, r.id
 FROM public.profiles p
 JOIN public.roles r ON r.code = p.primary_role
-WHERE p.primary_role IN ('desenvolvedor_ba', 'gestao', 'diretoria')
+WHERE p.primary_role IN ('dev_qa', 'gestao', 'diretoria')
 ON CONFLICT DO NOTHING;

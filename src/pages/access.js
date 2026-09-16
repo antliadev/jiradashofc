@@ -14,7 +14,7 @@ import { confirmAction, renderPageLoading, setButtonBusy, showToast } from '../u
 let users = [];
 let profiles = ACCESS_PROFILES.map(profile => ({ ...profile, permissions: [], allowedModules: [], blockedModules: [], userCount: 0 }));
 let selectedId = '';
-let selectedProfileCode = 'desenvolvedor_ba';
+let selectedProfileCode = 'dev_qa';
 let activeTab = 'users';
 let creatingProfile = false;
 
@@ -45,7 +45,7 @@ async function requestUsers() {
   users = usersData.users || [];
   profiles = profilesData.profiles?.length ? profilesData.profiles : profiles;
   selectedId = selectedId || users[0]?.id || '';
-  selectedProfileCode = selectedProfileCode || profiles[0]?.code || 'desenvolvedor_ba';
+  selectedProfileCode = selectedProfileCode || profiles[0]?.code || 'dev_qa';
 }
 
 function currentUser() {
@@ -91,7 +91,7 @@ function renderUserList() {
 
 function renderForm(user) {
   const isNew = !user;
-  const role = normalizeAccessProfile(user?.role || selectedProfileCode || 'desenvolvedor_ba');
+  const role = normalizeAccessProfile(user?.role || selectedProfileCode || 'dev_qa');
   const inheritedPermissions = ACCESS_MODULES.map(item => ({
     ...item,
     level: item.levels?.[role] || 'deny',
@@ -160,14 +160,13 @@ function renderProfiles() {
     ? selectedProfile.permissions
     : ACCESS_MODULES.map(item => ({
       ...item,
-      level: creatingProfile ? 'deny' : (item.levels?.[selectedProfile?.code || 'desenvolvedor_ba'] || 'deny'),
+      level: creatingProfile ? 'deny' : (item.levels?.[selectedProfile?.code || 'dev_qa'] || 'deny'),
     }));
   const selectedPermissionCodes = new Set(permissions.filter(item => item.level === 'allow' || item.level === 'partial').map(item => item.code));
   return `
     <section class="access-list">
       <div class="access-list-head">
         <h3>Perfis</h3>
-        <button class="btn btn-primary" type="button" id="new-access-profile">Novo perfil</button>
       </div>
       <div class="access-user-list">
         ${profiles.map(profile => `
@@ -219,7 +218,6 @@ function renderProfiles() {
       </div>
       <div class="access-actions">
         <button class="btn btn-primary" type="button" id="save-access-profile">Salvar perfil</button>
-        ${creatingProfile ? '<button class="btn btn-secondary" type="button" id="cancel-access-profile">Cancelar</button>' : ''}
       </div>
       <div class="report-alert info">
         Alterar uma permissão do perfil atualiza automaticamente todos os usuários vinculados a ele, sem edição individual por pessoa.

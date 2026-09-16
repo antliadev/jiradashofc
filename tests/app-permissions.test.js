@@ -1,6 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canAccessPermission, hasPartialSelfScope, permissionForJiraRequest, permissionsForProfile } from '../lib/appPermissions.js';
+import { ACCESS_PROFILES, canAccessPermission, hasPartialSelfScope, normalizeAccessProfile, permissionForJiraRequest, permissionsForProfile } from '../lib/appPermissions.js';
+
+test('perfis oficiais de acesso ficam limitados a Diretoria, Gestão e Dev/QA', () => {
+  assert.deepEqual(ACCESS_PROFILES.map(profile => profile.name), ['Dev/QA', 'Gestão', 'Diretoria']);
+  assert.equal(normalizeAccessProfile('full'), 'diretoria');
+  assert.equal(normalizeAccessProfile('master'), 'gestao');
+  assert.equal(normalizeAccessProfile('visualizacao'), 'dev_qa');
+  assert.equal(normalizeAccessProfile('personalizado'), 'dev_qa');
+  assert.equal(normalizeAccessProfile('desenvolvedor_ba'), 'dev_qa');
+});
 
 test('perfil diretoria administra acessos e qualquer permissao funcional', () => {
   const user = { role: 'diretoria', status: 'active', permissions: [] };
@@ -16,8 +25,8 @@ test('perfil gestao acessa modulos gerenciais mas nao administra acessos', () =>
   assert.equal(canAccessPermission(user, 'data'), false);
 });
 
-test('perfil desenvolvedor ba tem analistas parcial e nao acessa comparativo', () => {
-  const user = { role: 'desenvolvedor_ba', status: 'active', permissions: [] };
+test('perfil dev qa tem analistas parcial e nao acessa comparativo', () => {
+  const user = { role: 'dev_qa', status: 'active', permissions: [] };
   assert.equal(canAccessPermission(user, 'analysts.general'), true);
   assert.equal(canAccessPermission(user, 'analysts.evolution'), true);
   assert.equal(canAccessPermission(user, 'analysts.comparative'), false);

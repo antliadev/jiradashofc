@@ -26,7 +26,13 @@ const ITERATIONS = 120000;
 const KEY_LENGTH = 32;
 const DIGEST = 'sha256';
 
-const ROLE_CODES = [...ACCESS_PROFILE_CODES, 'full', 'master', 'visualizacao', 'personalizado'];
+const ROLE_CODES = [...ACCESS_PROFILE_CODES, 'full', 'master', 'visualizacao', 'personalizado', 'desenvolvedor_ba'];
+const FIXED_ACCESS_PROFILE_CODES = new Set(ACCESS_PROFILE_CODES);
+const STORAGE_ROLE_FALLBACKS = Object.freeze({
+  dev_qa: ['dev_qa', 'visualizacao'],
+  gestao: ['gestao', 'master'],
+  diretoria: ['diretoria', 'full'],
+});
 
 function ensureDir() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -168,7 +174,7 @@ function safeUser(user) {
 function normalizeRole(role) {
   const normalized = normalizeAccessProfile(role);
   if (ROLE_CODES.includes(normalized)) return normalized;
-  return /^[a-z0-9_.-]{2,60}$/.test(normalized) ? normalized : 'desenvolvedor_ba';
+  return /^[a-z0-9_.-]{2,60}$/.test(normalized) ? normalized : 'dev_qa';
 }
 
 function normalizeStatus(status) {
@@ -219,7 +225,7 @@ function dbGrantToUser(row) {
 }
 
 async function roleIdFor(code) {
-  const roleCode = normalizeRole(code);
+  const roleCode = await roleCodeForStorage(code);
   const { data, error } = await supabase
     .from('roles')
     .select('id')
@@ -228,6 +234,18 @@ async function roleIdFor(code) {
   if (error) throw error;
   if (!data?.id) throw new Error(`Perfil ${roleCode} nao encontrado. Aplique a migration oficial de Auth/RLS.`);
   return data.id;
+}
+
+async function roleCodeForStorage(code) {
+  const roleCode = normalizeRole(code);
+  const candidates = STORAGE_ROLE_FALLBACKS[roleCode] || [roleCode];
+  const { data, error } = await supabase
+    .from('roles')
+    .select('code')
+    .in('code', candidates);
+  if (error) throw error;
+  const available = new Set((data || []).map(row => row.code));
+  return candidates.find(candidate => available.has(candidate)) || roleCode;
 }
 
 async function permissionCodesForUser(userId) {
@@ -290,13 +308,16 @@ async function listAccessProfiles() {
     if (!rolePermissions.has(row.role_id)) rolePermissions.set(row.role_id, new Set());
     if (row.permissions?.code) rolePermissions.get(row.role_id).add(row.permissions.code);
   });
-  const rows = roleRows.length ? roleRows : ACCESS_PROFILES;
-  return rows.map(row => profileSummary({
-    code: row.code,
-    name: row.name,
-    description: row.description || '',
-    permissionCodes: [...(rolePermissions.get(row.id) || [])],
-  }, linkedUsers));
+  const rowsByCode = new Map(roleRows.map(row => [normalizeRole(row.code), row]));
+  return ACCESS_PROFILES.map(profile => {
+    const row = rowsByCode.get(profile.code);
+    return profileSummary({
+      code: profile.code,
+      name: profile.name,
+      description: row?.description || profile.description || '',
+      permissionCodes: row?.id ? [...(rolePermissions.get(row.id) || [])] : undefined,
+    }, linkedUsers);
+  });
 }
 
 function profileSummary(profile, linkedUsers = []) {
@@ -341,12 +362,18 @@ async function upsertAccessProfile(input = {}) {
     throw error;
   }
   const code = normalizeRole(input.code || profileCodeFromName(name));
+  if (!FIXED_ACCESS_PROFILE_CODES.has(code)) {
+    const error = new Error('Perfil invalido. Use apenas Diretoria, Gestao ou Dev/QA.');
+    error.status = 400;
+    throw error;
+  }
+  const storageCode = await roleCodeForStorage(code);
   const description = String(input.description || '').trim();
   const selectedPermissions = [...new Set((input.permissions || []).filter(permission => MENU_PERMISSIONS.includes(permission)))];
 
   const { data: role, error: roleError } = await supabase
     .from('roles')
-    .upsert({ code, name, description }, { onConflict: 'code' })
+    .upsert({ code: storageCode, name, description }, { onConflict: 'code' })
     .select('id,code,name,description')
     .single();
   if (roleError) throw roleError;
@@ -377,13 +404,14 @@ async function upsertAccessProfile(input = {}) {
   }
 
   await auditAccessChange(input.actorUserId, 'role.upsert', code, { code, name, permissions: selectedPermissions });
-  return profileSummary({ ...role, permissionCodes: selectedPermissions }, await listUsers());
+  return profileSummary({ code, name, description: role.description || description, permissionCodes: selectedPermissions }, await listUsers());
 }
 
 async function upsertAccessGrant(input = {}) {
   requirePrivilegedSupabase();
   const email = assertAllowedEmail(input.login || input.email);
   const role = normalizeRole(input.role);
+  const storageRole = await roleCodeForStorage(role);
   const displayName = String(input.name || '').trim();
   const status = normalizeStatus(input.status);
   const permissions = normalizePermissions(role, input.permissions);
@@ -391,7 +419,7 @@ async function upsertAccessGrant(input = {}) {
     email,
     display_name: displayName,
     status,
-    primary_role: role,
+    primary_role: storageRole,
     permissions,
     updated_at: new Date().toISOString(),
   };
@@ -413,7 +441,7 @@ async function upsertAccessGrant(input = {}) {
       .update({
         ...(displayName ? { display_name: displayName } : {}),
         status,
-        primary_role: role,
+        primary_role: storageRole,
       })
       .eq('user_id', profile.user_id);
     if (profileError) throw profileError;
@@ -595,6 +623,7 @@ async function updateUser(id, input = {}) {
     const name = String(input.name || '').trim();
     const password = String(input.password || '');
     const role = normalizeRole(input.role);
+    const storageRole = await roleCodeForStorage(role);
     if (!login) {
       const error = new Error('Email e obrigatorio.');
       error.status = 400;
@@ -614,7 +643,7 @@ async function updateUser(id, input = {}) {
         email: login,
         ...(name ? { display_name: name } : {}),
         status: normalizeStatus(input.status),
-        primary_role: role,
+        primary_role: storageRole,
       })
       .eq('user_id', id);
     if (profileError) throw profileError;

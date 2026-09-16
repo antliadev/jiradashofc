@@ -18,20 +18,22 @@ test('usuario inativo nao libera menus mesmo que possua permissoes', () => {
   assert.equal(firstAllowedRoute(user), '/login');
 });
 
-test('login direciona perfil personalizado para seu primeiro menu permitido', () => {
+test('login direciona perfil desenvolvedor ba para Home e respeita bloqueios da matriz', () => {
   const user = {
-    role: 'personalizado',
+    role: 'desenvolvedor_ba',
     status: 'active',
-    permissions: ['monitoring.blocked', 'data'],
+    permissions: [],
   };
-  assert.equal(firstAllowedRoute(user), '/monitoring/blocked');
+  assert.equal(firstAllowedRoute(user), '/home');
   assert.equal(canAccessRoute('/monitoring/blocked', user), true);
-  assert.equal(canAccessRoute('/home', user), false);
+  assert.equal(canAccessRoute('/contracts/crawford', user), false);
+  assert.equal(canAccessRoute('/analysts/general', user), true);
+  assert.equal(canAccessRoute('/analysts/comparative', user), false);
 });
 
-test('somente perfil full ativo acessa a gestao de acessos', () => {
-  const full = { role: 'full', status: 'active', permissions: [] };
-  const master = { role: 'master', status: 'active', permissions: [] };
-  assert.equal(canAccessRoute('/access', full), true);
-  assert.equal(canAccessRoute('/access', master), false);
+test('somente perfil diretoria ativo acessa a gestao de acessos', () => {
+  const diretoria = { role: 'diretoria', status: 'active', permissions: [] };
+  const gestao = { role: 'gestao', status: 'active', permissions: [] };
+  assert.equal(canAccessRoute('/access', diretoria), true);
+  assert.equal(canAccessRoute('/access', gestao), false);
 });

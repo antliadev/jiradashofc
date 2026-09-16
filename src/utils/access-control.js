@@ -1,29 +1,21 @@
 /**
  * access-control.js - Regras de perfis e permissoes de navegação.
  */
+import {
+  ACCESS_MANAGE_PERMISSION,
+  ACCESS_MODULES,
+  canProfileManageAccess,
+  permissionLevelForProfile,
+} from '../../shared/access-rbac.js';
+
 const CURRENT_USER_KEY = 'rja.currentUser';
 const HOME_ROUTE = '/home';
 
-const ACCESS_ITEMS = [
-  { id: 'dashboard', label: 'Dashboard', route: '/' },
-  { id: 'executive', label: 'Home', route: HOME_ROUTE },
-  { id: 'contracts.crawford', label: 'Contratos / Crawford', route: '/contracts/crawford' },
-  { id: 'contracts.docwise', label: 'Contratos / Docwise', route: '/contracts/docwise' },
-  { id: 'monitoring.overdue', label: 'Monitoramento / Cards em Atraso', route: '/monitoring/overdue' },
-  { id: 'monitoring.blocked', label: 'Monitoramento / Cards Bloqueados', route: '/monitoring/blocked' },
-  { id: 'gantt', label: 'Gantt', route: '/gantt' },
-  { id: 'projects.kanban', label: 'Projetos / Issues - Kanban', route: '/projects' },
-  { id: 'projects.health', label: 'Projetos / Saude dos Cards', route: '/projects/health' },
-  { id: 'projects.resource-allocation', label: 'Projetos / Alocação de Recursos', route: '/projects/resource-allocation' },
-  { id: 'projects.sprint-plan', label: 'Projetos / Sprint Plan', route: '/projects/sprint-plan' },
-  { id: 'projects.sprint-review', label: 'Projetos / Sprint Review', route: '/projects/sprint-review' },
-  { id: 'projects.executive', label: 'Projetos / Relatorio Gerencial', route: '/projects/executive' },
-  { id: 'projects.detailed', label: 'Projetos / Relatorio Detalhado', route: '/projects/detailed-report' },
-  { id: 'analysts.general', label: 'Analistas / Geral', route: '/analysts/general' },
-  { id: 'analysts.comparative', label: 'Analistas / Comparativo', route: '/analysts/comparative' },
-  { id: 'analysts.evolution', label: 'Analistas / Evolucao', route: '/analysts/evolution' },
-  { id: 'data', label: 'Dados', route: '/data' },
-];
+const ACCESS_ITEMS = ACCESS_MODULES.filter(item => item.route && !item.code.startsWith('access.')).map(item => ({
+  id: item.code,
+  label: item.label,
+  route: item.route,
+}));
 
 const ROUTE_PERMISSION = {
   '/': 'dashboard',
@@ -47,7 +39,7 @@ const ROUTE_PERMISSION = {
   '/analysts/comparative': 'analysts.comparative',
   '/analysts/evolution': 'analysts.evolution',
   '/data': 'data',
-  '/access': 'access.manage',
+  '/access': ACCESS_MANAGE_PERMISSION,
 };
 
 function normalizePath(path) {
@@ -71,11 +63,7 @@ function getCurrentUser() {
 }
 
 function isFull(user = getCurrentUser()) {
-  return user?.role === 'full' && user?.status === 'active';
-}
-
-function isMaster(user = getCurrentUser()) {
-  return user?.role === 'master' && user?.status === 'active';
+  return user?.status === 'active' && canProfileManageAccess(user?.role);
 }
 
 function canAccessPermission(permission, user = getCurrentUser()) {
@@ -84,9 +72,9 @@ function canAccessPermission(permission, user = getCurrentUser()) {
   // autenticacao e validada no backend, mas este bloqueio evita que menus e
   // paginas pisquem ou sejam renderizados com um estado local incompleto.
   if (!user || user.status !== 'active') return false;
-  if (permission === 'access.manage') return isFull(user);
-  if (isFull(user) || isMaster(user)) return true;
-  if (!['custom', 'personalizado', 'visualizacao'].includes(user.role)) return false;
+  if (permission === ACCESS_MANAGE_PERMISSION) return isFull(user);
+  const profileLevel = permissionLevelForProfile(user.role, permission);
+  if (profileLevel === 'allow' || profileLevel === 'partial') return true;
   return Array.isArray(user.permissions) && user.permissions.includes(permission);
 }
 

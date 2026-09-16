@@ -137,6 +137,9 @@ function renderForm(user) {
 function renderProfiles() {
   const selectedProfile = creatingProfile ? null : (profiles.find(profile => profile.code === selectedProfileCode) || profiles[0]);
   const profileCode = selectedProfile?.code || 'dev_qa';
+  const profileUsers = users
+    .filter(user => normalizeAccessProfile(user.role) === profileCode)
+    .sort((a, b) => displayName(a).localeCompare(displayName(b), 'pt-BR', { sensitivity: 'base' }));
   const permissions = ACCESS_MODULES.map(item => ({
     ...item,
     level: item.levels?.[profileCode] || 'deny',
@@ -172,6 +175,23 @@ function renderProfiles() {
         <article><strong>${permissions.filter(item => item.level === 'allow').length}</strong><span>permitidos</span></article>
         <article><strong>${permissions.filter(item => item.level === 'partial').length}</strong><span>parciais</span></article>
         <article><strong>${permissions.filter(item => item.level === 'deny').length}</strong><span>bloqueados</span></article>
+      </div>
+      <div class="access-profile-users">
+        <div class="access-permissions-head">
+          <strong>Usuários neste perfil</strong>
+          <span>${profileUsers.length} usuário(s) vinculado(s)</span>
+        </div>
+        <div class="access-profile-user-list">
+          ${profileUsers.map(user => `
+            <button class="access-profile-user-card" type="button" data-profile-user-id="${sanitize(user.id)}">
+              <span>
+                <strong>${sanitize(displayName(user))}</strong>
+                <small>${sanitize(user.login)}</small>
+              </span>
+              <em class="${user.status === 'inactive' ? 'inactive' : ''}">${sanitize(statusLabel(user.status))}${user.pendingFirstLogin ? ' · Aguardando login Google' : ''}</em>
+            </button>
+          `).join('') || '<p class="muted">Nenhum usuário vinculado a este perfil.</p>'}
+        </div>
       </div>
       <div class="access-permissions">
         <div class="access-permissions-head">
@@ -354,6 +374,14 @@ function bindAccessEvents() {
     button.addEventListener('click', () => {
       creatingProfile = false;
       selectedProfileCode = button.dataset.profileCode;
+      renderAccessPage();
+    });
+  });
+  document.querySelectorAll('[data-profile-user-id]').forEach(button => {
+    button.addEventListener('click', () => {
+      selectedId = button.dataset.profileUserId;
+      activeTab = 'users';
+      creatingProfile = false;
       renderAccessPage();
     });
   });

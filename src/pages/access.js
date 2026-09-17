@@ -26,6 +26,9 @@ function sessionHeaders() {
 }
 
 function roleLabel(role) {
+  const normalized = normalizeAccessProfile(role);
+  const profile = profiles.find(item => item.code === normalized);
+  if (profile?.name) return profile.name;
   return profileByCode(role).name;
 }
 
@@ -137,17 +140,23 @@ function renderForm(user) {
 function renderProfiles() {
   const selectedProfile = creatingProfile ? null : (profiles.find(profile => profile.code === selectedProfileCode) || profiles[0]);
   const profileCode = selectedProfile?.code || 'dev_qa';
+  const isFixedProfile = ACCESS_PROFILES.some(profile => profile.code === profileCode);
+  const canEditPermissions = creatingProfile || !isFixedProfile;
   const profileUsers = users
     .filter(user => normalizeAccessProfile(user.role) === profileCode)
     .sort((a, b) => displayName(a).localeCompare(displayName(b), 'pt-BR', { sensitivity: 'base' }));
-  const permissions = ACCESS_MODULES.map(item => ({
-    ...item,
-    level: item.levels?.[profileCode] || 'deny',
-  }));
+  const permissions = selectedProfile?.permissions?.length && !isFixedProfile
+    ? selectedProfile.permissions
+    : ACCESS_MODULES.map(item => ({
+      ...item,
+      level: creatingProfile ? 'deny' : (item.levels?.[profileCode] || 'deny'),
+    }));
+  const selectedPermissionCodes = new Set(permissions.filter(item => item.level === 'allow' || item.level === 'partial').map(item => item.code));
   return `
     <section class="access-list">
       <div class="access-list-head">
         <h3>Perfis</h3>
+        <button class="btn btn-primary" type="button" id="new-access-profile">Novo perfil</button>
       </div>
       <div class="access-user-list">
         ${profiles.map(profile => `
@@ -196,15 +205,15 @@ function renderProfiles() {
       <div class="access-permissions">
         <div class="access-permissions-head">
           <strong>Permissões do perfil</strong>
-          <span>Lista baseada na matriz oficial de acessos.</span>
+          <span>${canEditPermissions ? 'Marque os módulos permitidos para este perfil.' : 'Perfil padrão baseado na matriz oficial de acessos.'}</span>
         </div>
         <div class="access-permission-grid">
           ${permissions.map(item => {
             const level = item.level || 'deny';
-            const checked = level === 'allow' || level === 'partial';
+            const checked = selectedPermissionCodes.has(item.code);
             return `
               <label class="access-permission-option ${sanitize(level)}" title="${sanitize(item.module)}${item.submodule !== '—' ? ` / ${item.submodule}` : ''}">
-                <input type="checkbox" value="${sanitize(item.code)}" ${checked ? 'checked' : ''} disabled>
+                <input type="checkbox" value="${sanitize(item.code)}" ${checked ? 'checked' : ''} ${canEditPermissions ? '' : 'disabled'}>
                 <span>
                   <strong>${sanitize(item.module)}${item.submodule !== '—' ? ` · ${sanitize(item.submodule)}` : ''}</strong>
                   <small>${level === 'partial' ? 'Acesso parcial aos próprios dados' : checked ? 'Com acesso' : 'Sem acesso'}</small>
@@ -218,7 +227,7 @@ function renderProfiles() {
         <button class="btn btn-primary" type="button" id="save-access-profile">Salvar perfil</button>
       </div>
       <div class="report-alert info">
-        As permissões seguem a matriz oficial enviada. Alterações de acesso devem ser feitas na matriz central, não por usuário.
+        ${canEditPermissions ? 'Ao salvar, todos os usuários vinculados passam a usar as permissões deste perfil.' : 'Este perfil padrão segue a matriz oficial enviada. Para regras diferentes, crie um novo perfil.'}
       </div>
     </section>
   `;
@@ -332,7 +341,7 @@ async function saveProfile() {
   const payload = {
     name: document.getElementById('access-profile-name')?.value || '',
     description: document.getElementById('access-profile-description')?.value || '',
-    permissions: [...document.querySelectorAll('.access-permission-check input:checked')].map(input => input.value),
+    permissions: [...document.querySelectorAll('.access-permission-option input:checked:not(:disabled)')].map(input => input.value),
   };
   const confirmed = await confirmAction({
     title: code ? 'Salvar perfil?' : 'Criar perfil?',

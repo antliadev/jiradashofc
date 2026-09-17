@@ -1,5 +1,5 @@
 -- ============================================================
--- JiraDash Oficial - correcoes apos Supabase Advisors
+-- Antlia Deliverable System - correcoes apos Supabase Advisors
 -- ============================================================
 
 CREATE SCHEMA IF NOT EXISTS app_private;

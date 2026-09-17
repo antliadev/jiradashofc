@@ -1,4 +1,4 @@
-# JiraDash - Regras Para Agentes
+# Antlia Deliverable System - Regras Para Agentes
 
 Regras obrigatórias:
 

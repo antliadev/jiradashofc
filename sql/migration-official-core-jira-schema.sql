@@ -1,5 +1,5 @@
 -- ============================================================
--- JiraDash Oficial - schema operacional Jira limpo
+-- Antlia Deliverable System - schema operacional Jira limpo
 -- Mantem apenas tabelas necessarias para sync, dashboards e operacao.
 -- Nao cria usuarios/sessoes legadas.
 -- ============================================================

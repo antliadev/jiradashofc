@@ -7,7 +7,7 @@ export const ACCESS_LEVEL = Object.freeze({
 export const ACCESS_PROFILES = Object.freeze([
   {
     code: 'dev_qa',
-    name: 'Dev/QA',
+    name: 'Desenvolvedor / QA',
     description: 'Acesso operacional com restrição aos próprios dados nas visões de Analistas.',
   },
   {

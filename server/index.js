@@ -143,7 +143,7 @@ app.use('/api/jira', jiraApiAuth, jiraRoutes);
 app.get('/api/jira', jiraApiAuth, (req, res) => {
   res.json({
     status: 'ok',
-    message: 'Radar Jira Antlia API (Desenvolvimento)',
+    message: 'Antlia Deliverable System API (Desenvolvimento)',
     endpoints: [
       'GET  /api/jira/config          - Configuração atual',
       'POST /api/jira/config          - Salva configuração',

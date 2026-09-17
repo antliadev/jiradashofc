@@ -164,10 +164,10 @@ function authErrorMessage(data = {}) {
     return 'Este sistema e exclusivo para colaboradores com e-mail @antlia.com.br.';
   }
   if (data.code === 'AUTH_EMAIL_NOT_GRANTED') {
-    return 'Seu e-mail ainda nao esta liberado para acessar o Radar Jira Antlia. Entre em contato com o administrador do sistema.';
+    return 'Seu e-mail ainda nao esta liberado para acessar o Antlia Deliverable System. Entre em contato com o administrador do sistema.';
   }
   if (data.code === 'AUTH_EMAIL_NOT_CONFIRMED') {
-    return 'Confirme o e-mail da sua conta Google antes de acessar o Radar Jira Antlia.';
+    return 'Confirme o e-mail da sua conta Google antes de acessar o Antlia Deliverable System.';
   }
   return data.error || 'Acesso Google nao autorizado. Entre em contato com o administrador do sistema.';
 }

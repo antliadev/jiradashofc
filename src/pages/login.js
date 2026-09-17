@@ -23,8 +23,8 @@ export function renderLogin() {
           <div class="login-logo">
             <img src="/antlia-logo.png" alt="">
           </div>
-          <div class="login-product-mark">RJA</div>
-          <h1>Radar Jira Antlia</h1>
+          <div class="login-product-mark">ADS</div>
+          <h1>Antlia Deliverable System</h1>
           <p class="login-subtitle">${recoveryMode ? 'Entre em contato com o administrador para redefinir sua senha' : 'Faça login para acessar o painel'}</p>
         </div>
         

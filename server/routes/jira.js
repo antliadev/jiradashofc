@@ -30,7 +30,7 @@ import {
 } from '../../lib/projectMetadataService.js';
 import { createSyncJob, createSyncJobFromEnv, createScopedSyncJobFromEnv, getSyncJobStatus, runSyncJob, executeAutoSync, ensureRecentAutoSync } from '../../lib/syncJobService.js';
 import { fetchHoursDashboard } from '../../lib/hoursDashboardService.js';
-import { hasPartialSelfScope } from '../../lib/appPermissions.js';
+import { canAccessPermission, hasPartialSelfScope } from '../../lib/appPermissions.js';
 
 const router = express.Router();
 router.use('/sprint-review', sprintReviewRoutes);
@@ -59,7 +59,15 @@ function analystEmailsForSession(req) {
 
 export function scopeDashboardForUser(data, req, permission = null) {
   const user = req.session?.user;
-  if (!hasPartialSelfScope(user?.role, permission)) return data;
+  if (!hasPartialSelfScope(user?.role, permission)) {
+    if (!hasPartialSelfScope(user?.role, 'analysts.general')) return data;
+    // Operational cards and assignee labels do not grant analyst comparisons.
+    return {
+      ...data,
+      analysts: (data.analysts || []).map(({ id, name, email, avatar }) => ({ id, name, email, avatar })),
+      metrics: { ...data.metrics, byAnalyst: {}, distributionByAnalyst: {} },
+    };
+  }
 
   const emails = new Set(analystEmailsForSession(req));
   if (!emails.size) return buildDashboardData([]);
@@ -579,6 +587,18 @@ router.get('/projects', async (req, res) => {
 // ─────────────────────────────────────────────
 // GET /api/jira/analysts — Analistas do banco
 // ─────────────────────────────────────────────
+router.get('/analysts/:mode', async (req, res) => {
+  const permission = { general: 'analysts.general', evolution: 'analysts.evolution', comparative: 'analysts.comparative' }[req.params.mode];
+  if (!permission) return res.status(404).json({ error: 'Visão não encontrada.' });
+  if (!canAccessPermission(req.session?.user, permission)) return res.status(403).json({ error: 'Permissão insuficiente.' });
+  try {
+    res.set('Cache-Control', 'private, no-store');
+    return res.json(scopeDashboardForUser(await fetchDashboardDataFromDatabase(), req, permission));
+  } catch {
+    return res.status(500).json({ error: 'Não foi possível consultar Analistas.' });
+  }
+});
+
 router.get('/analysts', async (req, res) => {
   try {
     const data = scopeDashboardForUser(await fetchDashboardDataFromDatabase(), req, 'analysts.general');

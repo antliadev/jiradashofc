@@ -6,6 +6,7 @@ import { dataService } from '../data/data-service.js';
 import { resolveStatusCategory, StatusCategory, isCardOverdue } from '../data/models.js';
 import { STATUS_COLORS, healthLabel, sanitize, formatDateTime, formatDate, priorityLabel, sanitizeTitle, getJiraIssueUrl } from '../utils/helpers.js';
 import { businessHelp } from '../utils/ui-feedback.js';
+import { canAccessPermission } from '../utils/access-control.js';
 
 let dashboardChart = null;
 let selectedWorkloadProject = '';
@@ -430,7 +431,10 @@ function renderDashboardContent() {
     `}
   `;
 
-  initCharts(stats, workload);
+  if (!canAccessPermission('analysts.comparative')) {
+    document.getElementById('workload-container')?.closest('.chart-card')?.remove();
+  }
+  initCharts(stats, canAccessPermission('analysts.comparative') ? workload : []);
   
   // Listener para o seletor de projeto no gráfico de workload
   document.getElementById('workload-project-select')?.addEventListener('change', (e) => {

@@ -380,7 +380,7 @@ async function upsertAccessProfile(input = {}) {
   }
   const code = normalizeRole(input.code || profileCodeFromName(name));
   if (!FIXED_ACCESS_PROFILE_CODES.has(code) && !/^[a-z0-9_.-]{2,60}$/.test(code)) {
-    const error = new Error('Perfil invalido. Use apenas Diretoria, Gestao ou Dev/QA.');
+    const error = new Error('Perfil invalido. Use apenas Diretoria, Gestao ou Desenvolvedor / QA.');
     error.status = 400;
     throw error;
   }

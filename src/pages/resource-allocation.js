@@ -724,7 +724,7 @@ export async function renderResourceAllocation({ skipRemote = false } = {}) {
   const isProject = state.tab === 'project';
   content.innerHTML = `<div class="report-page resource-allocation ${isTimeline ? 'resource-allocation-timeline-mode' : ''} ${isProject ? 'resource-allocation-project-mode' : ''}">
     ${state.warning ? `<div class="sr-warning" role="alert"><strong>Atenção:</strong> ${sanitize(state.warning)}</div>` : ''}
-    ${isTimeline ? '<p class="muted">Visão visual da alocação de profissionais em projetos ao longo do tempo.</p>' : `<p class="muted">Fonte dos dados de alocação: ${state.persistence === 'supabase' ? 'Supabase/API protegida' : 'fallback local do navegador'}. Profissionais vêm dos dados sincronizados do RJA.</p>`}
+    ${isTimeline ? '<p class="muted">Visão visual da alocação de profissionais em projetos ao longo do tempo.</p>' : `<p class="muted">Fonte dos dados de alocação: ${state.persistence === 'supabase' ? 'Supabase/API protegida' : 'fallback local do navegador'}. Profissionais vêm dos dados sincronizados do Antlia Deliverable System.</p>`}
     <div class="report-tabs"><button class="${state.tab === 'professional' ? 'active' : ''}" data-tab="professional">Visão por Profissional</button><button class="${state.tab === 'project' ? 'active' : ''}" data-tab="project">Visão por Projeto</button><button class="${state.tab === 'timeline' ? 'active' : ''}" data-tab="timeline">Visão Timeline</button></div>
     <div class="report-toolbar">
       <label>Busca<input id="ra-search" value="${sanitize(state.filters.search || '')}" placeholder="Profissional, projeto ou cliente"></label>

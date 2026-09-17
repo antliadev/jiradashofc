@@ -8,8 +8,8 @@ test('Sprint Plan possui rota e permissao independentes da Sprint Review', () =>
   assert.equal(item?.route, '/projects/sprint-plan');
   assert.equal(MENU_PERMISSIONS.includes('projects.sprint-plan'), true);
   assert.equal(permissionForJiraRequest({ path: '/sprint-plan/analyze', method: 'POST' }), 'projects.sprint-plan');
-  assert.equal(canAccessRoute('/projects/sprint-plan', { status: 'active', role: 'custom', permissions: ['projects.sprint-review'] }), false);
-  assert.equal(canAccessRoute('/projects/sprint-plan', { status: 'active', role: 'custom', permissions: ['projects.sprint-plan'] }), true);
+  assert.equal(canAccessRoute('/projects/sprint-plan', { status: 'active', role: 'financeiro', permissions: ['projects.sprint-review'] }), false);
+  assert.equal(canAccessRoute('/projects/sprint-plan', { status: 'active', role: 'financeiro', permissions: ['projects.sprint-plan'] }), true);
 });
 
 test('Alocação de Recursos possui rota e permissão próprias', () => {
@@ -17,6 +17,6 @@ test('Alocação de Recursos possui rota e permissão próprias', () => {
   assert.equal(item?.route, '/projects/resource-allocation');
   assert.equal(MENU_PERMISSIONS.includes('projects.resource-allocation'), true);
   assert.equal(permissionForJiraRequest({ path: '/resource-allocation/state', method: 'GET' }), 'projects.resource-allocation');
-  assert.equal(canAccessRoute('/projects/resource-allocation', { status: 'active', role: 'custom', permissions: ['projects.sprint-review'] }), false);
-  assert.equal(canAccessRoute('/projects/resource-allocation', { status: 'active', role: 'custom', permissions: ['projects.resource-allocation'] }), true);
+  assert.equal(canAccessRoute('/projects/resource-allocation', { status: 'active', role: 'financeiro', permissions: ['projects.sprint-review'] }), false);
+  assert.equal(canAccessRoute('/projects/resource-allocation', { status: 'active', role: 'financeiro', permissions: ['projects.resource-allocation'] }), true);
 });

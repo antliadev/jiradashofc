@@ -1,7 +1,10 @@
 /**
  * analysts.js — Visoes Geral, Comparativo e Evolucao de analistas.
  */
-import { dataService } from '../data/data-service.js';
+import { DataService } from '../data/data-service.js';
+import { canAccessPermission } from '../utils/access-control.js';
+let dataService = new DataService();
+let renderRequest = 0;
 import { isCardOverdue, resolveStatusCategory, StatusCategory } from '../data/models.js';
 import { formatDate, sanitize, sanitizeTitle, typeLabel } from '../utils/helpers.js';
 import { exportRowsWorkbook } from '../utils/excel-export.js';
@@ -115,6 +118,7 @@ function renderProfessionalsPicker(users, selectedIds = []) {
 }
 
 function getSharedAnalystId(users) {
+  if (users.length === 1) return users[0].id;
   const queryUserId = params().get('userId') || '';
   const storedUserId = localStorage.getItem(SHARED_ANALYST_KEY) || '';
   const userId = queryUserId || storedUserId;
@@ -208,7 +212,7 @@ function renderModeTabs(mode, sharedUserId = '') {
     <div class="report-tabs">
       <button class="${mode === 'general' ? 'active' : ''}" onclick="location.hash='#${analystModePath('/analysts/general', sharedUserId)}'">Geral</button>
       <button class="${mode === 'evolution' ? 'active' : ''}" onclick="location.hash='#${analystModePath('/analysts/evolution', sharedUserId)}'">Evolucao</button>
-      <button class="${mode === 'comparative' ? 'active' : ''}" onclick="location.hash='#/analysts/comparative'">Comparativo</button>
+      ${canAccessPermission('analysts.comparative') ? `<button class="${mode === 'comparative' ? 'active' : ''}" onclick="location.hash='#/analysts/comparative'">Comparativo</button>` : ''}
     </div>
   `;
 }
@@ -819,8 +823,21 @@ async function exportEvolution(user, filters, grouping) {
   ], `analista_evolucao_${user.displayName.replace(/\s+/g, '_')}.xlsx`);
 }
 
-export function renderAnalysts() {
+export async function renderAnalysts() {
+  const request = ++renderRequest;
   const mode = routeMode();
+  const route = window.location.hash;
+  const content = document.getElementById('page-content');
+  content.innerHTML = '<p role="status">Carregando seus dados autorizados…</p>';
+  const scopedService = new DataService();
+  try {
+    await scopedService.loadAnalystData(mode);
+  } catch {
+    if (request === renderRequest && route === window.location.hash) content.innerHTML = '<p role="alert">Não foi possível carregar os dados de Analistas. Tente novamente.</p>';
+    return;
+  }
+  if (request !== renderRequest || route !== window.location.hash) return;
+  dataService = scopedService;
   if (mode === 'comparative') return renderComparative();
   if (mode === 'evolution') return renderEvolution();
   return renderGeneral();

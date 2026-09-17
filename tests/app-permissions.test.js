@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ACCESS_PROFILES, canAccessPermission, hasPartialSelfScope, normalizeAccessProfile, permissionForJiraRequest, permissionsForProfile } from '../lib/appPermissions.js';
+import { scopeDashboardForUser, scopeIssuesForUser } from '../server/routes/jira.js';
 
 test('perfis oficiais de acesso ficam limitados a Diretoria, Gestão e Dev/QA', () => {
   assert.deepEqual(ACCESS_PROFILES.map(profile => profile.name), ['Dev/QA', 'Gestão', 'Diretoria']);
@@ -38,4 +39,29 @@ test('mapeia rotas Jira sensiveis para permissao de dados', () => {
   assert.equal(permissionForJiraRequest({ path: '/sync/start', method: 'POST' }), 'data');
   assert.equal(permissionForJiraRequest({ path: '/config', method: 'POST' }), 'data');
   assert.equal(permissionForJiraRequest({ path: '/dashboard', method: 'GET' }), 'dashboard');
+});
+
+test('perfil dev qa nao perde dados operacionais por regra parcial de analistas', () => {
+  const req = { session: { user: { role: 'dev_qa', email: 'contas.ti@antlia.com.br' } } };
+  const data = {
+    issues: [
+      { id: 'P1-1', assignee_id: 'a1', assignee_email: 'alan.silva@antlia.com.br', status: 'Em andamento', project: 'P1' },
+      { id: 'P1-2', assignee_id: 'a2', assignee_email: 'matheus.santos@antlia.com.br', status: 'Bloqueado', project: 'P1' },
+    ],
+    analysts: [
+      { id: 'a1', email: 'alan.silva@antlia.com.br', displayName: 'Alan Silva' },
+      { id: 'a2', email: 'matheus.santos@antlia.com.br', displayName: 'Matheus Santos' },
+    ],
+    projects: [{ id: 'P1', name: 'Projetos Antlia' }],
+    statuses: ['Em andamento', 'Bloqueado'],
+    metrics: { total: 2 },
+    board: { columns: [] },
+    totalIssues: 2,
+    lastSyncedAt: '2026-09-17T10:00:00.000Z',
+  };
+
+  assert.equal(scopeDashboardForUser(data, req, 'dashboard').issues.length, 2);
+  assert.equal(scopeIssuesForUser(data.issues, req, 'projects.kanban').length, 2);
+  assert.equal(scopeDashboardForUser(data, req, 'analysts.general').issues.length, 0);
+  assert.equal(scopeIssuesForUser(data.issues, req, 'analysts.general').length, 0);
 });

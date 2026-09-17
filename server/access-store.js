@@ -187,6 +187,12 @@ function normalizePermissions(role, permissions = []) {
   return [...new Set(permissions.filter(permission => MENU_PERMISSIONS.includes(permission)))];
 }
 
+function permissionCodesForProfile(profile) {
+  const fixedPermissions = permissionsForProfile(profile.code, { includePartial: true });
+  if (fixedPermissions.length) return fixedPermissions;
+  return [...new Set((profile.permissionCodes || profile.permissions || []).filter(permission => MENU_PERMISSIONS.includes(permission)))];
+}
+
 function dbProfileToUser(row, permissions = []) {
   const role = normalizeRole(row.primary_role);
   const name = row.display_name || '';
@@ -309,7 +315,7 @@ async function listAccessProfiles() {
     if (row.permissions?.code) rolePermissions.get(row.role_id).add(row.permissions.code);
   });
   const rowsByCode = new Map(roleRows.map(row => [normalizeRole(row.code), row]));
-  return ACCESS_PROFILES.map(profile => {
+  const officialProfiles = ACCESS_PROFILES.map(profile => {
     const row = rowsByCode.get(profile.code);
     return profileSummary({
       code: profile.code,
@@ -318,16 +324,31 @@ async function listAccessProfiles() {
       permissionCodes: row?.id ? [...(rolePermissions.get(row.id) || [])] : undefined,
     }, linkedUsers);
   });
+
+  const officialCodes = new Set(ACCESS_PROFILE_CODES);
+  const dynamicProfiles = roleRows
+    .map(row => ({ row, code: normalizeRole(row.code) }))
+    .filter(({ code }) => !officialCodes.has(code) && /^[a-z0-9_.-]{2,60}$/.test(code))
+    .map(({ row, code }) => profileSummary({
+      code,
+      name: row.name || code,
+      description: row.description || '',
+      permissionCodes: row.id ? [...(rolePermissions.get(row.id) || [])] : [],
+    }, linkedUsers));
+
+  return [...officialProfiles, ...dynamicProfiles];
 }
 
 function profileSummary(profile, linkedUsers = []) {
   const usersForProfile = linkedUsers.filter(user => normalizeRole(user.role) === profile.code);
+  const selectedPermissions = new Set(permissionCodesForProfile(profile));
+  const isFixedProfile = permissionsForProfile(profile.code, { includePartial: true }).length > 0;
   const permissions = ACCESS_MODULES.map(item => ({
     code: item.code,
     module: item.module,
     submodule: item.submodule,
     label: item.label,
-    level: item.levels?.[profile.code] || 'deny',
+    level: isFixedProfile ? (item.levels?.[profile.code] || 'deny') : (selectedPermissions.has(item.code) ? 'allow' : 'deny'),
     scope: item.scope || null,
   }));
   return {
@@ -358,14 +379,16 @@ async function upsertAccessProfile(input = {}) {
     throw error;
   }
   const code = normalizeRole(input.code || profileCodeFromName(name));
-  if (!FIXED_ACCESS_PROFILE_CODES.has(code)) {
+  if (!FIXED_ACCESS_PROFILE_CODES.has(code) && !/^[a-z0-9_.-]{2,60}$/.test(code)) {
     const error = new Error('Perfil invalido. Use apenas Diretoria, Gestao ou Dev/QA.');
     error.status = 400;
     throw error;
   }
   const storageCode = await roleCodeForStorage(code);
   const description = String(input.description || '').trim();
-  const selectedPermissions = permissionsForProfile(code);
+  const selectedPermissions = FIXED_ACCESS_PROFILE_CODES.has(code)
+    ? permissionsForProfile(code)
+    : [...new Set((input.permissions || []).filter(permission => MENU_PERMISSIONS.includes(permission)))];
 
   const { data: role, error: roleError } = await supabase
     .from('roles')

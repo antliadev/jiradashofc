@@ -57,7 +57,7 @@ function analystEmailsForSession(req) {
   ].map(value => String(value || '').trim().toLowerCase()).filter(Boolean);
 }
 
-function scopeDashboardForUser(data, req, permission = 'analysts.general') {
+export function scopeDashboardForUser(data, req, permission = null) {
   const user = req.session?.user;
   if (!hasPartialSelfScope(user?.role, permission)) return data;
 
@@ -80,7 +80,7 @@ function scopeDashboardForUser(data, req, permission = 'analysts.general') {
   };
 }
 
-function scopeIssuesForUser(issues, req, permission = 'analysts.general') {
+export function scopeIssuesForUser(issues, req, permission = null) {
   const user = req.session?.user;
   if (!hasPartialSelfScope(user?.role, permission)) return issues;
   const emails = new Set(analystEmailsForSession(req));
@@ -447,7 +447,7 @@ router.get('/dashboard', async (req, res) => {
     const data = scopeDashboardForUser(
       await fetchDashboardDataFromDatabase({ force: req.query.force === 'true' || req.query.force === '1' }),
       req,
-      'analysts.general'
+      'dashboard'
     );
     const total = data.totalIssues || 0;
 
@@ -537,7 +537,7 @@ router.get('/issues', async (req, res) => {
     const filters = { project, status, assignee, priority, type };
 
     if (req.query.all === 'true') {
-      const issues = scopeIssuesForUser(await fetchIssuesFromDatabase(filters), req);
+      const issues = scopeIssuesForUser(await fetchIssuesFromDatabase(filters), req, 'projects.kanban');
       return res.json({
         total: issues.length,
         limit: issues.length,
@@ -549,7 +549,7 @@ router.get('/issues', async (req, res) => {
     const limit  = Math.min(parseInt(req.query.limit)  || 100, 500);
     const offset = parseInt(req.query.offset) || 0;
     const page = await fetchIssuesPageFromDatabase(filters, { limit, offset });
-    const scopedIssues = scopeIssuesForUser(page.issues, req);
+    const scopedIssues = scopeIssuesForUser(page.issues, req, 'projects.kanban');
 
     return res.json({
       total: scopedIssues.length,
@@ -568,7 +568,7 @@ router.get('/issues', async (req, res) => {
 // ─────────────────────────────────────────────
 router.get('/projects', async (req, res) => {
   try {
-    const data = scopeDashboardForUser(await fetchDashboardDataFromDatabase(), req, 'analysts.general');
+    const data = scopeDashboardForUser(await fetchDashboardDataFromDatabase(), req, 'projects.kanban');
     return res.json(data.projects);
   } catch (error) {
     console.error('[projects] Erro:', error.message);
@@ -594,7 +594,7 @@ router.get('/analysts', async (req, res) => {
 // ─────────────────────────────────────────────
 router.get('/statuses', async (req, res) => {
   try {
-    const data = scopeDashboardForUser(await fetchDashboardDataFromDatabase(), req, 'analysts.general');
+    const data = scopeDashboardForUser(await fetchDashboardDataFromDatabase(), req, 'dashboard');
     return res.json(data.statuses);
   } catch (error) {
     console.error('[statuses] Erro:', error.message);
@@ -607,7 +607,7 @@ router.get('/statuses', async (req, res) => {
 // ─────────────────────────────────────────────
 router.get('/metrics', async (req, res) => {
   try {
-    const data = scopeDashboardForUser(await fetchDashboardDataFromDatabase(), req, 'analysts.general');
+    const data = scopeDashboardForUser(await fetchDashboardDataFromDatabase(), req, 'dashboard');
     return res.json(data.metrics);
   } catch (error) {
     console.error('[metrics] Erro:', error.message);
@@ -620,7 +620,7 @@ router.get('/metrics', async (req, res) => {
 // ─────────────────────────────────────────────
 router.get('/board', async (req, res) => {
   try {
-    const data = scopeDashboardForUser(await fetchDashboardDataFromDatabase(), req, 'analysts.general');
+    const data = scopeDashboardForUser(await fetchDashboardDataFromDatabase(), req, 'projects.kanban');
     return res.json(data.board);
   } catch (error) {
     console.error('[board] Erro:', error.message);

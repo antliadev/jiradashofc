@@ -1,5 +1,5 @@
 -- ============================================================
--- JiraDash Oficial - Supabase Auth, perfis, permissoes e RLS
+-- Antlia Deliverable System - Supabase Auth, perfis, permissoes e RLS
 -- Aplicar no projeto oficial depois de configurar backups/ambiente.
 -- Projeto alvo: vzkiniwjhnhfximpfzuk
 -- ============================================================
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
 );
 
 INSERT INTO public.roles (code, name, description) VALUES
-  ('full', 'Full', 'Administracao completa do JiraDash.'),
+  ('full', 'Full', 'Administração completa do Antlia Deliverable System.'),
   ('master', 'Master', 'Acesso amplo operacional sem gestao plena de acessos.'),
   ('visualizacao', 'Visualizacao', 'Acesso de leitura aos modulos permitidos.'),
   ('personalizado', 'Personalizado', 'Permissoes atribuidas individualmente.')

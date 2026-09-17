@@ -3,13 +3,109 @@ import assert from 'node:assert/strict';
 import { ACCESS_PROFILES, canAccessPermission, hasPartialSelfScope, normalizeAccessProfile, permissionForJiraRequest, permissionsForProfile } from '../lib/appPermissions.js';
 import { scopeDashboardForUser, scopeIssuesForUser } from '../server/routes/jira.js';
 
-test('perfis oficiais de acesso ficam limitados a Diretoria, Gestão e Dev/QA', () => {
-  assert.deepEqual(ACCESS_PROFILES.map(profile => profile.name), ['Dev/QA', 'Gestão', 'Diretoria']);
+test('perfis oficiais de acesso ficam limitados a Desenvolvedor / QA, Gestão e Diretoria', () => {
+  assert.deepEqual(ACCESS_PROFILES.map(profile => profile.name), ['Desenvolvedor / QA', 'Gestão', 'Diretoria']);
   assert.equal(normalizeAccessProfile('full'), 'diretoria');
   assert.equal(normalizeAccessProfile('master'), 'gestao');
   assert.equal(normalizeAccessProfile('visualizacao'), 'dev_qa');
   assert.equal(normalizeAccessProfile('personalizado'), 'dev_qa');
   assert.equal(normalizeAccessProfile('desenvolvedor_ba'), 'dev_qa');
+});
+
+test('matriz oficial respeita acesso total, parcial e sem acesso por perfil', () => {
+  const expected = {
+    dev_qa: {
+      allow: [
+        'dashboard',
+        'executive',
+        'monitoring.overdue',
+        'monitoring.blocked',
+        'gantt',
+        'projects.kanban',
+      ],
+      partial: ['analysts.general', 'analysts.evolution'],
+      deny: [
+        'contracts.crawford',
+        'contracts.docwise',
+        'projects.sprint-plan',
+        'projects.sprint-review',
+        'projects.health',
+        'projects.resource-allocation',
+        'analysts.comparative',
+        'data',
+        'access.users',
+        'access.profiles',
+        'access.permissions',
+      ],
+    },
+    gestao: {
+      allow: [
+        'dashboard',
+        'executive',
+        'contracts.crawford',
+        'contracts.docwise',
+        'monitoring.overdue',
+        'monitoring.blocked',
+        'gantt',
+        'projects.sprint-plan',
+        'projects.sprint-review',
+        'projects.kanban',
+        'projects.health',
+        'projects.resource-allocation',
+        'analysts.general',
+        'analysts.evolution',
+        'analysts.comparative',
+      ],
+      partial: [],
+      deny: ['data', 'access.users', 'access.profiles', 'access.permissions'],
+    },
+    diretoria: {
+      allow: [
+        'dashboard',
+        'executive',
+        'contracts.crawford',
+        'contracts.docwise',
+        'monitoring.overdue',
+        'monitoring.blocked',
+        'gantt',
+        'projects.sprint-plan',
+        'projects.sprint-review',
+        'projects.kanban',
+        'projects.health',
+        'projects.resource-allocation',
+        'analysts.general',
+        'analysts.evolution',
+        'analysts.comparative',
+        'data',
+        'access.users',
+        'access.profiles',
+        'access.permissions',
+      ],
+      partial: [],
+      deny: [],
+    },
+  };
+
+  for (const [role, groups] of Object.entries(expected)) {
+    const user = { role, status: 'active', permissions: [] };
+    for (const permission of groups.allow) assert.equal(canAccessPermission(user, permission), true, `${role} deveria acessar ${permission}`);
+    for (const permission of groups.partial) {
+      assert.equal(canAccessPermission(user, permission), true, `${role} deveria acessar parcialmente ${permission}`);
+      assert.equal(hasPartialSelfScope(role, permission), true, `${role} deveria ter escopo proprio em ${permission}`);
+    }
+    for (const permission of groups.deny) assert.equal(canAccessPermission(user, permission), false, `${role} nao deveria acessar ${permission}`);
+  }
+});
+
+test('deny by default bloqueia permissao nao declarada e usuario inativo', () => {
+  assert.equal(canAccessPermission({ role: 'dev_qa', status: 'active', permissions: [] }, 'permissao.inexistente'), false);
+  assert.equal(canAccessPermission({ role: 'gestao', status: 'inactive', permissions: ['dashboard'] }, 'dashboard'), false);
+});
+
+test('perfis oficiais nao podem burlar SEM_ACESSO com permissao residual de usuario', () => {
+  assert.equal(canAccessPermission({ role: 'dev_qa', status: 'active', permissions: ['contracts.crawford'] }, 'contracts.crawford'), false);
+  assert.equal(canAccessPermission({ role: 'gestao', status: 'active', permissions: ['data', 'access.users'] }, 'data'), false);
+  assert.equal(canAccessPermission({ role: 'financeiro', status: 'active', permissions: ['dashboard'] }, 'dashboard'), true);
 });
 
 test('perfil diretoria administra acessos e qualquer permissao funcional', () => {

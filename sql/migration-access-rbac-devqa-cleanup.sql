@@ -1,5 +1,5 @@
 -- ============================================================
--- JiraDash - limpeza dos perfis oficiais de acesso
+-- Antlia Deliverable System - limpeza dos perfis oficiais de acesso
 -- Mantém apenas Diretoria, Gestão e Dev/QA como perfis operacionais.
 -- Usuários/grants existentes ficam como Diretoria, exceto Hector, que fica Dev/QA.
 -- ============================================================

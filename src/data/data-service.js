@@ -27,7 +27,7 @@ function jiraFieldText(value) {
   return jiraFieldText(value.value ?? value.displayName ?? value.name ?? value.label ?? value.child);
 }
 
-class DataService {
+export class DataService {
   constructor() {
     this._projects = [];
     this._cards = [];
@@ -463,6 +463,17 @@ class DataService {
   /**
    * Carrega dados do Jira via API interna
    */
+  async loadAnalystData(mode) {
+    if (!['general', 'evolution', 'comparative'].includes(mode)) throw new Error('Visão de analistas inválida.');
+    const response = await this._fetchWithTimeout(`${this._apiBase}/analysts/${mode}`, {
+      headers: this._getHeaders(),
+    }, DASHBOARD_DATA_TIMEOUT_MS);
+    if (!response.ok) throw new Error('Não foi possível consultar os dados autorizados de Analistas.');
+    const data = await response.json();
+    this._applyJiraData(data);
+    return data;
+  }
+
   async loadJiraData({ force = false } = {}) {
     try {
       if (force) this._clearDashboardCache();

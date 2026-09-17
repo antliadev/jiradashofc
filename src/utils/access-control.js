@@ -4,7 +4,9 @@
 import {
   ACCESS_MANAGE_PERMISSION,
   ACCESS_MODULES,
+  ACCESS_PROFILES,
   canProfileManageAccess,
+  normalizeAccessProfile,
   permissionLevelForProfile,
 } from '../../shared/access-rbac.js';
 
@@ -67,7 +69,7 @@ function isFull(user = getCurrentUser()) {
 }
 
 function canAccessPermission(permission, user = getCurrentUser()) {
-  if (!permission) return true;
+  if (!permission) return false;
   // A ausencia de um usuario nunca pode liberar uma rota protegida. A
   // autenticacao e validada no backend, mas este bloqueio evita que menus e
   // paginas pisquem ou sejam renderizados com um estado local incompleto.
@@ -75,6 +77,7 @@ function canAccessPermission(permission, user = getCurrentUser()) {
   if (permission === ACCESS_MANAGE_PERMISSION) return isFull(user);
   const profileLevel = permissionLevelForProfile(user.role, permission);
   if (profileLevel === 'allow' || profileLevel === 'partial') return true;
+  if (ACCESS_PROFILES.some(profile => profile.code === normalizeAccessProfile(user.role))) return false;
   return Array.isArray(user.permissions) && user.permissions.includes(permission);
 }
 

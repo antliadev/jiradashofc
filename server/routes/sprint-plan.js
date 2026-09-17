@@ -23,7 +23,7 @@ async function enabledProjects() { return (await fetchDashboardDataFromDatabase(
 async function requestContext(req, requireSprint = false) {
   const data = req.method === 'GET' ? req.query : req.body;
   const key = projectKey(data.projectKey), boardId = positiveId(data.boardId);
-  if (!(await enabledProjects()).some(item => item.key === key)) throw Object.assign(new Error('Projeto nao habilitado no RJA.'), { status: 403 });
+  if (!(await enabledProjects()).some(item => item.key === key)) throw Object.assign(new Error('Projeto nao habilitado no Antlia Deliverable System.'), { status: 403 });
   const sprintId = data.sprintId ? positiveId(data.sprintId) : null;
   if (requireSprint && !sprintId) throw Object.assign(new Error('Selecione uma sprint futura ou ativa.'), { status: 400 });
   return { projectKey: key, boardId, ...(sprintId ? { sprintId } : {}) };

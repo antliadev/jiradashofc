@@ -147,8 +147,8 @@ export function renderSidebar() {
           <img src="/antlia-logo.png" alt="">
         </div>
         <div class="sidebar-brand-text">
-          <h1>Radar Jira Antlia</h1>
-          <span>RJA</span>
+          <h1>Antlia Deliverable System</h1>
+          <span>ADS</span>
         </div>
       </div>
       <button class="sidebar-collapse-toggle" id="sidebar-collapse-toggle" type="button" aria-label="${isCollapsed ? 'Expandir menu' : 'Recolher menu'}" aria-expanded="${isCollapsed ? 'false' : 'true'}">
@@ -262,7 +262,7 @@ export function renderSidebar() {
 
   document.getElementById('logout-button')?.addEventListener('click', async () => {
     const confirmed = await confirmAction({
-      title: 'Sair do JiraDash?',
+      title: 'Sair do Antlia Deliverable System?',
       message: 'Sua sessão será encerrada neste dispositivo.',
       confirmLabel: 'Sair'
     });

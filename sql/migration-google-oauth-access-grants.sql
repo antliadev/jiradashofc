@@ -1,5 +1,5 @@
 -- ============================================================
--- JiraDash Oficial - Google OAuth allowlist por email
+-- Antlia Deliverable System - Google OAuth allowlist por email
 -- Permite liberar acesso antes do primeiro login Google.
 -- ============================================================
 

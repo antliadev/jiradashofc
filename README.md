@@ -1,6 +1,6 @@
-# JiraDash — Documentação Unificada & Guia Completo do Sistema
+# Antlia Deliverable System — Documentação Unificada & Guia Completo do Sistema
 
-JiraDash é a plataforma interna da **Antlia** para acompanhamento executivo e operacional dos dados do **Jira Cloud**. O sistema reúne dashboards executivos, indicadores de projetos, relatórios de horas por contrato/analista, visão Kanban, gráfico de Gantt e gestão de acessos baseada em papéis (RBAC).
+Antlia Deliverable System é a plataforma interna da **Antlia** para acompanhamento executivo e operacional dos dados do **Jira Cloud**. O sistema reúne dashboards executivos, indicadores de projetos, relatórios de horas por contrato/analista, visão Kanban, gráfico de Gantt e gestão de acessos baseada em papéis (RBAC).
 
 ---
 
@@ -23,7 +23,7 @@ JiraDash é a plataforma interna da **Antlia** para acompanhamento executivo e o
 
 ## 2. Visão Geral de Arquitetura e Fluxo de Dados
 
-O JiraDash atua com um fluxo unidirecional: **Jira Cloud -> Backend (Express/Vercel) -> Supabase Postgres -> SPA Client (Vite)**.
+O Antlia Deliverable System atua com um fluxo unidirecional: **Jira Cloud -> Backend (Express/Vercel) -> Supabase Postgres -> SPA Client (Vite)**.
 
 ```mermaid
 graph TD

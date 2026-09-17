@@ -392,7 +392,7 @@ async function exportWorkbook() {
     const ExcelModule = await import('exceljs');
     const ExcelJS = ExcelModule.default || ExcelModule;
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'Radar Jira Antlia';
+    workbook.creator = 'Antlia Deliverable System';
     workbook.created = new Date();
 
     const description = workbook.addWorksheet('Descricao');

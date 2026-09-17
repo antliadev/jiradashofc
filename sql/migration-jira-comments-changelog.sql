@@ -1,5 +1,5 @@
 -- ============================================================
--- Radar Jira Antlia - Comentarios, historico e campos de bloqueio
+-- Antlia Deliverable System - Comentarios, historico e campos de bloqueio
 -- Seguro para rodar varias vezes. Nao apaga dados existentes.
 -- ============================================================
 

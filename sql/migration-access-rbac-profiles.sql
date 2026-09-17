@@ -1,5 +1,5 @@
 -- ============================================================
--- JiraDash - RBAC por Perfis de Acesso
+-- Antlia Deliverable System - RBAC por Perfis de Acesso
 -- Substitui a matriz operacional antiga por perfis centralizados:
 -- Dev/QA, Gestão e Diretoria.
 -- ============================================================

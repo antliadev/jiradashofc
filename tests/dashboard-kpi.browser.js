@@ -33,6 +33,15 @@ try {
   await assert.doesNotReject(() => page.locator('.dashboard-status-percentages').waitFor({ state: 'visible' }));
   assert.match(await page.locator('.dashboard-status-percentages').innerText(), /Concluídos\s+25%/);
   assert.match(await page.locator('.dashboard-status-percentages').innerText(), /Não concluídos\s+75%/);
+  await assert.doesNotReject(() => page.locator('.dashboard-insight-card').waitFor({ state: 'visible' }));
+  const insightText = await page.locator('.dashboard-insight-card').innerText();
+  assert.match(insightText, /Leitura executiva/);
+  assert.match(insightText, /CONCLUÍDO\s+25%/);
+  assert.match(insightText, /EM ABERTO\s+75%/);
+  assert.match(insightText, /ATRASO\s+25%/);
+  assert.match(insightText, /SAÚDE DE DADOS\s+25%/);
+  assert.match(insightText, /Tratar cards atrasados/);
+  assert.match(insightText, /Corrigir saúde dos dados/);
 
   await page.locator('[data-dashboard-kpi="totalCards"]').click();
   await assert.doesNotReject(() => page.locator('.dashboard-kpi-modal').waitFor({ state: 'visible' }));
@@ -45,7 +54,7 @@ try {
   assert.doesNotMatch(await page.locator('.dashboard-kpi-modal').innerText(), /P1-1/);
 
   assert.deepEqual(errors, []);
-  console.log('Browser passed: dashboard KPIs abrem modal com cards, links Jira e percentuais do grafico.');
+  console.log('Browser passed: dashboard KPIs abrem modal, links Jira, percentuais do grafico e leitura executiva.');
 } finally {
   await browser.close();
 }

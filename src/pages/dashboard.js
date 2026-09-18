@@ -227,6 +227,7 @@ function renderDashboardContent() {
 
   // Obter workload filtrado
   const workload = getFilteredWorkload();
+  const canViewComparative = canAccessPermission('analysts.comparative');
 
   // Gerar HTML dos filtros ativos
   const activeFiltersHtml = renderActiveFilters();
@@ -358,7 +359,9 @@ function renderDashboardContent() {
         <canvas id="statusChart"></canvas>
         ${renderStatusCompletionSummary(stats)}
       </div>
-      <div class="chart-card">
+      ${renderDashboardInsightPanel(stats)}
+      ${canViewComparative ? `
+      <div class="chart-card chart-full dashboard-workload-card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
           <h3>Carga de Trabalho por Analista ${businessHelp('Regra de carga', 'Agrupa os cards filtrados pelo analista responsável. O percentual da barra compara cada total com o maior total da lista.')}</h3>
           <select id="workload-project-select" style="background: var(--bg-input); border: 1px solid var(--border); color: var(--text-primary); padding: 6px 12px; border-radius: 6px; font-size: 12px;">
@@ -370,6 +373,7 @@ function renderDashboardContent() {
           ${renderWorkloadList(workload)}
         </div>
       </div>
+      ` : ''}
       <div class="chart-card chart-full">
         <h3>Progresso por Projeto ${businessHelp('Regra de progresso', 'O progresso de cada projeto é a proporção de cards concluídos em relação ao total de cards daquele projeto.')}</h3>
         <div class="table-container">
@@ -460,10 +464,7 @@ function renderDashboardContent() {
     `}
   `;
 
-  if (!canAccessPermission('analysts.comparative')) {
-    document.getElementById('workload-container')?.closest('.chart-card')?.remove();
-  }
-  initCharts(stats, canAccessPermission('analysts.comparative') ? workload : []);
+  initCharts(stats, canViewComparative ? workload : []);
   bindDashboardKpiCards();
 
   // Listener para o seletor de projeto no gráfico de workload
@@ -535,6 +536,91 @@ function renderStatusCompletionSummary(stats) {
     <div class="dashboard-status-percentages" aria-label="Percentual de cards concluídos e não concluídos">
       <div class="dashboard-status-percentage done"><span>Concluídos</span><strong>${donePercent}%</strong><small>${done} card(s)</small></div>
       <div class="dashboard-status-percentage pending"><span>Não concluídos</span><strong>${notDonePercent}%</strong><small>${notDone} card(s)</small></div>
+    </div>
+  `;
+}
+
+function getDashboardPercent(value, total) {
+  return total > 0 ? Math.round((value / total) * 100) : 0;
+}
+
+function renderDashboardInsightMetric(label, value, total, tone) {
+  const percent = getDashboardPercent(value, total);
+
+  return `
+    <div class="dashboard-insight-metric ${tone}">
+      <span>${sanitize(label)}</span>
+      <strong>${percent}%</strong>
+      <small>${value} card(s)</small>
+    </div>
+  `;
+}
+
+function renderDashboardActionItem(title, detail, tone) {
+  return `
+    <li class="${tone}">
+      <strong>${sanitize(title)}</strong>
+      <span>${sanitize(detail)}</span>
+    </li>
+  `;
+}
+
+function renderDashboardInsightPanel(stats) {
+  const total = stats.totalCards || 0;
+  const done = stats.byCategory.done || 0;
+  const notDone = Math.max(0, total - done);
+  const inProgress = stats.byCategory.in_progress || 0;
+  const todo = stats.byCategory.todo || 0;
+  const blocked = stats.byCategory.blocked || 0;
+  const overdue = stats.overdue || 0;
+  const inconsistent = stats.inconsistent || 0;
+  const openStatusRows = [
+    { label: 'A Fazer', value: todo, tone: 'todo' },
+    { label: 'Em andamento', value: inProgress, tone: 'progress' },
+    { label: 'Bloqueado', value: blocked, tone: 'blocked' },
+  ].filter(item => item.value > 0);
+  const actionItems = [];
+
+  if (overdue > 0) {
+    actionItems.push(renderDashboardActionItem('Tratar cards atrasados', `${overdue} card(s) fora do prazo nos filtros atuais.`, 'danger'));
+  }
+  if (inconsistent > 0) {
+    actionItems.push(renderDashboardActionItem('Corrigir saúde dos dados', `${inconsistent} card(s) com informação incompleta ou inconsistente.`, 'warning'));
+  }
+  if (inProgress > 0) {
+    actionItems.push(renderDashboardActionItem('Acompanhar execução', `${inProgress} card(s) em andamento para manter o fluxo.`, 'info'));
+  }
+  if (!actionItems.length) {
+    actionItems.push(renderDashboardActionItem('Sem alerta crítico', 'Os filtros atuais não indicam atraso ou inconsistência relevante.', 'success'));
+  }
+
+  return `
+    <div class="chart-card dashboard-insight-card">
+      <h3>Leitura executiva ${businessHelp('Como usar esta leitura?', 'Resumo calculado com os mesmos filtros do dashboard. A área destaca conclusão, pendências, atraso, saúde dos dados e próximos focos de ação.')}</h3>
+      <div class="dashboard-insight-summary" aria-label="Resumo executivo dos filtros atuais">
+        ${renderDashboardInsightMetric('Concluído', done, total, 'success')}
+        ${renderDashboardInsightMetric('Em aberto', notDone, total, 'info')}
+        ${renderDashboardInsightMetric('Atraso', overdue, total, 'danger')}
+        ${renderDashboardInsightMetric('Saúde de dados', inconsistent, total, 'warning')}
+      </div>
+      <div class="dashboard-insight-section">
+        <h4>Prioridade de ação</h4>
+        <ul class="dashboard-action-list">
+          ${actionItems.join('')}
+        </ul>
+      </div>
+      <div class="dashboard-insight-section">
+        <h4>Status em aberto</h4>
+        <div class="dashboard-open-status-list">
+          ${openStatusRows.length ? openStatusRows.map(item => `
+            <div class="${item.tone}">
+              <span>${sanitize(item.label)}</span>
+              <strong>${item.value}</strong>
+              <small>${getDashboardPercent(item.value, total)}%</small>
+            </div>
+          `).join('') : '<p>Sem cards em aberto nos filtros atuais.</p>'}
+        </div>
+      </div>
     </div>
   `;
 }

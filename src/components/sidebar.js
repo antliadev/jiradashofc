@@ -293,7 +293,7 @@ export function renderSidebar() {
   sidebar.querySelectorAll('.nav-group').forEach(group => {
     const button = group.querySelector('[data-nav-toggle]');
     button?.addEventListener('click', () => {
-      const shouldExpand = group.dataset.activeMenu === 'true' || group.dataset.previewExpanded === 'true' || !group.classList.contains('expanded');
+      const shouldExpand = group.dataset.previewExpanded === 'true' || !group.classList.contains('expanded');
       delete group.dataset.previewExpanded;
       sidebar.querySelectorAll('.nav-group').forEach(otherGroup => {
         if (otherGroup !== group && otherGroup.dataset.activeMenu !== 'true') {
@@ -304,10 +304,12 @@ export function renderSidebar() {
       setGroupExpanded(group, shouldExpand);
     });
     group.addEventListener('mouseenter', () => {
+      if (!isSidebarCollapsed()) return;
       if (!group.classList.contains('expanded')) group.dataset.previewExpanded = 'true';
       setGroupExpanded(group, true);
     });
     group.addEventListener('focusin', () => {
+      if (!isSidebarCollapsed()) return;
       if (!group.classList.contains('expanded')) group.dataset.previewExpanded = 'true';
       setGroupExpanded(group, true);
     });

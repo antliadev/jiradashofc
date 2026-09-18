@@ -32,6 +32,34 @@ let statsCache = {
   data: null
 };
 
+const KPI_CARD_CONFIG = {
+  activeProjects: {
+    label: 'Projetos Ativos',
+    empty: 'Nenhum card encontrado nos projetos ativos para os filtros selecionados.',
+    getCards: cards => cards,
+  },
+  totalCards: {
+    label: 'Total de Cards',
+    empty: 'Nenhum card encontrado para os filtros selecionados.',
+    getCards: cards => cards,
+  },
+  inProgress: {
+    label: 'Cards em Andamento',
+    empty: 'Nenhum card em andamento para os filtros selecionados.',
+    getCards: cards => cards.filter(card => resolveStatusCategory(card.status) === StatusCategory.IN_PROGRESS),
+  },
+  overdue: {
+    label: 'Cards Atrasados',
+    empty: 'Nenhum card atrasado para os filtros selecionados.',
+    getCards: cards => cards.filter(card => isCardOverdue(card)),
+  },
+  dataHealth: {
+    label: 'Saúde de Dados',
+    empty: 'Nenhum card com inconsistência de dados para os filtros selecionados.',
+    getCards: cards => cards.filter(card => card.isInconsistent),
+  },
+};
+
 
 
 export function renderDashboard() {
@@ -39,11 +67,11 @@ export function renderDashboard() {
   const metadata = dataService.getSyncMetadata();
   const projects = dataService.getProjects();
   const users = dataService.getUsersForSelection();
-  
+
   // Verificar se há filtros ativos
   const activeFilters = getActiveFilterCount();
   const clearBtnStyle = activeFilters > 0 ? '' : 'display: none;';
-  
+
   header.innerHTML = `
     <div>
       <h2>Dashboard Executivo</h2>
@@ -190,13 +218,13 @@ function renderDashboardContent() {
   const content = document.getElementById('page-content');
   const projects = dataService.getProjects();
   const users = dataService.getUsersForSelection();
-  
+
   // Obter estatísticas com filtros
   const stats = getFilteredStats();
-  
+
   // Obter projetos filtrados para a tabela
   const filteredProjects = getFilteredProjects();
-  
+
   // Obter workload filtrado
   const workload = getFilteredWorkload();
 
@@ -213,7 +241,7 @@ function renderDashboardContent() {
           ${projects.map(p => `<option value="${sanitize(p.id)}" ${dashboardFilters.projectId === p.id ? 'selected' : ''}>${sanitize(p.name)}</option>`).join('')}
         </select>
       </div>
-      
+
       <div class="filter-field">
         <span class="filter-label">Analista</span>
         <select id="filter-analyst" class="filter-select">
@@ -221,7 +249,7 @@ function renderDashboardContent() {
           ${users.map(u => `<option value="${sanitize(u.id)}" ${dashboardFilters.analystId === u.id ? 'selected' : ''}>${sanitize(u.displayName)}</option>`).join('')}
         </select>
       </div>
-      
+
       <div class="filter-field">
         <span class="filter-label">Status</span>
         <select id="filter-status" class="filter-select">
@@ -229,7 +257,7 @@ function renderDashboardContent() {
           ${dataService.getStatusOptions().map(s => `<option value="${sanitize(s)}" ${dashboardFilters.status === s ? 'selected' : ''}>${sanitize(s)}</option>`).join('')}
         </select>
       </div>
-      
+
       <div class="filter-field filter-field-sm">
         <span class="filter-label">Prioridade</span>
         <select id="filter-priority" class="filter-select">
@@ -241,12 +269,12 @@ function renderDashboardContent() {
           <option value="lowest" ${dashboardFilters.priority === 'lowest' ? 'selected' : ''}>Muito Baixa</option>
         </select>
       </div>
-      
+
       <div class="filter-field filter-field-date">
         <span class="filter-label">Inicial</span>
         <input type="date" id="filter-date-start" class="filter-input" value="${dashboardFilters.dateStart}">
       </div>
-      
+
       <div class="filter-field filter-field-date">
         <span class="filter-label">Final</span>
         <input type="date" id="filter-date-end" class="filter-input" value="${dashboardFilters.dateEnd}">
@@ -258,7 +286,7 @@ function renderDashboardContent() {
         ${quickFilterButton({ key: 'showNoAnalyst', label: 'Sem analista', tone: 'accent' })}
       </div>
     </div>
-    
+
     <!-- INDICADORES DE FILTROS ATIVOS -->
     ${activeFiltersHtml ? `
     <div class="active-filters-bar">
@@ -266,7 +294,7 @@ function renderDashboardContent() {
       ${activeFiltersHtml}
     </div>
     ` : ''}
-    
+
     <!-- VERIFICAÇÃO DE ESTADO VAZIO -->
     ${stats.totalCards === 0 ? `
     <div class="empty-state" style="padding: 60px; text-align: center;">
@@ -278,10 +306,10 @@ function renderDashboardContent() {
       <button class="btn btn-primary" onclick="location.hash='#/data'" style="margin-top: 16px;">Ir para Dados</button>
     </div>
     ` : `
-    
+
     <!-- KPI GRID -->
     <div class="kpi-grid dashboard-kpi-grid">
-      <div class="kpi-card">
+      <div role="button" tabindex="0" class="kpi-card dashboard-kpi-action" data-dashboard-kpi="activeProjects" aria-label="Ver cards de projetos ativos">
         ${businessHelp('Como é calculado?', 'Quantidade de projetos que possuem cards depois da aplicação dos filtros. O sistema não consulta um campo de status do projeto.')}
         <div class="kpi-label">Projetos Ativos</div>
         <div class="kpi-value">${stats.totalProjects}</div>
@@ -289,7 +317,7 @@ function renderDashboardContent() {
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
         </div>
       </div>
-      <div class="kpi-card">
+      <div role="button" tabindex="0" class="kpi-card dashboard-kpi-action" data-dashboard-kpi="totalCards" aria-label="Ver todos os cards filtrados">
         ${businessHelp('Como é calculado?', 'Contagem de cards retornados após aplicar projeto, analista, status, prioridade, período e filtros rápidos.')}
         <div class="kpi-label">Total de Cards</div>
         <div class="kpi-value">${stats.totalCards}</div>
@@ -297,7 +325,7 @@ function renderDashboardContent() {
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
         </div>
       </div>
-      <div class="kpi-card">
+      <div role="button" tabindex="0" class="kpi-card dashboard-kpi-action" data-dashboard-kpi="inProgress" aria-label="Ver cards em andamento">
         ${businessHelp('Como é calculado?', 'Cards cujo status do Jira é classificado como Em Andamento pelo mapa padrão de status normalizados.')}
         <div class="kpi-label">Em Andamento</div>
         <div class="kpi-value">${stats.byCategory.in_progress}</div>
@@ -305,7 +333,7 @@ function renderDashboardContent() {
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/></svg>
         </div>
       </div>
-      <div class="kpi-card">
+      <div role="button" tabindex="0" class="kpi-card dashboard-kpi-action" data-dashboard-kpi="overdue" aria-label="Ver cards atrasados">
         ${businessHelp('Como é calculado?', 'Cards com data de entrega anterior ao dia atual, desde que tenham data válida e ainda não estejam concluídos.')}
         <div class="kpi-label">Atrasados</div>
         <div class="kpi-value ${stats.overdue > 0 ? 'text-danger' : ''}">${stats.overdue}</div>
@@ -313,7 +341,7 @@ function renderDashboardContent() {
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         </div>
       </div>
-      <div class="kpi-card">
+      <div role="button" tabindex="0" class="kpi-card dashboard-kpi-action" data-dashboard-kpi="dataHealth" aria-label="Ver cards com inconsistência de dados">
         ${businessHelp('Como é calculado?', 'Contagem de cards marcados como inconsistentes durante a normalização dos dados do Jira.')}
         <div class="kpi-label">Saúde de Dados</div>
         <div class="kpi-value ${stats.inconsistent > 0 ? 'text-warning' : ''}">${stats.inconsistent}</div>
@@ -328,6 +356,7 @@ function renderDashboardContent() {
       <div class="chart-card">
         <h3>Distribuição por Status ${businessHelp('Regra de status', 'Cada status original do Jira é convertido em A Fazer, Em Andamento, Concluído ou Bloqueado pelo mapa de status normalizado.')}</h3>
         <canvas id="statusChart"></canvas>
+        ${renderStatusCompletionSummary(stats)}
       </div>
       <div class="chart-card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
@@ -396,14 +425,14 @@ function renderDashboardContent() {
         </div>
       </div>
     </div>
-    
+
     <!-- AUDIT SECTION -->
     <div class="audit-section">
       <div class="section-header">
         <h3>Auditoria de Saúde dos Dados</h3>
         <p class="subtitle">Identificação de tickets com informações incompletas no Jira</p>
       </div>
-      
+
       <div class="audit-grid">
         ${renderAuditCard('Sem Analista', stats.inconsistentData?.noAssignee || [], 'crítico para medir carga de trabalho')}
         ${renderAuditCard('Sem Prioridade', stats.inconsistentData?.noPriority || [], 'afeta a ordenação e foco')}
@@ -435,20 +464,162 @@ function renderDashboardContent() {
     document.getElementById('workload-container')?.closest('.chart-card')?.remove();
   }
   initCharts(stats, canAccessPermission('analysts.comparative') ? workload : []);
-  
+  bindDashboardKpiCards();
+
   // Listener para o seletor de projeto no gráfico de workload
   document.getElementById('workload-project-select')?.addEventListener('change', (e) => {
     selectedWorkloadProject = e.target.value;
     // Recarregar com filtro de projeto específico
-    const newWorkload = selectedWorkloadProject 
+    const newWorkload = selectedWorkloadProject
       ? getFilteredWorkload().filter(w => {
           const cards = dataService.getCardsByProject(dataService.getProjects().find(p => p.key === selectedWorkloadProject)?.id);
           return cards.some(c => c.assigneeId === w.user.id);
         })
       : getFilteredWorkload();
-    
+
     document.getElementById('workload-container').innerHTML = renderWorkloadList(newWorkload);
   });
+}
+
+function getFilteredCardsForDashboard() {
+  let cards = [...dataService.getCards()];
+
+  if (dashboardFilters.projectId) {
+    cards = cards.filter(c => c.projectId === dashboardFilters.projectId);
+  }
+
+  if (dashboardFilters.analystId) {
+    cards = cards.filter(c => c.assigneeId === dashboardFilters.analystId);
+  }
+
+  if (dashboardFilters.status) {
+    cards = cards.filter(c => c.status === dashboardFilters.status);
+  }
+
+  if (dashboardFilters.priority) {
+    cards = cards.filter(c => c.priority === dashboardFilters.priority);
+  }
+
+  if (dashboardFilters.dateStart) {
+    const startDate = new Date(dashboardFilters.dateStart);
+    cards = cards.filter(c => c.dueDate && new Date(c.dueDate) >= startDate);
+  }
+
+  if (dashboardFilters.dateEnd) {
+    const endDate = new Date(dashboardFilters.dateEnd);
+    cards = cards.filter(c => c.dueDate && new Date(c.dueDate) <= endDate);
+  }
+
+  if (dashboardFilters.showOverdue) {
+    cards = cards.filter(c => isCardOverdue(c));
+  }
+
+  if (dashboardFilters.showNoDate) {
+    cards = cards.filter(c => !c.dueDate);
+  }
+
+  if (dashboardFilters.showNoAnalyst) {
+    cards = cards.filter(c => !c.assigneeId || c.assigneeId === 'unassigned');
+  }
+
+  return cards;
+}
+
+function renderStatusCompletionSummary(stats) {
+  const done = stats.byCategory.done || 0;
+  const notDone = Math.max(0, stats.totalCards - done);
+  const donePercent = stats.totalCards ? Math.round((done / stats.totalCards) * 100) : 0;
+  const notDonePercent = stats.totalCards ? Math.round((notDone / stats.totalCards) * 100) : 0;
+
+  return `
+    <div class="dashboard-status-percentages" aria-label="Percentual de cards concluídos e não concluídos">
+      <div class="dashboard-status-percentage done"><span>Concluídos</span><strong>${donePercent}%</strong><small>${done} card(s)</small></div>
+      <div class="dashboard-status-percentage pending"><span>Não concluídos</span><strong>${notDonePercent}%</strong><small>${notDone} card(s)</small></div>
+    </div>
+  `;
+}
+
+function bindDashboardKpiCards() {
+  document.querySelectorAll('[data-dashboard-kpi]').forEach(button => {
+    button.addEventListener('click', event => {
+      if (event.target.closest('.business-help')) return;
+      showDashboardKpiModal(button.dataset.dashboardKpi);
+    });
+    button.addEventListener('keydown', event => {
+      if (!['Enter', ' '].includes(event.key) || event.target.closest('.business-help')) return;
+      event.preventDefault();
+      showDashboardKpiModal(button.dataset.dashboardKpi);
+    });
+  });
+}
+
+function dashboardCardJiraLink(card) {
+  const url = getJiraIssueUrl(card, dataService.config?.baseUrl);
+  if (url === '#') {
+    return `<span class="issue-link unavailable" title="URL do Jira não configurada">${sanitize(card.key)}</span>`;
+  }
+  return `<a class="issue-link" href="${sanitizeTitle(url)}" target="_blank" rel="noopener noreferrer" aria-label="Abrir ${sanitizeTitle(card.key)} no Jira">${sanitize(card.key)}</a>`;
+}
+
+function renderDashboardKpiRows(cards) {
+  if (!cards.length) return '';
+  return cards.map(card => {
+    const project = dataService.getProjectById(card.projectId);
+    const assignee = dataService.getUserById(card.assigneeId);
+    const category = resolveStatusCategory(card.status);
+    return `
+      <article class="dashboard-kpi-modal-row">
+        <div>
+          <strong>${dashboardCardJiraLink(card)}</strong>
+          <span>${sanitize(card.title || 'Sem resumo informado')}</span>
+        </div>
+        <div class="dashboard-kpi-modal-meta">
+          <span>${sanitize(project?.key || project?.name || 'Sem projeto')}</span>
+          <span>${sanitize(assignee?.displayName || 'Não atribuído')}</span>
+          <span class="badge badge-${category}">${sanitize(card.status || 'Sem status')}</span>
+          ${isCardOverdue(card) ? '<span class="badge badge-overdue">Atrasado</span>' : ''}
+        </div>
+      </article>
+    `;
+  }).join('');
+}
+
+function showDashboardKpiModal(kpiKey) {
+  const config = KPI_CARD_CONFIG[kpiKey];
+  if (!config) return;
+  const cards = config.getCards(getFilteredCardsForDashboard())
+    .sort((left, right) => String(right.updatedAt || right.dueDate || '').localeCompare(String(left.updatedAt || left.dueDate || '')));
+  const previous = document.querySelector('.ui-modal-backdrop[data-dashboard-kpi-modal]');
+  if (previous) previous.remove();
+
+  const modal = document.createElement('div');
+  modal.className = 'ui-modal-backdrop';
+  modal.dataset.dashboardKpiModal = 'true';
+  modal.innerHTML = `
+    <section class="ui-modal dashboard-kpi-modal" role="dialog" aria-modal="true" aria-labelledby="dashboard-kpi-modal-title">
+      <div class="ui-modal-icon" aria-hidden="true">i</div>
+      <div class="ui-modal-body">
+        <h2 id="dashboard-kpi-modal-title">${sanitize(config.label)}</h2>
+        <p>${cards.length} card(s) encontrado(s) com os filtros atuais.</p>
+        <div class="dashboard-kpi-modal-list">
+          ${cards.length ? renderDashboardKpiRows(cards) : `<div class="dashboard-kpi-modal-empty">${sanitize(config.empty)}</div>`}
+        </div>
+      </div>
+      <div class="ui-modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal>Fechar</button>
+      </div>
+    </section>
+  `;
+  modal.addEventListener('click', event => {
+    if (event.target === modal || event.target.closest('[data-close-modal]')) modal.remove();
+  });
+  document.addEventListener('keydown', function closeOnEscape(event) {
+    if (event.key !== 'Escape' || !document.body.contains(modal)) return;
+    modal.remove();
+    document.removeEventListener('keydown', closeOnEscape);
+  });
+  document.body.appendChild(modal);
+  modal.querySelector('[data-close-modal]')?.focus();
 }
 
 /**
@@ -458,14 +629,14 @@ function renderWorkloadList(workload) {
   if (workload.length === 0) {
     return '<div style="text-align: center; padding: 40px; color: var(--text-muted);">Nenhum dado de carga de trabalho para os filtros selecionados.</div>';
   }
-  
+
   // Ordenar por total de cards (maior primeiro)
   const sorted = [...workload].sort((a, b) => b.total - a.total);
   const maxTotal = Math.max(...sorted.map(w => w.total));
-  
+
   return sorted.map(w => {
     const percent = maxTotal > 0 ? Math.round((w.total / maxTotal) * 100) : 0;
-    
+
     return `
       <div class="workload-item" style="display: flex; align-items: center; gap: 12px; padding: 10px; border-bottom: 1px solid var(--border); position: relative;" title="Total: ${w.total} | Andamento: ${w.inProgress} | Concluídos: ${w.done}">
         <div style="min-width: 120px;">
@@ -498,58 +669,16 @@ function renderWorkloadList(workload) {
 function getFilteredStats() {
   // Gerar chave de cache baseada nos filtros atuais
   const cacheKey = JSON.stringify(dashboardFilters);
-  
+
   // Retornar cache se filtros não mudaram
   if (statsCache.key === cacheKey && statsCache.data) {
     return statsCache.data;
   }
-  
-  let cards = [...dataService.getCards()];
-  let projects = [...dataService.getProjects()];
-  
-  // Aplicar filtros
-  if (dashboardFilters.projectId) {
-    cards = cards.filter(c => c.projectId === dashboardFilters.projectId);
-    projects = projects.filter(p => p.id === dashboardFilters.projectId);
-  }
-  
-  if (dashboardFilters.analystId) {
-    cards = cards.filter(c => c.assigneeId === dashboardFilters.analystId);
-    // Filtrar projetos que têm cards do analista
-    const projectIdsWithAnalyst = [...new Set(cards.map(c => c.projectId))];
-    projects = projects.filter(p => projectIdsWithAnalyst.includes(p.id));
-  }
-  
-  if (dashboardFilters.status) {
-    cards = cards.filter(c => c.status === dashboardFilters.status);
-  }
-  
-  if (dashboardFilters.priority) {
-    cards = cards.filter(c => c.priority === dashboardFilters.priority);
-  }
-  
-  if (dashboardFilters.dateStart) {
-    const startDate = new Date(dashboardFilters.dateStart);
-    cards = cards.filter(c => c.dueDate && new Date(c.dueDate) >= startDate);
-  }
-  
-  if (dashboardFilters.dateEnd) {
-    const endDate = new Date(dashboardFilters.dateEnd);
-    cards = cards.filter(c => c.dueDate && new Date(c.dueDate) <= endDate);
-  }
-  
-  if (dashboardFilters.showOverdue) {
-    cards = cards.filter(c => isCardOverdue(c));
-  }
-  
-  if (dashboardFilters.showNoDate) {
-    cards = cards.filter(c => !c.dueDate);
-  }
-  
-  if (dashboardFilters.showNoAnalyst) {
-    cards = cards.filter(c => !c.assigneeId || c.assigneeId === 'unassigned');
-  }
-  
+
+  const cards = getFilteredCardsForDashboard();
+  const projectIds = new Set(cards.map(card => card.projectId));
+  const projects = dataService.getProjects().filter(project => projectIds.has(project.id));
+
   // Calcular estatísticas
   const total = cards.length;
   const byCategory = { todo: 0, in_progress: 0, done: 0, blocked: 0 };
@@ -573,19 +702,19 @@ function getFilteredStats() {
     unknownStatus: cards.filter(c => c.status === 'Unknown')
   };
 
-  const result = { 
-    totalProjects: projects.length, 
-    totalCards: total, 
-    byCategory, 
-    byPriority, 
-    overdue, 
+  const result = {
+    totalProjects: projects.length,
+    totalCards: total,
+    byCategory,
+    byPriority,
+    overdue,
     inconsistent,
     inconsistentData
   };
-  
+
   // Atualizar cache
   statsCache = { key: cacheKey, data: result };
-  
+
   return result;
 }
 
@@ -593,19 +722,8 @@ function getFilteredStats() {
  * Obtém projetos que têm cards após aplicação dos filtros
  */
 function getFilteredProjects() {
-  let projects = [...dataService.getProjects()];
-  
-  if (dashboardFilters.projectId) {
-    projects = projects.filter(p => p.id === dashboardFilters.projectId);
-  }
-  
-  if (dashboardFilters.analystId) {
-    const cards = dataService.getCards().filter(c => c.assigneeId === dashboardFilters.analystId);
-    const projectIds = [...new Set(cards.map(c => c.projectId))];
-    projects = projects.filter(p => projectIds.includes(p.id));
-  }
-  
-  return projects;
+  const projectIds = new Set(getFilteredCardsForDashboard().map(card => card.projectId));
+  return dataService.getProjects().filter(project => projectIds.has(project.id));
 }
 
 /**
@@ -614,24 +732,24 @@ function getFilteredProjects() {
 function getFilteredWorkload() {
   let cards = [...dataService.getCards()];
   const users = dataService.getUsersForSelection();
-  
+
   // Aplicar filtros aos cards
   if (dashboardFilters.projectId) {
     cards = cards.filter(c => c.projectId === dashboardFilters.projectId);
   }
-  
+
   if (dashboardFilters.analystId) {
     cards = cards.filter(c => c.assigneeId === dashboardFilters.analystId);
   }
-  
+
   if (dashboardFilters.status) {
     cards = cards.filter(c => c.status === dashboardFilters.status);
   }
-  
+
   if (dashboardFilters.priority) {
     cards = cards.filter(c => c.priority === dashboardFilters.priority);
   }
-  
+
   // Calcular workload por usuário
   const workloadByUser = new Map();
   users.forEach(user => {
@@ -657,46 +775,46 @@ function renderActiveFilters() {
   const filters = [];
   const projects = dataService.getProjects();
   const users = dataService.getUsersForSelection();
-  
+
   if (dashboardFilters.projectId) {
     const p = projects.find(p => p.id === dashboardFilters.projectId);
     if (p) filters.push(clearFilterChip('projectId', `Projeto: ${p.name}`));
   }
-  
+
   if (dashboardFilters.analystId) {
     const u = users.find(u => u.id === dashboardFilters.analystId);
     if (u) filters.push(clearFilterChip('analystId', `Analista: ${u.displayName}`));
   }
-  
+
   if (dashboardFilters.status) {
     filters.push(clearFilterChip('status', `Status: ${dashboardFilters.status}`));
   }
-  
+
   if (dashboardFilters.priority) {
     filters.push(clearFilterChip('priority', `Prioridade: ${priorityLabel(dashboardFilters.priority)}`));
   }
-  
+
   if (dashboardFilters.dateStart) {
     filters.push(clearFilterChip('dateStart', `De: ${formatDate(dashboardFilters.dateStart)}`));
   }
-  
+
   if (dashboardFilters.dateEnd) {
     filters.push(clearFilterChip('dateEnd', `Até: ${formatDate(dashboardFilters.dateEnd)}`));
   }
-  
+
   if (dashboardFilters.showOverdue) {
     filters.push(clearFilterChip('showOverdue', 'Vencidos', 'danger'));
   }
-  
+
 
   if (dashboardFilters.showNoDate) {
     filters.push(clearFilterChip('showNoDate', 'Sem data', 'warning'));
   }
-  
+
   if (dashboardFilters.showNoAnalyst) {
     filters.push(clearFilterChip('showNoAnalyst', 'Sem analista', 'accent'));
   }
-  
+
   return filters.join('');
 }
 
@@ -723,7 +841,7 @@ function renderAuditCard(title, list, tooltip) {
 function renderInconsistentTableRows() {
   const stats = getFilteredStats();
   const summary = stats.inconsistentData;
-  
+
   const allInconsistent = new Set([
     ...summary.noAssignee,
     ...summary.noPriority,

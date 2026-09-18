@@ -37,6 +37,13 @@ try {
   assert.equal(await page.locator('[data-route="/projects"]').evaluate(el => el.classList.contains('active')), false);
   assert.equal(await projectsSubmenu.evaluate(el => getComputedStyle(el).gridTemplateRows !== '0px'), true);
 
+  await page.locator('[data-nav-toggle="projects"]').click();
+  assert.equal(await projectsSubmenu.getAttribute('aria-hidden'), 'true');
+  assert.equal(await projectsGroup.evaluate(el => el.classList.contains('expanded')), false);
+  await page.locator('[data-nav-toggle="projects"]').click();
+  assert.equal(await projectsSubmenu.getAttribute('aria-hidden'), 'false');
+  assert.equal(await projectsGroup.evaluate(el => el.classList.contains('expanded')), true);
+
   await sprintButton.click();
   assert.equal(await sprintButton.getAttribute('aria-expanded'), 'true');
   assert.equal(await sprintSubmenu.getAttribute('aria-hidden'), 'false');

@@ -28,9 +28,12 @@ test('adapter lista somente a sprint ativa e resolve anterior no mesmo board', a
 test('rotas e migration Sprint Plan preservam autenticacao e append-only', () => {
   const routes = fs.readFileSync(new URL('../server/routes/sprint-plan.js', import.meta.url), 'utf8');
   const migration = fs.readFileSync(new URL('../sql/migration-sprint-plan.sql', import.meta.url), 'utf8');
+  const page = fs.readFileSync(new URL('../src/pages/sprint-plan.js', import.meta.url), 'utf8');
   for (const route of ['/projects', '/boards', '/context', '/profile', '/analyze', '/recalculate', '/ai-status', '/synthesize', '/snapshots']) assert.match(routes, new RegExp(route.replace('/', '\\/')));
   assert.match(routes, /requireAppAuth/);
   assert.match(migration, /ENABLE ROW LEVEL SECURITY/i);
   assert.match(migration, /service_role/i);
   assert.match(migration, /BEFORE UPDATE OR DELETE/i);
+  assert.match(page, /Análise do Sprint Plan em andamento/);
+  assert.match(page, /aria-live="polite"/);
 });

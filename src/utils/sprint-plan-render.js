@@ -2,6 +2,7 @@ import { sanitize } from './helpers.js';
 
 const esc = value => sanitize(String(value ?? ''));
 export const SPRINT_PLAN_TEMPLATE_VERSION = 'antlia-sprint-plan-16x9-v1';
+export const SPRINT_PLAN_STITCH_PROVENANCE = Object.freeze({ projectId: '12038302626029116856', screenId: '0399b1de9f944bebac027729e13dac07', usage: 'design_time_reference' });
 const label = item => item.displayName || `${item.issueKey || item.key} — ${item.title || 'Sem título'}`;
 
 export function sprintPlanPages(plan) {

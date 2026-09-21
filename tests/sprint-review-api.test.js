@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { createReviewJiraClient, positiveId, projectKey, mayBelongToReview } from '../lib/sprintReviewJira.js';
 import { validateReviewProfile, prepareReviewSnapshot } from '../lib/sprintReviewValidation.js';
 import { permissionForJiraRequest, canAccessPermission } from '../lib/appPermissions.js';
@@ -56,4 +57,14 @@ test('server recomputes facts and blocks snapshot with missing history and appro
 test('Sprint Review has an explicit permission for all operations', () => {
   assert.equal(permissionForJiraRequest({ path: '/sprint-review/snapshots', method: 'POST' }), 'projects.sprint-review');
   assert.equal(canAccessPermission({ status: 'active', role: 'custom', permissions: ['projects.health'] }, 'projects.sprint-review'), false);
+});
+
+test('Sprint Review usa fluxo serverless seguro, síntese automática e proveniência Stitch', () => {
+  const page = fs.readFileSync(new URL('../src/pages/sprint-review.js', import.meta.url), 'utf8');
+  const routes = fs.readFileSync(new URL('../server/routes/sprint-review.js', import.meta.url), 'utf8');
+  assert.match(page, /api\('\/analyze'/);
+  assert.match(page, /api\('\/synthesize'/);
+  assert.match(page, /A NVIDIA está validando evidências/);
+  assert.doesNotMatch(page, /analysis-jobs|pollAnalysisJob|restoreJob/);
+  assert.match(routes, /designProvenance: SPRINT_REVIEW_STITCH_PROVENANCE/);
 });

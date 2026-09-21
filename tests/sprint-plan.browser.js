@@ -38,7 +38,7 @@ try {
   await page.selectOption('#sp-sprint', '5');
   await page.click('#sp-analyze');
   await page.waitForSelector('.sp-kpis');
-  assert.equal(await page.locator('.sp-kpis article').count(), 6);
+  assert.equal(await page.locator('.sp-kpis article').count(), 8);
   await page.click('[data-tab="items"]');
   assert.equal(await page.locator('tbody tr').count(), 2);
   await page.click('#sp-preview');

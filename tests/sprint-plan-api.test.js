@@ -5,7 +5,7 @@ import { createPlanJiraClient } from '../lib/sprintPlanJira.js';
 
 const response = body => ({ ok: true, status: 200, headers: new Headers(), json: async () => body });
 
-test('adapter lista futuras e ativas e resolve anterior no mesmo board', async () => {
+test('adapter lista somente a sprint ativa e resolve anterior no mesmo board', async () => {
   const calls = [];
   const fetchImpl = async (url, options = {}) => {
     calls.push([url, options]);
@@ -19,15 +19,16 @@ test('adapter lista futuras e ativas e resolve anterior no mesmo board', async (
   };
   const client = await createPlanJiraClient({ connection: { baseUrl: 'https://jira.example', email: 'a@b.c', token: 'x' }, fetchImpl });
   const context = await client.context('DEV', 10, 5);
-  assert.deepEqual(context.sprints.map(item => item.id), [5, 6]);
+  assert.deepEqual(context.sprints.map(item => item.id), [5]);
   assert.equal(context.previousSprint.id, 4);
   assert.ok(calls.some(([url]) => url.includes('state=active%2Cclosed%2Cfuture') || url.includes('state=active,closed,future')));
+  await assert.rejects(() => client.context('DEV', 10, 6), /sprint atual\/ativa/i);
 });
 
 test('rotas e migration Sprint Plan preservam autenticacao e append-only', () => {
   const routes = fs.readFileSync(new URL('../server/routes/sprint-plan.js', import.meta.url), 'utf8');
   const migration = fs.readFileSync(new URL('../sql/migration-sprint-plan.sql', import.meta.url), 'utf8');
-  for (const route of ['/projects', '/boards', '/context', '/profile', '/analyze', '/recalculate', '/snapshots']) assert.match(routes, new RegExp(route.replace('/', '\\/')));
+  for (const route of ['/projects', '/boards', '/context', '/profile', '/analyze', '/recalculate', '/ai-status', '/synthesize', '/snapshots']) assert.match(routes, new RegExp(route.replace('/', '\\/')));
   assert.match(routes, /requireAppAuth/);
   assert.match(migration, /ENABLE ROW LEVEL SECURITY/i);
   assert.match(migration, /service_role/i);

@@ -30,8 +30,8 @@ test('Sprint Plan aceita perfil sugerido para validacao inicial com aviso audita
   assert.equal(plan.preflight.errors.length, 0);
 });
 
-test('classifica origens exclusivas, pendencia nao absorvida e evidencia por janela', () => {
-  const carry = issue('DEV-1', [4, 5], { comments: [
+test('classifica origens exclusivas, pendencia nao absorvida e usa descricao e comentarios como evidencia', () => {
+  const carry = issue('DEV-1', [4, 5], { fields: { description: 'Contrato externo ainda nao validado.' }, comments: [
     { id: 'c1', created: '2026-08-15T09:00:00Z', body: 'Bloqueado pela API', author: { accountId: 'u', displayName: 'Ana' } },
     { id: 'c2', created: '2026-08-16T09:00:00Z', body: 'Proximo passo validar contrato', author: { accountId: 'u', displayName: 'Ana' } },
     { id: 'c3', created: '2026-08-17T09:00:00Z', body: 'Tarde demais', author: { accountId: 'u', displayName: 'Ana' } },
@@ -43,7 +43,25 @@ test('classifica origens exclusivas, pendencia nao absorvida e evidencia por jan
   assert.deepEqual(plan.items.map(item => item.primaryOrigin), ['carry_over', 'replanned_before_close', 'new_planned']);
   assert.equal(new Set(plan.items.map(item => item.issueKey)).size, plan.metrics.planned);
   assert.equal(plan.previousPending[0].issueKey, 'DEV-4');
-  assert.deepEqual(plan.evidence.map(item => item.window), ['closure', 'planning']);
+  assert.deepEqual(plan.evidence.map(item => item.window), ['planning', 'closure', 'planning', 'planning']);
+  assert.equal(plan.evidence[0].source, 'jira_description');
+  assert.equal(plan.items[0].displayName, 'DEV-1 — DEV-1');
+  assert.equal(plan.previousPending[0].displayName, 'DEV-4 — DEV-4');
+});
+
+test('sprint futura e rejeitada e item adicionado depois do inicio vira escopo adicional', () => {
+  const future = { ...target, id: 6, state: 'future' };
+  assert.throws(() => buildSprintPlan({ projectKey: 'DEV', boardId: '1', targetSprint: future, previousSprint: previous, profile, issues: [], scopeComplete: true, fetchedAt: target.startDate }), /atual\/ativa/i);
+
+  const addedLater = issue('DEV-5', [5], {
+    histories: [history('2026-08-18T09:00:00Z', [{ fieldId: 'customfield_1', field: 'Sprint', from: '', to: '5' }])],
+  });
+  const plan = buildSprintPlan({ projectKey: 'DEV', boardId: '1', targetSprint: target, previousSprint: previous, profile, issues: [issue('DEV-1', [5]), addedLater], scopeComplete: true, fetchedAt: '2026-08-20T10:00:00Z' });
+  assert.equal(plan.metrics.planned, 1);
+  assert.equal(plan.metrics.currentScope, 2);
+  assert.equal(plan.metrics.additionalScope, 1);
+  assert.equal(plan.items.find(item => item.issueKey === 'DEV-5').addedAfterBaseline, true);
+  assert.ok(plan.preflight.warnings.some(item => item.code === 'added_after_baseline' && item.issueKey === 'DEV-5'));
 });
 
 test('baseline preserva atributos e visao atual produz deltas sem reescrever origem', () => {

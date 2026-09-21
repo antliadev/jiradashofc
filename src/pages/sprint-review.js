@@ -77,7 +77,9 @@ export async function renderSprintReview() {
   }
   function link(key) {
     const url = getJiraIssueUrl({ key }, state.jiraBaseUrl);
-    return url === '#' ? esc(key) : `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(key)}</a>`;
+    const item = state.review?.items?.find(value => value.key === key);
+    const label = item ? `${key} — ${item.title}` : key;
+    return url === '#' ? esc(label) : `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(label)}</a>`;
   }
   function evidence(ids) {
     return state.review.evidence.filter(e => ids.includes(e.id)).map(e => `<div class="sr-evidence">${e.issueKey ? link(e.issueKey) : 'Entrega executiva'} <span class="muted">${esc(e.type)} · ${esc(date(e.timestamp, state.review.profile.timezone))}</span>${e.provenance === 'current_only' ? '<strong class="sr-warning">Atual; não comprova fechamento</strong>' : ''}<p>${esc(e.text)}</p>${e.author ? `<small>${esc(e.author)}</small>` : ''}</div>`).join('');
@@ -114,7 +116,7 @@ export async function renderSprintReview() {
   function goalForm() {
     if (!state.review.sprint.goal) return '';
     const goal = state.snapshot?.payload.goal || state.goal || state.review.goalSuggestion;
-    return `<details class="sr-panel"><summary>Avaliacao opcional do Goal</summary><p>Avaliacao humana separada do percentual de entregas.</p><fieldset ${state.snapshot ? 'disabled' : ''}><label>Resultado<select id="sr-goal"><option value="">Nao incluir na arte</option>${options([{ id: 'achieved', name: 'Atingido' }, { id: 'partial', name: 'Parcialmente atingido' }, { id: 'not_achieved', name: 'Nao atingido' }, { id: 'insufficient', name: 'Evidencia insuficiente' }], goal?.result)}</select></label><label class="sr-check"><input id="sr-goal-confirm" type="checkbox" ${goal?.confirmed ? 'checked' : ''}>Confirmo a avaliacao do Goal</label><details><summary>Selecionar evidencias da avaliacao</summary>${state.review.evidence.map(e => `<label class="sr-check"><input data-goal-evidence="${esc(e.id)}" type="checkbox" ${goal?.evidenceIds?.includes(e.id) ? 'checked' : ''}>${esc(e.issueKey)}: ${esc(e.text)}</label>`).join('')}</details></fieldset></details>`;
+    return `<details class="sr-panel"><summary>Avaliacao opcional do Goal</summary><p>Avaliacao humana separada do percentual de entregas.</p><fieldset ${state.snapshot ? 'disabled' : ''}><label>Resultado<select id="sr-goal"><option value="">Nao incluir na arte</option>${options([{ id: 'achieved', name: 'Atingido' }, { id: 'partial', name: 'Parcialmente atingido' }, { id: 'not_achieved', name: 'Nao atingido' }, { id: 'insufficient', name: 'Evidencia insuficiente' }], goal?.result)}</select></label><label class="sr-check"><input id="sr-goal-confirm" type="checkbox" ${goal?.confirmed ? 'checked' : ''}>Confirmo a avaliacao do Goal</label><details><summary>Selecionar evidencias da avaliacao</summary>${state.review.evidence.map(e => `<label class="sr-check"><input data-goal-evidence="${esc(e.id)}" type="checkbox" ${goal?.evidenceIds?.includes(e.id) ? 'checked' : ''}>${e.issueKey ? link(e.issueKey) : 'Entrega executiva'}: ${esc(e.text)}</label>`).join('')}</details></fieldset></details>`;
   }
   function draw() {
     if (!alive) return;

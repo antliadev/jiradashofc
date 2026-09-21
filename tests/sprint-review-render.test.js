@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { executiveBlocks, formatReviewDate, renderSprintSlides, sprintSlidePages } from '../src/utils/sprint-review-render.js';
+import { SPRINT_REVIEW_STITCH_PROVENANCE, executiveBlocks, formatReviewDate, renderSprintSlides, sprintSlidePages } from '../src/utils/sprint-review-render.js';
 
 const fixture = () => ({
   projectKey: 'TEST', sprint: { id: 4, name: 'Sprint 4', startDate: '2026-08-17', completeDate: '2026-08-22T15:10:56Z' },
@@ -69,4 +69,12 @@ test('overflow details are preserved in continuation when not repeated delivery 
   const pages = sprintSlidePages(review);
   assert.deepEqual(pages.filter(p => p.type === 'context').flatMap(p => p.blocks).map(b => b.text), details.map(d => d.text));
   assert.equal(pages[0].blocks.length, 5);
+});
+
+test('template da Sprint Review preserva a proveniencia do Stitch', () => {
+  assert.deepEqual(SPRINT_REVIEW_STITCH_PROVENANCE, {
+    projectId: '12038302626029116856',
+    screenId: '69dcd0cc948c4546a5f8f228bb26d210',
+    usage: 'design_time_reference',
+  });
 });

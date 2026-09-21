@@ -10,7 +10,6 @@ const itemOrigin = item => item.origin || item.primaryOrigin || item.originPrima
 const itemTitle = item => item.title || item.summary || item.key || 'Item sem titulo';
 const itemLabel = item => `${item.issueKey || item.key || '—'} — ${itemTitle(item)}`;
 const planItems = plan => plan?.items || [];
-const JOB_STORAGE_KEY = 'rja.sprintPlan.analysisJob';
 const CONTEXT_STORAGE_KEY = 'rja.sprintPlan.context';
 
 export async function renderSprintPlan() {
@@ -98,36 +97,22 @@ export async function renderSprintPlan() {
     if (!root.querySelector('[data-plan-slide]')) { state.tab = 'preview'; draw(); return; }
     await exportSprintPlanSlides(state.plan);
   }
-  function jobKey() { return `${state.projectKey}:${state.boardId}:${state.sprintId}`; }
   function saveContext() { localStorage.setItem(CONTEXT_STORAGE_KEY, JSON.stringify({ projectKey: state.projectKey, boardId: state.boardId, sprintId: state.sprintId })); }
-  function rememberJob(job) { localStorage.setItem(JOB_STORAGE_KEY, JSON.stringify({ key: jobKey(), id: job.id })); }
-  function clearJobStorage() { localStorage.removeItem(JOB_STORAGE_KEY); }
   async function startAnalysisJob() {
-    const payload = await api('/analysis-jobs', {}, 'POST', { signal: false });
-    if (!payload.job) {
-      const legacy = await api('/analyze', {}, 'POST', { signal: false });
-      state.plan = legacy.plan; state.sourceId = legacy.sourceId || ''; state.tab = 'continuities';
-      return;
-    }
-    state.analysisJob = payload.job; rememberJob(payload.job); pollAnalysisJob();
-  }
-  async function pollAnalysisJob() {
-    if (!state.analysisJob?.id || state.analysisJob.status !== 'running') return;
+    state.analysisJob = { status: 'running', message: 'Coletando cards, descrições, comentários e histórico do Jira.' }; draw();
     try {
-      const payload = await api(`/analysis-jobs/${state.analysisJob.id}`, null, 'GET');
-      state.analysisJob = payload.job;
-      if (payload.job.status === 'completed') {
-        Object.assign(state, payload.job.result); state.analysisJob = payload.job; state.tab = 'continuities'; clearJobStorage(); showToast('Análise do Sprint Plan concluída.', 'success'); draw(); return;
+      const result = await api('/analyze', {}, 'POST', { signal: false });
+      Object.assign(state, result); state.tab = 'continuities';
+      if (result.aiStatus?.configured) {
+        state.analysisJob = { status: 'running', message: 'Contexto coletado. A NVIDIA está validando prioridades e riscos.' }; draw();
+        Object.assign(state, await api('/synthesize', { sourceId: state.sourceId }, 'POST', { signal: false }));
       }
-      if (payload.job.status === 'failed') { state.error = payload.job.error?.message || payload.job.message; clearJobStorage(); draw(); return; }
-      draw(); setTimeout(() => { if (alive) pollAnalysisJob(); }, 3000);
-    } catch (error) { state.error = error.message; draw(); }
-  }
-  function restoreJob() {
-    try {
-      const saved = JSON.parse(localStorage.getItem(JOB_STORAGE_KEY) || 'null');
-      if (saved?.key === jobKey() && saved.id) { state.analysisJob = { id: saved.id, status: 'running', message: 'Retomando acompanhamento da análise...' }; pollAnalysisJob(); }
-    } catch { clearJobStorage(); }
+      state.analysisJob = { status: 'completed', message: 'Dados do Jira e análise NVIDIA concluídos.' };
+      showToast('Análise do Sprint Plan concluída.', 'success');
+    } catch (error) {
+      state.analysisJob = { status: 'failed', message: error.message };
+      throw error;
+    }
   }
   async function restoreContext() {
     const saved = JSON.parse(localStorage.getItem(CONTEXT_STORAGE_KEY) || 'null');
@@ -144,5 +129,4 @@ export async function renderSprintPlan() {
     }
   }
   await run(async () => { const [projects, ai] = await Promise.all([api('/projects'), api('/ai-status')]); state.projects = projects.projects || []; state.aiStatus = ai.aiStatus || state.aiStatus; await restoreContext(); });
-  restoreJob();
 }

@@ -2,6 +2,7 @@ import { sanitize } from './helpers.js';
 
 const esc = value => sanitize(String(value ?? ''));
 export const SPRINT_TEMPLATE_VERSION = 'antlia-sprint-16x9-v2';
+export const SPRINT_REVIEW_STITCH_PROVENANCE = Object.freeze({ projectId: '12038302626029116856', screenId: '69dcd0cc948c4546a5f8f228bb26d210', usage: 'design_time_reference' });
 export const executiveLabels = { highlight: 'Destaque positivo', attention: 'Ponto de atenção', justification: 'Justificativa', achievement: 'Principal conquista', nextStep: 'Próximo passo' };
 const labels = { done: 'Concluído', partial: 'Parcial', removed: 'Removido', blocked: 'Bloqueado', continuity: 'Continuidade' };
 const itemLabel = item => `${item.key} — ${item.title || 'Sem título'}`;

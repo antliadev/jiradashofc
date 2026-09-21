@@ -11,6 +11,7 @@ import { buildSuggestedPlanProfile } from '../../lib/sprintProfileDefaults.js';
 import { getSprintAnalysisJob, publicSprintAnalysisJob, startSprintAnalysisJob } from '../../lib/sprintAnalysisJobs.js';
 import { synthesizeSprintPlan } from '../../lib/sprintPlanAI.js';
 import { getNvidiaRuntimeConfig } from '../../lib/ai/nvidiaRuntimeConfig.js';
+import { SPRINT_PLAN_STITCH_PROVENANCE, SPRINT_PLAN_TEMPLATE_VERSION, sprintPlanPages } from '../../src/utils/sprint-plan-render.js';
 
 const router = express.Router(), pending = new Set();
 router.use((req, res, next) => Promise.resolve(requireAppAuth(req, res, next)).catch(error => {
@@ -142,7 +143,7 @@ router.post('/snapshots', handle(async (req, res) => {
     const existing = await listPlanRecords({ ...ctx, kind: 'baseline', includePayload: true });
     if (existing.length && existing[0].payload?.sourceId !== source.id) return res.status(409).json({ error: 'O Plan Baseline desta sprint ja foi aprovado e e imutavel. Gere uma Visao Atualizada.' });
   }
-  const payload = { plan, sourceId: source.id, acceptedWarnings: [...accepted], ruleVersion: plan.ruleVersion, approvedAt: source.payload.fetchedAt };
+  const payload = { plan, sourceId: source.id, acceptedWarnings: [...accepted], ruleVersion: plan.ruleVersion, approvedAt: source.payload.fetchedAt, renderManifest: { pageCount: sprintPlanPages(plan).length, templateVersion: SPRINT_PLAN_TEMPLATE_VERSION, designProvenance: SPRINT_PLAN_STITCH_PROVENANCE } };
   const saved = await insertPlanRecord({ ...ctx, kind, actor: req.session.user.id, payload, requestId: req.body.requestId });
   res.status(201).json({ snapshot: saved });
 }));

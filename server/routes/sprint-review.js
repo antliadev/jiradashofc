@@ -7,7 +7,7 @@ import { getReviewRecord, insertReviewRecord, listReviewRecords, insertReviewArt
 import { buildReviewArtManifest, collectReviewArt, reviewArtPageCount } from '../../lib/sprintReviewArt.js';
 import { prepareReviewSnapshot, validateReviewProfile, validateReviewChoices } from '../../lib/sprintReviewValidation.js';
 import { buildSprintReview } from '../../src/data/sprint-review.js';
-import { sprintSlidePages } from '../../src/utils/sprint-review-render.js';
+import { SPRINT_REVIEW_STITCH_PROVENANCE, sprintSlidePages } from '../../src/utils/sprint-review-render.js';
 import { synthesizeSprintReview } from '../../lib/sprintReviewAI.js';
 import { getNvidiaRuntimeConfig } from '../../lib/ai/nvidiaRuntimeConfig.js';
 import { buildSuggestedReviewProfile } from '../../lib/sprintProfileDefaults.js';
@@ -151,7 +151,7 @@ router.post('/snapshots', handle(async (req, res) => {
   if (!/^[0-9a-f-]{36}$/i.test(req.body.requestId || '')) return res.status(400).json({ error: 'Identificador da operacao invalido.' });
   const payload = prepareReviewSnapshot(record.payload, req.body);
   payload.sourceId = record.id;
-  payload.renderManifest = { pageCount: sprintSlidePages(payload.review).length, templateVersion: payload.templateVersion };
+  payload.renderManifest = { pageCount: sprintSlidePages(payload.review).length, templateVersion: payload.templateVersion, designProvenance: SPRINT_REVIEW_STITCH_PROVENANCE };
   const saved = await insertReviewRecord({ ...ctx, kind: 'snapshot', actor: req.session.user.id, payload, requestId: req.body.requestId });
   res.status(201).json({ snapshot: saved });
 }));

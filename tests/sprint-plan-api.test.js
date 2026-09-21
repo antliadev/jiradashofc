@@ -36,4 +36,8 @@ test('rotas e migration Sprint Plan preservam autenticacao e append-only', () =>
   assert.match(migration, /BEFORE UPDATE OR DELETE/i);
   assert.match(page, /Análise do Sprint Plan em andamento/);
   assert.match(page, /aria-live="polite"/);
+  assert.match(page, /api\('\/analyze'/);
+  assert.match(page, /api\('\/synthesize'/);
+  assert.doesNotMatch(page, /analysis-jobs|pollAnalysisJob|restoreJob/);
+  assert.match(routes, /designProvenance: SPRINT_PLAN_STITCH_PROVENANCE/);
 });

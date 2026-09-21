@@ -8,7 +8,6 @@ const esc = value => sanitize(String(value ?? ''));
 const resultNames = { done: 'Concluido', partial: 'Parcial', removed: 'Removido / postergado', blocked: 'Bloqueado', continuity: 'Nao concluido' };
 const options = (rows, selected, value = 'id', label = 'name') => rows.map(row => `<option value="${esc(row[value])}" ${String(row[value]) === String(selected) ? 'selected' : ''}>${esc(row[label])}</option>`).join('');
 const date = (value, timezone = 'America/Sao_Paulo') => value ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: timezone }).format(new Date(value)) : 'Nao informado';
-const JOB_STORAGE_KEY = 'rja.sprintReview.analysisJob';
 const CONTEXT_STORAGE_KEY = 'rja.sprintReview.context';
 
 export async function renderSprintReview() {
@@ -321,42 +320,23 @@ export async function renderSprintReview() {
     review.executive = Object.fromEntries(Object.entries(executiveBlocks(review)).map(([key, block]) => [key, { ...block, text: state.executiveEdits[key] ?? block.text, ...(state.executiveEdits[key] !== undefined && state.executiveEdits[key] !== block.text ? { editedByHuman: true } : {}) }]));
     return review;
   }
-  function jobKey() { return `${state.projectKey}:${state.boardId}:${state.sprintId}`; }
   function saveContext() { localStorage.setItem(CONTEXT_STORAGE_KEY, JSON.stringify({ projectKey: state.projectKey, boardId: state.boardId, sprintId: state.sprintId })); }
-  function rememberJob(job) { localStorage.setItem(JOB_STORAGE_KEY, JSON.stringify({ key: jobKey(), id: job.id })); }
-  function clearJobStorage() { localStorage.removeItem(JOB_STORAGE_KEY); }
   async function startAnalysisJob(mode) {
-    const payload = await api('/analysis-jobs', { mode }, 'POST', { signal: false });
-    if (!payload.job) {
-      await loadAnalysisLegacy(mode);
-      return;
-    }
-    state.analysisJob = payload.job; rememberJob(payload.job); pollAnalysisJob();
-  }
-  async function loadAnalysisLegacy(mode) {
-    const result = await api('/analyze', { mode }, 'POST', { signal: false });
-    clearReview(); Object.assign(state, result); state.snapshots = (await api('/snapshots')).snapshots;
-    if (result.aiAvailable) Object.assign(state, await api('/synthesize', { sourceId: state.sourceId, choices: state.choices }, 'POST'));
-  }
-  async function pollAnalysisJob() {
-    if (!state.analysisJob?.id || state.analysisJob.status !== 'running') return;
+    state.analysisJob = { status: 'running', message: 'Coletando baseline, cards, descrições, comentários e histórico do Jira.' }; draw();
     try {
-      const payload = await api(`/analysis-jobs/${state.analysisJob.id}`, null, 'GET');
-      state.analysisJob = payload.job;
-      if (payload.job.status === 'completed') {
-        clearReview(); Object.assign(state, payload.job.result); state.analysisJob = payload.job; clearJobStorage(); state.snapshots = (await api('/snapshots')).snapshots;
-        if (payload.job.result.aiAvailable) Object.assign(state, await api('/synthesize', { sourceId: state.sourceId, choices: state.choices }, 'POST'));
-        showToast('Análise da Sprint Review concluída.', 'success'); draw(); return;
+      const result = await api('/analyze', { mode }, 'POST', { signal: false });
+      clearReview(); Object.assign(state, result); state.analysisJob = { status: 'running', message: 'Contexto coletado. Preparando a síntese executiva.' }; draw();
+      state.snapshots = (await api('/snapshots')).snapshots;
+      if (result.aiAvailable) {
+        state.analysisJob = { status: 'running', message: 'A NVIDIA está validando evidências e redigindo a síntese executiva.' }; draw();
+        Object.assign(state, await api('/synthesize', { sourceId: state.sourceId, choices: state.choices }, 'POST', { signal: false }));
       }
-      if (payload.job.status === 'failed') { state.error = payload.job.error?.message || payload.job.message; clearJobStorage(); draw(); return; }
-      draw(); setTimeout(() => { if (alive) pollAnalysisJob(); }, 3000);
-    } catch (error) { state.error = error.message; draw(); }
-  }
-  function restoreJob() {
-    try {
-      const saved = JSON.parse(localStorage.getItem(JOB_STORAGE_KEY) || 'null');
-      if (saved?.key === jobKey() && saved.id) { state.analysisJob = { id: saved.id, status: 'running', message: 'Retomando acompanhamento da análise...' }; pollAnalysisJob(); }
-    } catch { clearJobStorage(); }
+      state.analysisJob = { status: 'completed', message: 'Dados do Jira e análise NVIDIA concluídos.' };
+      showToast('Análise da Sprint Review concluída.', 'success');
+    } catch (error) {
+      state.analysisJob = { status: 'failed', message: error.message };
+      throw error;
+    }
   }
   async function save() {
     const input = { sourceId: state.sourceId, choices: state.choices, acceptedWarnings: state.acceptedWarnings, edits: state.edits, executiveEdits: state.executiveEdits, confirmTextEdits: state.confirmTextEdits, goal: state.goal, renderManifest: { pageCount: sprintSlidePages(currentReview()).length, templateVersion: SPRINT_TEMPLATE_VERSION } };
@@ -393,5 +373,4 @@ export async function renderSprintReview() {
     }
   }
   await run(async () => { state.projects = (await api('/projects')).projects; await loadAiStatus(); await restoreContext(); });
-  restoreJob();
 }

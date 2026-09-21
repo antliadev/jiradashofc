@@ -9,6 +9,8 @@ import { listReviewRecords } from '../../lib/sprintReviewStore.js';
 import { buildSprintPlan, validatePlanProfile } from '../../src/data/sprint-plan.js';
 import { buildSuggestedPlanProfile } from '../../lib/sprintProfileDefaults.js';
 import { getSprintAnalysisJob, publicSprintAnalysisJob, startSprintAnalysisJob } from '../../lib/sprintAnalysisJobs.js';
+import { synthesizeSprintPlan } from '../../lib/sprintPlanAI.js';
+import { getNvidiaRuntimeConfig } from '../../lib/ai/nvidiaRuntimeConfig.js';
 
 const router = express.Router(), pending = new Set();
 router.use((req, res, next) => Promise.resolve(requireAppAuth(req, res, next)).catch(error => {
@@ -20,12 +22,16 @@ router.use((req, res, next) => Promise.resolve(requireAppAuth(req, res, next)).c
 });
 const handle = action => async (req, res) => { try { await action(req, res); } catch (error) { if (!res.headersSent) res.status(error.status || 500).json({ error: error.status ? error.message : 'Falha ao processar Sprint Plan. Nenhuma versao foi aprovada.' }); } };
 async function enabledProjects() { return (await fetchDashboardDataFromDatabase()).projects.map(item => ({ key: item.key, name: item.name })); }
+function aiStatus() {
+  const config = getNvidiaRuntimeConfig();
+  return { provider: config.provider, configured: config.configured, model: config.model, requiredEnv: config.requiredEnv, optionalEnv: config.optionalEnv, missing: config.missing };
+}
 async function requestContext(req, requireSprint = false) {
   const data = req.method === 'GET' ? req.query : req.body;
   const key = projectKey(data.projectKey), boardId = positiveId(data.boardId);
   if (!(await enabledProjects()).some(item => item.key === key)) throw Object.assign(new Error('Projeto nao habilitado no Antlia Deliverable System.'), { status: 403 });
   const sprintId = data.sprintId ? positiveId(data.sprintId) : null;
-  if (requireSprint && !sprintId) throw Object.assign(new Error('Selecione uma sprint futura ou ativa.'), { status: 400 });
+  if (requireSprint && !sprintId) throw Object.assign(new Error('Selecione a sprint atual/ativa.'), { status: 400 });
   return { projectKey: key, boardId, ...(sprintId ? { sprintId } : {}) };
 }
 function belongs(record, ctx, kind) {
@@ -50,9 +56,10 @@ async function analyzeSprintPlan(ctx, actor, body = {}) {
   source.baselineSnapshot = baselines[0]?.payload?.plan || null;
   source.mode = body.mode === 'current' ? 'current' : undefined;
   const saved = await insertPlanRecord({ ...ctx, kind: 'source', actor, payload: source });
-  return { sourceId: saved.id, plan: buildSprintPlan(source), jiraBaseUrl: source.jiraBaseUrl, fetchedAt: source.fetchedAt, collection: source.collection };
+  return { sourceId: saved.id, plan: buildSprintPlan(source), aiStatus: aiStatus(), jiraBaseUrl: source.jiraBaseUrl, fetchedAt: source.fetchedAt, collection: source.collection };
 }
 router.get('/projects', handle(async (_req, res) => res.json({ projects: await enabledProjects() })));
+router.get('/ai-status', handle(async (_req, res) => res.json({ aiStatus: aiStatus() })));
 router.get('/boards', handle(async (req, res) => {
   const key = projectKey(req.query.projectKey);
   if (!(await enabledProjects()).some(item => item.key === key)) return res.status(403).json({ error: 'Projeto nao habilitado.' });
@@ -107,6 +114,19 @@ router.post('/recalculate', handle(async (req, res) => {
   if (!belongs(source, ctx, 'source')) return res.status(403).json({ error: 'Origem nao pertence a este contexto.' });
   const mode = req.body.mode === 'current' ? 'current' : source.payload.mode;
   res.json({ plan: buildSprintPlan({ ...source.payload, mode }) });
+}));
+router.post('/synthesize', handle(async (req, res) => {
+  const ctx = await requestContext(req, true), source = await getPlanRecord(req.body.sourceId);
+  if (!belongs(source, ctx, 'source')) return res.status(403).json({ error: 'Origem nao pertence a este contexto.' });
+  const ai = aiStatus();
+  if (!ai.configured) return res.status(503).json({ error: 'IA NVIDIA nao configurada. Preencha NVIDIA_API_KEY nas variaveis de ambiente da producao.', aiStatus: ai });
+  const lock = `ai:${ctx.projectKey}:${ctx.boardId}:${ctx.sprintId}`;
+  if (pending.has(lock)) return res.status(409).json({ error: 'Ja existe uma sintese em andamento para esta sprint.' });
+  pending.add(lock);
+  try { source.payload.ai = await synthesizeSprintPlan(buildSprintPlan(source.payload)); }
+  finally { pending.delete(lock); }
+  const saved = await insertPlanRecord({ ...ctx, kind: 'source', actor: req.session.user.id, payload: source.payload });
+  res.json({ sourceId: saved.id, plan: buildSprintPlan(source.payload), aiStatus: ai });
 }));
 router.post('/snapshots', handle(async (req, res) => {
   const ctx = await requestContext(req, true), source = await getPlanRecord(req.body.sourceId);

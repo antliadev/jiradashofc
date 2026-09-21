@@ -4,14 +4,19 @@ const esc = value => sanitize(String(value ?? ''));
 export const SPRINT_TEMPLATE_VERSION = 'antlia-sprint-16x9-v2';
 export const executiveLabels = { highlight: 'Destaque positivo', attention: 'Ponto de atenção', justification: 'Justificativa', achievement: 'Principal conquista', nextStep: 'Próximo passo' };
 const labels = { done: 'Concluído', partial: 'Parcial', removed: 'Removido', blocked: 'Bloqueado', continuity: 'Continuidade' };
+const itemLabel = item => `${item.key} — ${item.title || 'Sem título'}`;
+const deliveryLabel = (review, delivery) => {
+  const members = (review.items || []).filter(item => delivery.keys?.includes(item.key));
+  return members.length === 1 ? itemLabel(members[0]) : delivery.title;
+};
 
 export function executiveBlocks(review) {
   const done = (review.deliveries || []).find(d => d.planned && d.result === 'done');
   const pending = (review.deliveries || []).find(d => d.planned && d.result !== 'done');
   const statement = (review.statements || []).find(s => pending?.keys?.includes(s.issueKey));
   const defaults = {
-    highlight: { text: done ? `${done.title}: concluído no fechamento.` : 'Nenhuma conquista confirmada nos dados disponíveis.', evidenceIds: done?.evidenceIds || [] },
-    attention: { text: pending ? `${pending.title}: ${labels[pending.result] || 'resultado não informado'} no fechamento.` : 'Nenhuma pendência identificada nas entregas disponíveis.', evidenceIds: pending?.evidenceIds || [] },
+    highlight: { text: done ? `${deliveryLabel(review, done)}: concluído no fechamento.` : 'Nenhuma conquista confirmada nos dados disponíveis.', evidenceIds: done?.evidenceIds || [] },
+    attention: { text: pending ? `${deliveryLabel(review, pending)}: ${labels[pending.result] || 'resultado não informado'} no fechamento.` : 'Nenhuma pendência identificada nas entregas disponíveis.', evidenceIds: pending?.evidenceIds || [] },
     justification: { text: statement?.text || `${review.metrics.completed} de ${review.metrics.planned} entregas planejadas concluídas. ${pending ? 'Causa não registrada; revise as evidências.' : 'Resultado conforme os fatos do fechamento.'}`, evidenceIds: statement?.evidenceIds || [] },
     achievement: { text: `${review.metrics.completed} de ${review.metrics.planned} entregas principais concluídas (${review.metrics.achievement}%).`, evidenceIds: done?.evidenceIds || [] },
     nextStep: { text: 'Próximo passo não documentado.', evidenceIds: [] },
@@ -36,8 +41,9 @@ export function sprintSlidePages(review) {
   const pages = [{ type: 'executive', rows: [], blocks: [] }];
   let page = pages[0], used = 0;
   for (const d of review.deliveries || []) {
-    const row = { ...d, plannedDate: deliveryDates(review, d, false), closingDate: deliveryDates(review, d, true) };
-    const cost = Math.max(1, Math.ceil(String(d.title).length / 58), Math.ceil(Math.max(row.plannedDate.length, row.closingDate.length) / 45));
+    const cardLabels = (review.items || []).filter(item => d.keys?.includes(item.key)).map(itemLabel);
+    const row = { ...d, displayTitle: deliveryLabel(review, d), cardLabels, plannedDate: deliveryDates(review, d, false), closingDate: deliveryDates(review, d, true) };
+    const cost = Math.max(1, Math.ceil(String(row.displayTitle).length / 58), cardLabels.length > 1 ? Math.ceil(cardLabels.join(' · ').length / 72) : 1, Math.ceil(Math.max(row.plannedDate.length, row.closingDate.length) / 45));
     if (used + cost > 6 && page.rows.length) { page = { type: 'deliveries', rows: [], blocks: [] }; pages.push(page); used = 0; }
     page.rows.push(row); used += cost;
   }
@@ -74,7 +80,7 @@ export function renderSprintSlides({ review, approved = false }) {
   return pages.map((page, index) => `<div class="sr-slide-shell"><article class="sr-slide sr-slide-${page.type} sr-severity-${severity}" data-classification="${esc(review.classification)}" data-slide="${index}" aria-label="Sprint Review, página ${index + 1} de ${pages.length}">
     <header><div>${logo ? `<img class="sr-slide-logo" src="${logo}" alt="${esc(review.profile.logo || 'Antlia')}">` : ''}</div><div class="sr-slide-heading"><span>ANTLIA DELIVERABLE SYSTEM</span><h1>STATUS EXECUTIVO · ${esc(review.projectKey)}</h1><h2>${esc(review.sprint.name)} · RESULTADO X PLANEJADO</h2><small>Início: ${esc(formatReviewDate(review.sprint.startDate, timezone))} · Fim previsto: ${esc(formatReviewDate(review.sprint.endDate, timezone))}</small></div><aside>${review.mode === 'current' ? 'DADOS ATUAIS · REPROCESSADA' : approved ? 'REVIEW APROVADA' : 'PRÉVIA · NÃO APROVADA'}</aside></header>
     <section class="sr-slide-score"><strong>${esc(review.metrics.achievement)}%</strong><div><h2>${esc(review.classification)}</h2><p>${esc(review.metrics.completed)} de ${esc(review.metrics.planned)} entregas principais concluídas</p></div></section>
-    <main>${page.type === 'context' ? '<h2>CONTEXTO EXECUTIVO · CONTINUAÇÃO</h2>' : `<div class="sr-slide-columns"><h3>PLANEJADO / ESCOPO</h3><h3>RESULTADO NO FECHAMENTO</h3></div>${page.rows.map(row => `<section class="sr-slide-row"><div><small>${row.planned ? 'Baseline' : 'Escopo adicional'} · ${esc(row.plannedDate)}</small><p>${esc(row.title)}</p></div><div><strong>${esc(labels[row.result] || 'Não informado')}</strong><small>Data no corte: ${esc(row.closingDate)}</small></div></section>`).join('') || '<p>Nenhuma entrega disponível.</p>'}`}</main>
+    <main>${page.type === 'context' ? '<h2>CONTEXTO EXECUTIVO · CONTINUAÇÃO</h2>' : `<div class="sr-slide-columns"><h3>PLANEJADO / ESCOPO</h3><h3>RESULTADO NO FECHAMENTO</h3></div>${page.rows.map(row => `<section class="sr-slide-row"><div><small>${row.planned ? 'Baseline' : 'Escopo adicional'} · ${esc(row.plannedDate)}</small><p>${esc(row.displayTitle)}</p>${row.cardLabels.length > 1 ? `<small>${row.cardLabels.map(esc).join(' · ')}</small>` : ''}</div><div><strong>${esc(labels[row.result] || 'Não informado')}</strong><small>Data no corte: ${esc(row.closingDate)}</small></div></section>`).join('') || '<p>Nenhuma entrega disponível.</p>'}`}</main>
     <div class="sr-slide-callouts">${page.blocks.filter(b => page.type === 'context' || !['achievement', 'nextStep'].includes(b.key)).map(block).join('')}</div>
     <footer><div class="sr-slide-outcome">${page.blocks.filter(b => page.type !== 'context' && ['achievement', 'nextStep'].includes(b.key)).map(block).join('')}</div><small>${goal ? `Goal confirmado: ${esc(goal)} · ` : ''}${review.metrics.carryOverUnknown ? `${esc(review.metrics.carryOverUnknown)} destinos não confirmados · ` : ''}Adicionais: ${esc(review.metrics.additional)} · Confiança documental: ${esc(review.confidence)}% · Corte: ${esc(formatReviewDate(review.sprint.completeDate, timezone))} · ${esc(timezone)} · Página ${index + 1}/${pages.length}</small></footer>
     </article></div>`).join('');

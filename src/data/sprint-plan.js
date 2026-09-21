@@ -1,6 +1,6 @@
 import { fieldAt, sprintIds, textFromJira, timestamp } from './sprint-review.js';
 
-export const PLAN_VERSION = 'plan-rules-1.1';
+export const PLAN_VERSION = 'plan-rules-1.2';
 export const PLAN_STATES = Object.freeze({ draft: 'draft', baseline: 'baseline', current: 'current' });
 const ORIGINS = new Set(['carry_over', 'replanned_before_close', 'new_planned']);
 const canonical = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -49,7 +49,8 @@ function eligible(issue, profile) { return profile.eligibleTypes.includes(String
 function assignee(issue, cutoff) { return fieldAt(issue, 'assignee', cutoff) || null; }
 function displayDate(issue, cutoff, profile) { return profile.executiveDateField ? fieldAt(issue, profile.executiveDateField, cutoff) || null : null; }
 function itemSnapshot(issue, cutoff, profile) {
-  return { issueKey: issue.key, title: String(issue.fields?.summary || ''), baselineStatus: statusAt(issue, cutoff, profile), assigneeId: assignee(issue, cutoff), displayDate: displayDate(issue, cutoff, profile), group: profile.groupField ? fieldAt(issue, profile.groupField, cutoff) : issue.fields?.parent?.key || null };
+  const title = String(issue.fields?.summary || '').trim();
+  return { issueKey: issue.key, title, displayName: `${issue.key} — ${title || 'Sem titulo'}`, baselineStatus: statusAt(issue, cutoff, profile), assigneeId: assignee(issue, cutoff), displayDate: displayDate(issue, cutoff, profile), group: profile.groupField ? fieldAt(issue, profile.groupField, cutoff) : issue.fields?.parent?.key || null };
 }
 function automated(comment, rules) {
   const author = comment.author || {};
@@ -67,6 +68,11 @@ function evidenceFor(issue, previous, baselineAt, profile) {
     seen.add(canonical(text));
     return [{ id: `${issue.key}:comment:${comment.id}`, issueKey: issue.key, commentId: String(comment.id), timestamp: comment.created, window, text, source: 'jira_comment' }];
   });
+}
+function descriptionEvidence(issue, baselineAt) {
+  const text = textFromJira(issue.fields?.description).trim();
+  if (!text) return [];
+  return [{ id: `${issue.key}:description`, issueKey: issue.key, timestamp: baselineAt, window: 'planning', text, source: 'jira_description' }];
 }
 function approvedReviewEvidence(issue, snapshot) {
   const review = snapshot?.review || snapshot?.payload?.review || snapshot;
@@ -115,11 +121,11 @@ function deltasFrom(baseline, current) {
 export function buildSprintPlan(input = {}) {
   const profile = validatePlanProfile(input.profile);
   const target = input.targetSprint, previous = input.previousSprint || null;
-  if (!target || !['future', 'active'].includes(target.state)) fail('Sprint alvo deve ser futura ou ativa.');
-  const baselineAt = target.state === 'future' ? input.fetchedAt : target.startDate;
+  if (!target || target.state !== 'active') fail('Sprint alvo deve ser a sprint atual/ativa.');
+  const baselineAt = target.startDate;
   if (!Number.isFinite(timestamp(baselineAt))) fail('Instante do planejamento invalido.');
   const candidates = (input.issues || []).filter(issue => eligible(issue, profile));
-  let targetMembers = candidates.filter(issue => membershipAt(issue, profile.sprintField, target.id, baselineAt) === true);
+  let targetMembers = candidates.filter(issue => membershipAt(issue, profile.sprintField, target.id, input.fetchedAt) === true);
   if (['parent', 'hybrid'].includes(profile.grouping)) {
     const referencedParents = new Set(targetMembers.map(issue => issue.fields?.parent?.key).filter(Boolean));
     targetMembers = targetMembers.filter(issue => !referencedParents.has(issue.key));
@@ -134,21 +140,22 @@ export function buildSprintPlan(input = {}) {
     const primaryOrigin = pendingAtClose ? 'carry_over' : wasPrevious ? 'replanned_before_close' : 'new_planned';
     if (!ORIGINS.has(primaryOrigin)) fail('Origem primaria invalida.');
     const reviewEvidence = primaryOrigin === 'new_planned' ? [] : approvedReviewEvidence(issue, input.reviewSnapshot);
-    const jiraEvidence = primaryOrigin === 'new_planned' ? [] : evidenceFor(issue, previous, baselineAt, profile).filter(item => !reviewEvidence.length || item.window === 'planning');
-    const itemEvidence = [...reviewEvidence, ...jiraEvidence];
+    const jiraEvidence = evidenceFor(issue, previous, input.fetchedAt, profile).filter(item => !reviewEvidence.length || item.window === 'planning');
+    const itemEvidence = [...reviewEvidence, ...descriptionEvidence(issue, input.fetchedAt), ...jiraEvidence];
     evidence.push(...itemEvidence);
-    const snapshot = itemSnapshot(issue, baselineAt, profile);
+    const memberAtBaseline = membershipAt(issue, profile.sprintField, target.id, baselineAt) === true;
+    const snapshot = itemSnapshot(issue, memberAtBaseline ? baselineAt : input.fetchedAt, profile);
     const current = itemSnapshot(issue, input.fetchedAt, profile);
     const createdBeforePrevious = previous && timestamp(issue.fields?.created) < timestamp(previous.startDate);
     if (snapshot.baselineStatus === 'done' && !(input.mode === 'current' && input.baselineSnapshot?.items?.some(item => item.issueKey === issue.key))) { completedBeforeStart.push({ issueKey: issue.key, reason: 'completed_before_start' }); return []; }
-    return [{ ...snapshot, primaryOrigin, secondaryProvenance: primaryOrigin === 'new_planned' ? (createdBeforePrevious ? 'backlog_existing' : 'created_for_sprint') : null, carryOverCount: primaryOrigin === 'carry_over' ? Math.max(1, (sprintIds(issue.fields?.[profile.sprintField]) || []).length - 1) : 0, sprintSequence: primaryOrigin === 'carry_over' ? (sprintIds(issue.fields?.[profile.sprintField]) || []).map(String) : [], evidenceIds: itemEvidence.map(item => item.id), currentStatus: current.baselineStatus, currentAssigneeId: current.assigneeId, currentDisplayDate: current.displayDate, sourcePrecedence: input.reviewSnapshot ? 'review_snapshot+jira' : 'jira_changelog' }];
+    return [{ ...snapshot, addedAfterBaseline: !memberAtBaseline, primaryOrigin, secondaryProvenance: primaryOrigin === 'new_planned' ? (createdBeforePrevious ? 'backlog_existing' : 'created_for_sprint') : null, carryOverCount: primaryOrigin === 'carry_over' ? Math.max(1, (sprintIds(issue.fields?.[profile.sprintField]) || []).length - 1) : 0, sprintSequence: primaryOrigin === 'carry_over' ? (sprintIds(issue.fields?.[profile.sprintField]) || []).map(String) : [], evidenceIds: itemEvidence.map(item => item.id), currentStatus: current.baselineStatus, currentAssigneeId: current.assigneeId, currentDisplayDate: current.displayDate, sourcePrecedence: input.reviewSnapshot ? 'review_snapshot+jira' : 'jira_changelog' }];
   });
   if (input.mode === 'current' && input.baselineSnapshot?.items) {
     const baselineByKey = new Map(input.baselineSnapshot.items.map(item => [item.issueKey, item]));
     items = items.map(item => baselineByKey.has(item.issueKey) ? { ...item, ...Object.fromEntries(['baselineStatus', 'assigneeId', 'displayDate', 'group', 'primaryOrigin', 'secondaryProvenance', 'carryOverCount', 'sprintSequence'].map(key => [key, baselineByKey.get(item.issueKey)[key]])) } : item);
   }
   const targetKeys = new Set(targetMembers.map(issue => issue.key));
-  const previousPending = previous ? candidates.filter(issue => membershipAt(issue, profile.sprintField, previous.id, previous.completeDate) === true && !['done', 'cancelled'].includes(statusAt(issue, previous.completeDate, profile)) && !targetKeys.has(issue.key)).map(issue => ({ issueKey: issue.key, destination: classifyDestination(issue, target.id, profile) })) : [];
+  const previousPending = previous ? candidates.filter(issue => membershipAt(issue, profile.sprintField, previous.id, previous.completeDate) === true && !['done', 'cancelled'].includes(statusAt(issue, previous.completeDate, profile)) && !targetKeys.has(issue.key)).map(issue => ({ issueKey: issue.key, title: String(issue.fields?.summary || ''), displayName: `${issue.key} — ${String(issue.fields?.summary || 'Sem titulo')}`, destination: classifyDestination(issue, target.id, profile) })) : [];
   const errors = [], warnings = [], info = [];
   if (!input.scopeComplete) errors.push({ code: 'incomplete_history', message: 'Historico Jira incompleto.' });
   if (!items.length) errors.push({ code: 'empty_denominator', message: 'Nenhum item elegivel no planejamento.' });
@@ -161,12 +168,13 @@ export function buildSprintPlan(input = {}) {
   const windowStart = String(target.startDate || '').slice(0, 10), windowEnd = String(target.endDate || '').slice(0, 10);
   for (const item of items.filter(value => value.displayDate && windowStart && windowEnd && (String(value.displayDate).slice(0, 10) < windowStart || String(value.displayDate).slice(0, 10) > windowEnd))) warnings.push({ code: 'date_outside_sprint', issueKey: item.issueKey, message: 'Data executiva fora da janela da sprint.' });
   for (const item of completedBeforeStart) warnings.push({ code: 'completed_before_start', issueKey: item.issueKey, message: 'Item concluido antes do inicio nao foi contado como trabalho previsto.' });
+  for (const item of items.filter(value => value.addedAfterBaseline)) warnings.push({ code: 'added_after_baseline', issueKey: item.issueKey, message: 'Item entrou na sprint atual depois do inicio e sera tratado como novo escopo.' });
   for (const item of items.filter(value => value.primaryOrigin !== 'new_planned' && !value.evidenceIds.length)) warnings.push({ code: 'continuity_without_cause', issueKey: item.issueKey, message: 'Continuidade sem causa registrada.' });
   for (const pending of previousPending) warnings.push({ code: pending.destination === 'unknown' ? 'previous_pending_unknown_destination' : 'previous_pending_not_absorbed', issueKey: pending.issueKey, message: 'Pendencia anterior nao absorvida.' });
   const readinessResult = readiness(items, previousPending, profile, Boolean(input.scopeComplete && target));
   if (readinessResult.score < 70) warnings.push({ code: 'low_readiness', message: 'Prontidao do Plano incompleta.' });
-  const metrics = { planned: items.length, continuities: items.filter(item => item.primaryOrigin !== 'new_planned').length, carryOvers: items.filter(item => item.primaryOrigin === 'carry_over').length, replanned: items.filter(item => item.primaryOrigin === 'replanned_before_close').length, newPlanned: items.filter(item => item.primaryOrigin === 'new_planned').length, multiSprint: items.filter(item => item.carryOverCount >= 2).length, previousPendingNotAbsorbed: previousPending.length, withDate: items.filter(item => item.displayDate).length, withoutAssignee: items.filter(item => !item.assigneeId).length };
-  const state = input.mode === 'current' ? PLAN_STATES.current : target.state === 'future' ? PLAN_STATES.draft : PLAN_STATES.baseline;
+  const metrics = { planned: items.filter(item => !item.addedAfterBaseline).length, currentScope: items.length, additionalScope: items.filter(item => item.addedAfterBaseline).length, continuities: items.filter(item => item.primaryOrigin !== 'new_planned').length, carryOvers: items.filter(item => item.primaryOrigin === 'carry_over').length, replanned: items.filter(item => item.primaryOrigin === 'replanned_before_close').length, newPlanned: items.filter(item => item.primaryOrigin === 'new_planned').length, multiSprint: items.filter(item => item.carryOverCount >= 2).length, previousPendingNotAbsorbed: previousPending.length, withDate: items.filter(item => item.displayDate).length, withoutAssignee: items.filter(item => !item.assigneeId).length };
+  const state = input.mode === 'current' || input.baselineSnapshot ? PLAN_STATES.current : PLAN_STATES.baseline;
   const deltas = deltasFrom(input.baselineSnapshot, items);
-  return { projectKey: input.projectKey, boardId: String(input.boardId), targetSprint: target, previousSprint: previous, state, baselineAt, timezone: profile.timezone, items, excludedItems: completedBeforeStart, previousPending, deltas, activationDeltas: input.draftSnapshot ? deltasFrom(input.draftSnapshot, items) : [], metrics, readiness: readinessResult, evidence, preflight: { errors, warnings, info, canApprove: errors.length === 0 }, sourcePrecedence: input.reviewSnapshot ? 'review_snapshot+jira' : 'jira_changelog', ruleVersion: PLAN_VERSION, fetchedAt: input.fetchedAt };
+  return { projectKey: input.projectKey, boardId: String(input.boardId), targetSprint: target, previousSprint: previous, state, baselineAt, timezone: profile.timezone, items, excludedItems: completedBeforeStart, previousPending, deltas, activationDeltas: input.draftSnapshot ? deltasFrom(input.draftSnapshot, items) : [], metrics, readiness: readinessResult, evidence, ai: input.ai || { status: 'not_generated', priorities: [] }, preflight: { errors, warnings, info, canApprove: errors.length === 0 }, sourcePrecedence: input.reviewSnapshot ? 'review_snapshot+jira' : 'jira_changelog', ruleVersion: PLAN_VERSION, fetchedAt: input.fetchedAt };
 }

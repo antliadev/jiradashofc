@@ -67,6 +67,24 @@ test('conta administrativa sem nome pessoal não ganha vínculo inferido de anal
   assert.equal(result.issues.length, 0);
 });
 
+test('dev qa é vinculado por primeiro nome quando o analista Jira é único e não expõe homônimos', () => {
+  const hectorData = buildDashboardData([
+    { id: 'hector', issue_key: 'DEVOPS-260', assignee_id: 'hector-id', assignee_name: 'Hector nelson', assignee_email: null, project_key: 'DEVOPS', project_id: 'devops', status_name: 'Em andamento' },
+    { id: 'other', issue_key: 'DEVOPS-261', assignee_id: 'other-id', assignee_name: 'Outra Pessoa', assignee_email: null, project_key: 'DEVOPS', project_id: 'devops', status_name: 'Concluído' },
+  ]);
+  const hector = scopeDashboardForUser(hectorData, { session: { user: { role: 'dev_qa', status: 'active', email: 'hector.troncoso@antlia.com.br', displayName: 'Hector' } } }, 'analysts.general');
+  assert.deepEqual(hector.analysts.map(analyst => analyst.id), ['hector-id']);
+  assert.deepEqual(hector.issues.map(issue => issue.assignee_id), ['hector-id']);
+
+  const ambiguousData = buildDashboardData([
+    { id: 'homonimo-a', issue_key: 'P1-30', assignee_id: 'homonimo-a', assignee_name: 'Alex Silva', assignee_email: null, project_key: 'P1', project_id: 'p1', status_name: 'EM PROGRESSO' },
+    { id: 'homonimo-b', issue_key: 'P1-31', assignee_id: 'homonimo-b', assignee_name: 'Alex Santos', assignee_email: null, project_key: 'P1', project_id: 'p1', status_name: 'EM PROGRESSO' },
+  ]);
+  const ambiguous = scopeDashboardForUser(ambiguousData, { session: { user: { role: 'dev_qa', status: 'active', email: 'alex.outro@antlia.com.br', displayName: 'Alex' } } }, 'analysts.general');
+  assert.equal(ambiguous.analysts.length, 0);
+  assert.equal(ambiguous.issues.length, 0);
+});
+
 test('Dashboard mantém cards operacionais sem expor agregados comparativos ao Desenvolvedor / QA', () => {
   const data = buildDashboardData(issues);
   const originalByAnalyst = structuredClone(data.metrics.byAnalyst);

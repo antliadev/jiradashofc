@@ -39,6 +39,34 @@ test('identidade ausente ou sem vínculo não recebe dados de outros analistas',
   }
 });
 
+test('dev qa é vinculado ao próprio analista por nome inferido do email corporativo', () => {
+  const data = buildDashboardData([
+    { id: 'raphael', issue_key: 'P1-10', assignee_id: 'raphael-id', assignee_name: 'Raphael Yokokura', assignee_email: null, project_key: 'P1', project_id: 'p1', status_name: 'EM PROGRESSO' },
+    { id: 'talles', issue_key: 'P1-11', assignee_id: 'talles-id', assignee_name: 'Talles Caverni', assignee_email: null, project_key: 'P1', project_id: 'p1', status_name: 'EM PROGRESSO' },
+    { id: 'matheus', issue_key: 'P1-12', assignee_id: 'matheus-id', assignee_name: 'Matheus Manoel Santos', assignee_email: null, project_key: 'P1', project_id: 'p1', status_name: 'EM PROGRESSO' },
+    { id: 'other', issue_key: 'P1-13', assignee_id: 'other-id', assignee_name: 'Outra Pessoa', assignee_email: null, project_key: 'P1', project_id: 'p1', status_name: 'EM PROGRESSO' },
+  ]);
+
+  for (const [email, expectedId] of [
+    ['raphael.yokokura@antlia.com.br', 'raphael-id'],
+    ['talles.caverni@antlia.com.br', 'talles-id'],
+    ['matheus.santos@antlia.com.br', 'matheus-id'],
+  ]) {
+    const result = scopeDashboardForUser(data, { session: { user: { role: 'dev_qa', status: 'active', email } } }, 'analysts.general');
+    assert.deepEqual(result.analysts.map(analyst => analyst.id), [expectedId]);
+    assert.deepEqual(result.issues.map(issue => issue.assignee_id), [expectedId]);
+  }
+});
+
+test('conta administrativa sem nome pessoal não ganha vínculo inferido de analista', () => {
+  const data = buildDashboardData([
+    { id: 'ti', issue_key: 'P1-20', assignee_id: 'tiago-id', assignee_name: 'Tiago Contas', assignee_email: null, project_key: 'P1', project_id: 'p1', status_name: 'EM PROGRESSO' },
+  ]);
+  const result = scopeDashboardForUser(data, { session: { user: { role: 'dev_qa', status: 'active', email: 'contas.ti@antlia.com.br' } } }, 'analysts.evolution');
+  assert.equal(result.analysts.length, 0);
+  assert.equal(result.issues.length, 0);
+});
+
 test('Dashboard mantém cards operacionais sem expor agregados comparativos ao Desenvolvedor / QA', () => {
   const data = buildDashboardData(issues);
   const originalByAnalyst = structuredClone(data.metrics.byAnalyst);

@@ -6,7 +6,7 @@ import { canAccessPermission, permissionForJiraRequest } from '../lib/appPermiss
 import { DataService } from '../src/data/data-service.js';
 
 const issues = [
-  { id: 'own', issue_key: 'P1-1', assignee_id: 'pedro', assignee_name: 'Pedro Oliveira Fernandes', assignee_email: 'pedro.fernandes@antlia.com.br', project_key: 'P1', project_id: 'p1', status_name: 'EM PROGRESSO' },
+  { id: 'own', issue_key: 'P1-1', assignee_id: '712020:fef15930-802e-4d55-a2d4-13fc0d09cefc', assignee_name: 'Pedro Oliveira Fernandes', assignee_email: 'pedro.fernandes@antlia.com.br', project_key: 'P1', project_id: 'p1', status_name: 'EM PROGRESSO' },
   { id: 'other', issue_key: 'P1-2', assignee_id: 'other', assignee_name: 'Outro colaborador', assignee_email: 'other@antlia.com.br', project_key: 'P2', project_id: 'p2', status_name: 'CONCLUÍDO' },
 ];
 
@@ -41,16 +41,16 @@ test('identidade ausente ou sem vínculo não recebe dados de outros analistas',
 
 test('dev qa é vinculado ao próprio analista por nome inferido do email corporativo', () => {
   const data = buildDashboardData([
-    { id: 'raphael', issue_key: 'P1-10', assignee_id: 'raphael-id', assignee_name: 'Raphael Yokokura', assignee_email: null, project_key: 'P1', project_id: 'p1', status_name: 'EM PROGRESSO' },
-    { id: 'talles', issue_key: 'P1-11', assignee_id: 'talles-id', assignee_name: 'Talles Caverni', assignee_email: null, project_key: 'P1', project_id: 'p1', status_name: 'EM PROGRESSO' },
-    { id: 'matheus', issue_key: 'P1-12', assignee_id: 'matheus-id', assignee_name: 'Matheus Manoel Santos', assignee_email: null, project_key: 'P1', project_id: 'p1', status_name: 'EM PROGRESSO' },
+    { id: 'raphael', issue_key: 'P1-10', assignee_id: '712020:09dc0185-dbe2-4d21-96c6-32470855b4f4', assignee_name: 'Raphael Yokokura', assignee_email: null, project_key: 'P1', project_id: 'p1', status_name: 'EM PROGRESSO' },
+    { id: 'talles', issue_key: 'P1-11', assignee_id: '712020:d152e415-e622-4389-b15e-2c4263442ffc', assignee_name: 'Talles Caverni', assignee_email: null, project_key: 'P1', project_id: 'p1', status_name: 'EM PROGRESSO' },
+    { id: 'matheus', issue_key: 'P1-12', assignee_id: '712020:9d0e7923-183f-40bb-a18c-ecb7ae7c2fb0', assignee_name: 'Matheus Manoel Santos', assignee_email: null, project_key: 'P1', project_id: 'p1', status_name: 'EM PROGRESSO' },
     { id: 'other', issue_key: 'P1-13', assignee_id: 'other-id', assignee_name: 'Outra Pessoa', assignee_email: null, project_key: 'P1', project_id: 'p1', status_name: 'EM PROGRESSO' },
   ]);
 
   for (const [email, expectedId] of [
-    ['raphael.yokokura@antlia.com.br', 'raphael-id'],
-    ['talles.caverni@antlia.com.br', 'talles-id'],
-    ['matheus.santos@antlia.com.br', 'matheus-id'],
+    ['raphael.yokokura@antlia.com.br', '712020:09dc0185-dbe2-4d21-96c6-32470855b4f4'],
+    ['talles.caverni@antlia.com.br', '712020:d152e415-e622-4389-b15e-2c4263442ffc'],
+    ['matheus.santos@antlia.com.br', '712020:9d0e7923-183f-40bb-a18c-ecb7ae7c2fb0'],
   ]) {
     const result = scopeDashboardForUser(data, { session: { user: { role: 'dev_qa', status: 'active', email } } }, 'analysts.general');
     assert.deepEqual(result.analysts.map(analyst => analyst.id), [expectedId]);
@@ -69,12 +69,12 @@ test('conta administrativa sem nome pessoal não ganha vínculo inferido de anal
 
 test('dev qa é vinculado por primeiro nome quando o analista Jira é único e não expõe homônimos', () => {
   const hectorData = buildDashboardData([
-    { id: 'hector', issue_key: 'DEVOPS-260', assignee_id: 'hector-id', assignee_name: 'Hector nelson', assignee_email: null, project_key: 'DEVOPS', project_id: 'devops', status_name: 'Em andamento' },
+    { id: 'hector', issue_key: 'DEVOPS-260', assignee_id: '70121:659b3d3b-7500-4cb5-ab42-1f077b0e551c', assignee_name: 'Hector nelson', assignee_email: null, project_key: 'DEVOPS', project_id: 'devops', status_name: 'Em andamento' },
     { id: 'other', issue_key: 'DEVOPS-261', assignee_id: 'other-id', assignee_name: 'Outra Pessoa', assignee_email: null, project_key: 'DEVOPS', project_id: 'devops', status_name: 'Concluído' },
   ]);
   const hector = scopeDashboardForUser(hectorData, { session: { user: { role: 'dev_qa', status: 'active', email: 'hector.troncoso@antlia.com.br', displayName: 'Hector' } } }, 'analysts.general');
-  assert.deepEqual(hector.analysts.map(analyst => analyst.id), ['hector-id']);
-  assert.deepEqual(hector.issues.map(issue => issue.assignee_id), ['hector-id']);
+  assert.deepEqual(hector.analysts.map(analyst => analyst.id), ['70121:659b3d3b-7500-4cb5-ab42-1f077b0e551c']);
+  assert.deepEqual(hector.issues.map(issue => issue.assignee_id), ['70121:659b3d3b-7500-4cb5-ab42-1f077b0e551c']);
 
   const ambiguousData = buildDashboardData([
     { id: 'homonimo-a', issue_key: 'P1-30', assignee_id: 'homonimo-a', assignee_name: 'Alex Silva', assignee_email: null, project_key: 'P1', project_id: 'p1', status_name: 'EM PROGRESSO' },
@@ -83,6 +83,22 @@ test('dev qa é vinculado por primeiro nome quando o analista Jira é único e n
   const ambiguous = scopeDashboardForUser(ambiguousData, { session: { user: { role: 'dev_qa', status: 'active', email: 'alex.outro@antlia.com.br', displayName: 'Alex' } } }, 'analysts.general');
   assert.equal(ambiguous.analysts.length, 0);
   assert.equal(ambiguous.issues.length, 0);
+});
+
+test('emails cadastrados aguardando primeiro login usam relação explícita com o accountId do Jira', () => {
+  const data = buildDashboardData([
+    { id: 'alan-card', issue_key: 'BSO-1', assignee_id: '712020:b06531c7-5c21-483c-938b-69c7009e1fbb', assignee_name: 'Alan Mazotti', assignee_email: null, project_key: 'BSO', project_id: 'bso', status_name: 'EM PROGRESSO' },
+    { id: 'lucas-card', issue_key: 'MAR-1', assignee_id: '70121:f8babedd-436a-4083-bda0-62d8b0e06692', assignee_name: 'Lucas Vitoretti', assignee_email: null, project_key: 'MAR', project_id: 'mar', status_name: 'EM PROGRESSO' },
+    { id: 'silva-card', issue_key: 'P1-40', assignee_id: '6414b8e0407493675d465f54', assignee_name: 'Carlos Alexandre Silva de Jesus', assignee_email: null, project_key: 'P1', project_id: 'p1', status_name: 'EM PROGRESSO' },
+  ]);
+
+  const alan = scopeDashboardForUser(data, { session: { user: { role: 'dev_qa', status: 'active', email: 'alan.silva@antlia.com.br' } } }, 'analysts.general');
+  assert.deepEqual(alan.analysts.map(analyst => analyst.id), ['712020:b06531c7-5c21-483c-938b-69c7009e1fbb']);
+  assert.deepEqual(alan.issues.map(issue => issue.assignee_id), ['712020:b06531c7-5c21-483c-938b-69c7009e1fbb']);
+
+  const lucas = scopeDashboardForUser(data, { session: { user: { role: 'dev_qa', status: 'active', email: 'lucas.vitoretti@antlia.com.br' } } }, 'analysts.evolution');
+  assert.deepEqual(lucas.analysts.map(analyst => analyst.id), ['70121:f8babedd-436a-4083-bda0-62d8b0e06692']);
+  assert.deepEqual(lucas.issues.map(issue => issue.assignee_id), ['70121:f8babedd-436a-4083-bda0-62d8b0e06692']);
 });
 
 test('Dashboard mantém cards operacionais sem expor agregados comparativos ao Desenvolvedor / QA', () => {
@@ -119,6 +135,6 @@ test('serviço de Analistas usa endpoint próprio sem reutilizar Dashboard nem e
     return { ok: true, json: async () => buildDashboardData([issues[0]]) };
   };
   await service.loadAnalystData('evolution');
-  assert.deepEqual(service.getUsers().map(user => user.id), ['pedro']);
+  assert.deepEqual(service.getUsers().map(user => user.id), ['712020:fef15930-802e-4d55-a2d4-13fc0d09cefc']);
   await assert.rejects(service.loadAnalystData('unknown'));
 });

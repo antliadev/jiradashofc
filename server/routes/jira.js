@@ -57,6 +57,40 @@ function analystEmailsForSession(req) {
   ].map(value => String(value || '').trim().toLowerCase()).filter(Boolean);
 }
 
+const EXPLICIT_ANALYST_IDS_BY_EMAIL = new Map([
+  ['alan.silva@antlia.com.br', '712020:b06531c7-5c21-483c-938b-69c7009e1fbb'],
+  ['bianca.moreira@antlia.com.br', '712020:662dabee-2d93-473c-9b00-ea2859a8a201'],
+  ['bruna.fernandes@antlia.com.br', '712020:85e385a7-33f6-4067-8444-77272e7c22d1'],
+  ['bruno.santos@antlia.com.br', '6074f01252404d0070888024'],
+  ['carlos.jesus@antlia.com.br', '6414b8e0407493675d465f54'],
+  ['contas.ti@antlia.com.br', null],
+  ['danilo.matias@antlia.com.br', '70121:f85f39c7-e231-4165-9a63-e0ab9ddb4917'],
+  ['guilherme.silva@antlia.com.br', '712020:d326e66e-0184-4807-82fc-340c68582fa5'],
+  ['hector.troncoso@antlia.com.br', '70121:659b3d3b-7500-4cb5-ab42-1f077b0e551c'],
+  ['lucas.vitoretti@antlia.com.br', '70121:f8babedd-436a-4083-bda0-62d8b0e06692'],
+  ['luis.silva@antlia.com.br', '712020:5282fe87-6513-4967-952d-c9684f3261c9'],
+  ['matheus.santos@antlia.com.br', '712020:9d0e7923-183f-40bb-a18c-ecb7ae7c2fb0'],
+  ['nelson.diniz@antlia.com.br', '712020:d212e30d-27ea-4337-adf0-569dbcf78b80'],
+  ['pedro.fernandes@antlia.com.br', '712020:fef15930-802e-4d55-a2d4-13fc0d09cefc'],
+  ['raphael.yokokura@antlia.com.br', '712020:09dc0185-dbe2-4d21-96c6-32470855b4f4'],
+  ['richard.silva@antlia.com.br', '712020:391a3120-4848-4e1a-853e-ff6e992f3350'],
+  ['talles.caverni@antlia.com.br', '712020:d152e415-e622-4389-b15e-2c4263442ffc'],
+  ['ulisses.moreno@antlia.com.br', '712020:e9562fa5-897b-41a2-9e5e-9493c2e0786b'],
+  ['william.fagotto@antlia.com.br', '712020:c9f77bb7-f7ec-4f8d-88d2-8bda52e3ec33'],
+]);
+
+function explicitAnalystIdsForEmails(emails) {
+  const ids = new Set();
+  let hasExplicitMapping = false;
+  for (const email of emails) {
+    if (!EXPLICIT_ANALYST_IDS_BY_EMAIL.has(email)) continue;
+    hasExplicitMapping = true;
+    const analystId = EXPLICIT_ANALYST_IDS_BY_EMAIL.get(email);
+    if (analystId) ids.add(analystId);
+  }
+  return { ids, hasExplicitMapping };
+}
+
 function normalizeIdentityText(value) {
   return String(value || '')
     .normalize('NFD')
@@ -142,6 +176,7 @@ function tokensMatchName(tokens, name) {
 
 function buildSelfIdentityMatcher(req, candidates = []) {
   const emails = new Set(analystEmailsForSession(req));
+  const explicitAnalystIds = explicitAnalystIdsForEmails(emails);
   const exactNames = new Set(identityNamesForSession(req));
   const tokenSets = [...emails].map(emailNameTokens).filter(tokens => tokens.length >= 2);
   const firstNameTokens = new Set([
@@ -151,6 +186,10 @@ function buildSelfIdentityMatcher(req, candidates = []) {
   const uniqueFirstNameTokens = buildUniqueFirstNameTokens(candidates);
 
   return candidate => {
+    const id = String(candidate?.id || candidate?.assignee_id || '').trim();
+    if (explicitAnalystIds.ids.size) return explicitAnalystIds.ids.has(id);
+    if (explicitAnalystIds.hasExplicitMapping) return false;
+
     const email = String(candidate?.email || candidate?.assignee_email || '').trim().toLowerCase();
     if (email && emails.has(email)) return true;
 

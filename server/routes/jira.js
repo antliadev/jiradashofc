@@ -57,6 +57,86 @@ function analystEmailsForSession(req) {
   ].map(value => String(value || '').trim().toLowerCase()).filter(Boolean);
 }
 
+function normalizeIdentityText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+const NON_PERSON_EMAIL_TOKENS = new Set([
+  'admin',
+  'adm',
+  'contas',
+  'financeiro',
+  'suporte',
+  'ti',
+  'noreply',
+  'no',
+  'reply',
+  'sistema',
+  'system',
+  'atendimento',
+]);
+
+function identityWords(value) {
+  return normalizeIdentityText(value)
+    .split(' ')
+    .filter(token => token.length >= 2);
+}
+
+function identityNamesForSession(req) {
+  return [
+    req.session?.user?.name,
+    req.session?.user?.displayName,
+    req.session?.user?.display_name,
+    req.session?.user?.fullName,
+  ].map(normalizeIdentityText).filter(Boolean);
+}
+
+function emailNameTokens(email) {
+  const local = String(email || '').split('@')[0] || '';
+  const tokens = identityWords(local)
+    .filter(token => token.length >= 3 && !NON_PERSON_EMAIL_TOKENS.has(token));
+  return [...new Set(tokens)];
+}
+
+function tokensMatchName(tokens, name) {
+  if (!tokens.length || !name) return false;
+  const words = new Set(identityWords(name));
+  if (!words.size) return false;
+
+  if (tokens.length === 1) {
+    return words.size === 1 && words.has(tokens[0]);
+  }
+
+  const matched = tokens.filter(token => words.has(token)).length;
+  if (matched >= 2) return true;
+
+  const first = tokens[0];
+  const last = tokens[tokens.length - 1];
+  return Boolean(first && last && first !== last && words.has(first) && words.has(last));
+}
+
+function buildSelfIdentityMatcher(req) {
+  const emails = new Set(analystEmailsForSession(req));
+  const exactNames = new Set(identityNamesForSession(req));
+  const tokenSets = [...emails].map(emailNameTokens).filter(tokens => tokens.length >= 2);
+
+  return candidate => {
+    const email = String(candidate?.email || candidate?.assignee_email || '').trim().toLowerCase();
+    if (email && emails.has(email)) return true;
+
+    const name = normalizeIdentityText(candidate?.name || candidate?.displayName || candidate?.assignee_name);
+    if (!name) return false;
+    if (exactNames.has(name)) return true;
+
+    return tokenSets.some(tokens => tokensMatchName(tokens, name));
+  };
+}
+
 export function scopeDashboardForUser(data, req, permission = null) {
   const user = req.session?.user;
   if (!hasPartialSelfScope(user?.role, permission)) {
@@ -69,17 +149,17 @@ export function scopeDashboardForUser(data, req, permission = null) {
     };
   }
 
-  const emails = new Set(analystEmailsForSession(req));
-  if (!emails.size) return buildDashboardData([]);
+  if (!analystEmailsForSession(req).length && !identityNamesForSession(req).length) return buildDashboardData([]);
+  const matchesSelf = buildSelfIdentityMatcher(req);
 
   const analystIds = new Set((data.analysts || [])
-    .filter(analyst => emails.has(String(analyst.email || '').trim().toLowerCase()))
+    .filter(analyst => matchesSelf(analyst))
     .map(analyst => analyst.id)
     .filter(Boolean));
 
   const ownIssues = (data.issues || []).filter(issue => (
     analystIds.has(issue.assignee_id)
-    || emails.has(String(issue.assignee_email || '').trim().toLowerCase())
+    || matchesSelf(issue)
   ));
   const scoped = buildDashboardData(ownIssues);
   return {
@@ -91,9 +171,9 @@ export function scopeDashboardForUser(data, req, permission = null) {
 export function scopeIssuesForUser(issues, req, permission = null) {
   const user = req.session?.user;
   if (!hasPartialSelfScope(user?.role, permission)) return issues;
-  const emails = new Set(analystEmailsForSession(req));
-  if (!emails.size) return [];
-  return (issues || []).filter(issue => emails.has(String(issue.assignee_email || '').trim().toLowerCase()));
+  if (!analystEmailsForSession(req).length && !identityNamesForSession(req).length) return [];
+  const matchesSelf = buildSelfIdentityMatcher(req);
+  return (issues || []).filter(issue => matchesSelf(issue));
 }
 
 router.get('/system/status', async (req, res) => {

@@ -103,6 +103,26 @@ function emailNameTokens(email) {
   return [...new Set(tokens)];
 }
 
+function candidateIdentityName(candidate) {
+  return normalizeIdentityText(candidate?.name || candidate?.displayName || candidate?.assignee_name);
+}
+
+function firstNameTokenFromName(name) {
+  const [first] = identityWords(name);
+  if (!first || first.length < 3 || NON_PERSON_EMAIL_TOKENS.has(first)) return '';
+  return first;
+}
+
+function buildUniqueFirstNameTokens(candidates = []) {
+  const counts = new Map();
+  for (const candidate of candidates || []) {
+    const first = firstNameTokenFromName(candidateIdentityName(candidate));
+    if (!first) continue;
+    counts.set(first, (counts.get(first) || 0) + 1);
+  }
+  return new Set([...counts].filter(([, count]) => count === 1).map(([token]) => token));
+}
+
 function tokensMatchName(tokens, name) {
   if (!tokens.length || !name) return false;
   const words = new Set(identityWords(name));
@@ -120,20 +140,28 @@ function tokensMatchName(tokens, name) {
   return Boolean(first && last && first !== last && words.has(first) && words.has(last));
 }
 
-function buildSelfIdentityMatcher(req) {
+function buildSelfIdentityMatcher(req, candidates = []) {
   const emails = new Set(analystEmailsForSession(req));
   const exactNames = new Set(identityNamesForSession(req));
   const tokenSets = [...emails].map(emailNameTokens).filter(tokens => tokens.length >= 2);
+  const firstNameTokens = new Set([
+    ...[...emails].map(emailNameTokens).map(tokens => tokens[0]).filter(Boolean),
+    ...[...exactNames].map(firstNameTokenFromName).filter(Boolean),
+  ]);
+  const uniqueFirstNameTokens = buildUniqueFirstNameTokens(candidates);
 
   return candidate => {
     const email = String(candidate?.email || candidate?.assignee_email || '').trim().toLowerCase();
     if (email && emails.has(email)) return true;
 
-    const name = normalizeIdentityText(candidate?.name || candidate?.displayName || candidate?.assignee_name);
+    const name = candidateIdentityName(candidate);
     if (!name) return false;
     if (exactNames.has(name)) return true;
 
-    return tokenSets.some(tokens => tokensMatchName(tokens, name));
+    if (tokenSets.some(tokens => tokensMatchName(tokens, name))) return true;
+
+    const first = firstNameTokenFromName(name);
+    return Boolean(first && uniqueFirstNameTokens.has(first) && firstNameTokens.has(first));
   };
 }
 
@@ -150,7 +178,7 @@ export function scopeDashboardForUser(data, req, permission = null) {
   }
 
   if (!analystEmailsForSession(req).length && !identityNamesForSession(req).length) return buildDashboardData([]);
-  const matchesSelf = buildSelfIdentityMatcher(req);
+  const matchesSelf = buildSelfIdentityMatcher(req, data.analysts || []);
 
   const analystIds = new Set((data.analysts || [])
     .filter(analyst => matchesSelf(analyst))
@@ -172,7 +200,10 @@ export function scopeIssuesForUser(issues, req, permission = null) {
   const user = req.session?.user;
   if (!hasPartialSelfScope(user?.role, permission)) return issues;
   if (!analystEmailsForSession(req).length && !identityNamesForSession(req).length) return [];
-  const matchesSelf = buildSelfIdentityMatcher(req);
+  const candidates = (issues || [])
+    .map(issue => ({ assignee_name: issue.assignee_name, assignee_email: issue.assignee_email }))
+    .filter(issue => issue.assignee_name || issue.assignee_email);
+  const matchesSelf = buildSelfIdentityMatcher(req, candidates);
   return (issues || []).filter(issue => matchesSelf(issue));
 }
 

@@ -409,7 +409,11 @@ async function authGuard(path) {
         return true;
       } catch (err) {
         console.warn('[Auth] Validacao indisponivel:', err.message);
-        clearSession();
+        const user = getCurrentUser();
+        if (canAccessRoute(path, user)) {
+          authCache = { authenticated: true, checkedAt: Date.now() };
+          return true;
+        }
         return false;
       } finally {
         authValidationPromise = null;

@@ -82,7 +82,9 @@ function canAccessPermission(permission, user = getCurrentUser()) {
 }
 
 function canAccessRoute(path, user = getCurrentUser()) {
-  const permission = ROUTE_PERMISSION[normalizePath(path)];
+  const normalizedPath = normalizePath(path);
+  const permission = ROUTE_PERMISSION[normalizedPath]
+    || (normalizedPath.startsWith('/executive/') ? ROUTE_PERMISSION['/executive'] : null);
   return canAccessPermission(permission, user);
 }
 

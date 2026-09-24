@@ -25,6 +25,7 @@ test('login direciona perfil Desenvolvedor / QA para Home e respeita bloqueios d
     permissions: [],
   };
   assert.equal(firstAllowedRoute(user), '/home');
+  assert.equal(canAccessRoute('/executive/ETF', user), true);
   assert.equal(canAccessRoute('/monitoring/blocked', user), true);
   assert.equal(canAccessRoute('/contracts/crawford', user), false);
   assert.equal(canAccessRoute('/analysts/general', user), true);

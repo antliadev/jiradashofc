@@ -1614,6 +1614,23 @@ input, select, textarea { font-family: inherit; }
   font-size: 11px;
 }
 
+.analyst-kpi-action {
+  width: 100%;
+  border: 1px solid var(--border);
+  text-align: left;
+  cursor: pointer;
+}
+
+.analyst-kpi-action:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.analyst-detail-modal .dashboard-kpi-modal-list {
+  max-height: min(58vh, 520px);
+  overflow: auto;
+}
+
 .mini-bars {
   display: grid;
   gap: 10px;

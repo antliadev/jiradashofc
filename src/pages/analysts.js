@@ -16,6 +16,7 @@ const MIN_SAMPLE_KEY = 'rja.analysts.minimumSample';
 const SHARED_ANALYST_KEY = 'rja.analysts.sharedUserId';
 
 let comparisonProfessionalsOpen = false;
+let analystDetailGroups = {};
 
 function routeMode() {
   const path = (window.location.hash.replace(/^#\/?/, '/') || '/analysts').split('?')[0];
@@ -193,6 +194,21 @@ function percentLabel(value) {
   return value === null || value === undefined ? 'Nao aplicavel' : `${value}%`;
 }
 
+function uniqueCards(cards) {
+  return [...new Map(cards.map(card => [card.id || card.key, card])).values()];
+}
+
+function metricButton({ key, tone = '', title, help, value, label, trend = '' }) {
+  return `
+    <div class="kpi-card analyst-kpi-action ${tone}" data-analyst-detail="${sanitizeTitle(key)}" role="button" tabindex="0">
+      ${businessHelp(`Regra: ${title}`, help)}
+      <div class="kpi-value">${value}</div>
+      <div class="kpi-label">${sanitize(label)}</div>
+      ${trend ? `<div class="kpi-trend">${sanitize(trend)}</div>` : ''}
+    </div>
+  `;
+}
+
 function header(title, subtitle) {
   document.getElementById('page-header').innerHTML = `
     <div>
@@ -237,6 +253,17 @@ function renderGeneral() {
   }
   const m = selectedUser ? calcAnalystMetrics(selectedUser, filters) : null;
   const performance = m ? calculateAnalystPerformance(m.cards) : null;
+  const staleCards = performance?.indicators.find(indicator => indicator.key === 'staleCards')?.cards || m?.stale || [];
+  analystDetailGroups = selectedUser && performance ? {
+    current: m.current.map(card => ({ card, detail: 'Responsabilidade atual' })),
+    done: m.done.map(card => ({ card, detail: 'Concluido' })),
+    onTime: (performance.originalOnTimeCards || m.onTime).map(card => ({ card, detail: 'Entregue dentro do prazo original' })),
+    deliveryDelays: performance.deliveryDelays.map(item => ({ card: item.card, detail: `Venceu em ${formatDate(item.dueDate)} com status ${item.statusAtDueDate}` })),
+    blockedEvents: performance.blockedEvents.map(item => ({ card: item.card, detail: `Bloqueado em ${formatDate(item.event.at)}` })),
+    commentCoverage: m.cards.filter(card => Number(card.humanCommentCount || 0) > 0).map(card => ({ card, detail: 'Possui comentario humano' })),
+    stale: staleCards.map(card => ({ card, detail: 'Sem atualizacao recente' })),
+    replans: performance.replans.map(item => ({ card: item.card, detail: `Prazo alterado de ${item.change.previousDate || '-'} para ${item.change.newDate || '-'}` })),
+  } : {};
   const selectedIds = selectedUser ? [selectedUser.id] : [];
   if (selectedUserId) persistSharedAnalyst(selectedUserId);
 
@@ -269,13 +296,14 @@ function renderGeneral() {
       <div class="kpi-grid analyst-kpi-grid">
         <div class="kpi-card kpi-info">${businessHelp('Regra: nota de performance', 'Nota de 0 a 100 calculada por score normalizado de cada indicador vezes seu peso. Indicadores sem dados saem do denominador para evitar nota inventada.')}<div class="kpi-value">${performance.score ?? 'N/A'}</div><div class="kpi-label">Nota de Performance</div><div class="kpi-trend">${sanitize(performance.label)}</div></div>
         <div class="kpi-card">${businessHelp('Regra: projetos em atuação', 'Quantidade de projetos que possuem cards atribuídos ao profissional no período analisado.')}<div class="kpi-value">${m.projects.length}</div><div class="kpi-label">Projetos em atuacao</div></div>
-        <div class="kpi-card">${businessHelp('Regra: cards sob responsabilidade', 'Cards atuais atribuídos ao profissional, excluindo os que estão concluídos.')}<div class="kpi-value">${m.current.length}</div><div class="kpi-label">Cards sob responsabilidade</div></div>
-        <div class="kpi-card kpi-success">${businessHelp('Regra: cards concluídos', 'Cards do profissional classificados como Concluído.')}<div class="kpi-value">${m.done.length}</div><div class="kpi-label">Cards concluidos</div></div>
-        <div class="kpi-card">${businessHelp('Regra: entregas no prazo', 'Percentual de cards concluídos com data de entrega e resolução até o prazo.')}<div class="kpi-value">${percentLabel(m.onTimeRate)}</div><div class="kpi-label">Entregas no prazo</div></div>
-        <div class="kpi-card kpi-danger">${businessHelp('Regra: cards atrasados', 'Cards com data vencida que ainda não foram concluídos.')}<div class="kpi-value">${m.overdue.length}</div><div class="kpi-label">Cards atrasados</div><div class="kpi-trend">${m.avgLateDays} dias uteis em media</div></div>
-        <div class="kpi-card kpi-warning">${businessHelp('Regra: cards bloqueados', 'Cards classificados como Bloqueado no mapa de status normalizado.')}<div class="kpi-value">${m.blocked.length}</div><div class="kpi-label">Cards bloqueados</div></div>
-        <div class="kpi-card">${businessHelp('Regra: cobertura de comentários', 'Percentual de cards com pelo menos um comentário humano, quando os comentários estão disponíveis.')}<div class="kpi-value">${percentLabel(m.commentCoverage)}</div><div class="kpi-label">Cobertura comentarios</div></div>
-        <div class="kpi-card">${businessHelp('Regra: sem atualização recente', 'Cards em aberto cuja última atualização ocorreu há mais de cinco dias úteis.')}<div class="kpi-value">${m.stale.length}</div><div class="kpi-label">Sem atualizacao recente</div></div>
+        ${metricButton({ key: 'current', title: 'cards sob responsabilidade', help: 'Cards atuais atribuídos ao profissional, excluindo os que estão concluídos.', value: m.current.length, label: 'Cards sob responsabilidade' })}
+        ${metricButton({ key: 'done', tone: 'kpi-success', title: 'cards concluídos', help: 'Cards do profissional classificados como Concluído.', value: m.done.length, label: 'Cards concluidos' })}
+        ${metricButton({ key: 'onTime', title: 'entregas no prazo', help: 'Percentual de cards concluídos até o primeiro prazo. Se a Data Limite foi postergada, a entrega não entra como no prazo original.', value: percentLabel(performance.originalOnTimeRate ?? m.onTimeRate), label: 'Entregas no prazo' })}
+        ${metricButton({ key: 'deliveryDelays', tone: 'kpi-danger', title: 'quantidade de atrasos nas entregas', help: 'Quantidade de vezes em que um prazo venceu enquanto o card estava em Itens pendentes ou Em andamento. O histórico é mantido mesmo após alteração de data ou conclusão.', value: performance.deliveryDelays.length, label: 'Quantidade de atrasos nas entregas', trend: `${uniqueCards(performance.deliveryDelays.map(item => item.card)).length} card(s)` })}
+        ${metricButton({ key: 'blockedEvents', tone: 'kpi-warning', title: 'quantidade de bloqueios nas entregas', help: 'Quantidade de vezes em que o card entrou em Bloqueado. O histórico é mantido mesmo depois do desbloqueio.', value: performance.blockedEvents.length, label: 'Quantidade de bloqueios nas entregas', trend: `${uniqueCards(performance.blockedEvents.map(item => item.card)).length} card(s)` })}
+        ${metricButton({ key: 'commentCoverage', title: 'cobertura de comentários', help: 'Percentual de cards com pelo menos um comentário humano, quando os comentários estão disponíveis.', value: percentLabel(m.commentCoverage), label: 'Cobertura comentarios' })}
+        ${metricButton({ key: 'stale', title: 'sem atualização recente', help: 'Cards em andamento ou bloqueados cuja última atualização ocorreu há mais de três dias úteis. Concluídos e Itens pendentes não entram.', value: staleCards.length, label: 'Sem atualizacao recente' })}
+        ${metricButton({ key: 'replans', title: 'quantidade de alteração no prazo', help: 'Quantidade de alterações na Data Limite, mantendo histórico para medir previsibilidade.', value: performance.replans.length, label: 'Quantidade de alteracao no prazo', trend: `${uniqueCards(performance.replans.map(item => item.card)).length} card(s)` })}
       </div>
 
       <section class="report-section">
@@ -355,6 +383,68 @@ function updateHash(path, values) {
   window.location.hash = `${path}${query ? `?${query}` : ''}`;
 }
 
+function renderAnalystDetailRows(rows) {
+  return rows.map(({ card, detail }) => {
+    const project = dataService.getProjectById(card.projectId);
+    return `
+      <article class="dashboard-kpi-modal-row">
+        <div>
+          <a class="issue-link" href="${sanitize(card.jiraUrl || '#')}" target="_blank" rel="noopener noreferrer">${sanitize(card.key)}</a>
+          <span>${sanitize(card.title || 'Sem titulo')}</span>
+        </div>
+        <div class="dashboard-kpi-modal-meta">
+          <span>${sanitize(project?.key || card.projectId || '-')}</span>
+          <span>${sanitize(card.status || '-')}</span>
+          <span>${sanitize(detail || '-')}</span>
+        </div>
+      </article>
+    `;
+  }).join('');
+}
+
+function showAnalystDetailModal(key) {
+  const rows = analystDetailGroups[key] || [];
+  const labels = {
+    current: 'Cards sob responsabilidade',
+    done: 'Cards concluidos',
+    onTime: 'Entregas no prazo',
+    deliveryDelays: 'Quantidade de atrasos nas entregas',
+    blockedEvents: 'Quantidade de bloqueios nas entregas',
+    commentCoverage: 'Cards com comentarios',
+    stale: 'Sem atualizacao recente',
+    replans: 'Quantidade de alteracao no prazo',
+  };
+  document.querySelector('.ui-modal-backdrop[data-analyst-detail-modal]')?.remove();
+  const modal = document.createElement('div');
+  modal.className = 'ui-modal-backdrop';
+  modal.dataset.analystDetailModal = 'true';
+  modal.innerHTML = `
+    <section class="ui-modal dashboard-kpi-modal analyst-detail-modal" role="dialog" aria-modal="true" aria-labelledby="analyst-detail-modal-title">
+      <div class="ui-modal-icon" aria-hidden="true">i</div>
+      <div class="ui-modal-body">
+        <h2 id="analyst-detail-modal-title">${sanitize(labels[key] || 'Cards')}</h2>
+        <p>${rows.length} item(ns) encontrado(s). Clique no card para abrir no Jira.</p>
+        <div class="dashboard-kpi-modal-list">
+          ${rows.length ? renderAnalystDetailRows(rows) : '<div class="dashboard-kpi-modal-empty">Nenhum card encontrado para este campo.</div>'}
+        </div>
+      </div>
+      <div class="ui-modal-actions">
+        <button type="button" class="btn btn-secondary" data-close-modal>Fechar</button>
+      </div>
+    </section>
+  `;
+  modal.addEventListener('click', event => {
+    if (event.target === modal || event.target.closest('[data-close-modal]')) modal.remove();
+  });
+  document.addEventListener('keydown', function handleEscape(event) {
+    if (event.key !== 'Escape' || !document.body.contains(modal)) return;
+    modal.remove();
+    document.removeEventListener('keydown', handleEscape);
+  });
+  document.body.appendChild(modal);
+  modal.querySelector('[data-close-modal]')?.focus();
+}
+
 function bindGeneral(selectedUser) {
   const apply = () => updateHash('/analysts/general', {
     userId: document.getElementById('analyst-user')?.value || '',
@@ -378,6 +468,18 @@ function bindGeneral(selectedUser) {
   });
   document.getElementById('analyst-export')?.addEventListener('click', () => {
     if (selectedUser) exportAnalystGeneral(selectedUser);
+  });
+  document.querySelectorAll('[data-analyst-detail]').forEach(button => {
+    const open = event => {
+      if (event.target.closest('.business-help')) return;
+      showAnalystDetailModal(button.dataset.analystDetail);
+    };
+    button.addEventListener('click', open);
+    button.addEventListener('keydown', event => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      open(event);
+    });
   });
 }
 
